@@ -1,9 +1,16 @@
 # CI/CD トークン設定ガイド
 
 本プロジェクトでは GitHub Actions を用いて、各種パッケージマネージャ (crates.io, npm, PyPI 等) への自動デプロイを行っています。
-これらのジョブを成功させるためには、リポジトリの **Settings > Secrets and variables > Actions** に以下のシークレットを登録する必要があります。
+これらのジョブを成功させるためには、リポジトリの **Settings > Environments** を開き、各ジョブに対応した名前の Environment を作成した上で、**「Environment secrets」** にトークンを登録する必要があります。
 
-## 必要なシークレット一覧
+> **⚠️ 注意: Environmentの名前について**
+> 作成する Environment の名前とセットするシークレット名は完全一致する必要があります。もし異なるENVIRONMENTでSecretを保存した場合はCDについてもそのENVIRONMENTを指定して実行してください。
+
+[Actions secrets · makinzm/mille](https://github.com/makinzm/mille/settings/secrets/actions)
+
+指定をさせない場合は「Repository secrets」に登録してください。
+
+## 必要な Environment と シークレット一覧
 
 | シークレット名 | 用途 | 取得元 | 権限・スコープの設定 |
 |---|---|---|---|
