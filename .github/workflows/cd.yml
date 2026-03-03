@@ -1,12 +1,14 @@
-name: Publish Dummy Packages (Reservation)
+name: Publish Packages
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   publish-crates-io:
     runs-on: ubuntu-latest
-    environment: CARGO_REGISTRY_TOKEN
+    environment: crates.io
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
@@ -18,7 +20,7 @@ jobs:
 
   publish-npm:
     runs-on: ubuntu-latest
-    environment: NPM_TOKEN
+    environment: npm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +36,7 @@ jobs:
 
   publish-pypi:
     runs-on: ubuntu-latest
+    environment: pypi
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

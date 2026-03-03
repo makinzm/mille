@@ -21,3 +21,19 @@ Rustで実装し、複数言語のコードベースに対応する。TOMLの設
   - AIアシスタントやエージェントに向けた、プロジェクト固有のルールやコンテキスト指示書です。
 
 今後、開発（Rustの実装や設定ファイル、GitHub Actionsの定義など）が進むにつれて、`src/` や `.github/`、各パッケージマネージャ向けラッパーのディレクトリ (`packages/`) などが追加される予定です。
+
+## リリース（パッケージ公開）手順
+
+本プロジェクトでは、GitHubのタグを利用して各パッケージマネージャ（crates.io, npm, PyPI, Go）への自動および手動リリースを行っています。
+
+新しいバージョンをリリースする際は、`main` ブランチにて以下の形式でタグを付与し、Pushしてください。
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+`v*` にマッチするタグがPushされると、GitHub Actions の CD パイプライン (`.github/workflows/cd.yml`) が作動し、各レジストリへ自動的に公開されます。
+※ Go モジュールに関しては設定済みのタグがそのままプロキシサーバー等に認識されるため、GitHub Actionsによる特別の処理は行わずタグPushのみで完了します。
+
+各環境のトークン設定など、管理者向けの詳細設定ガイドは [`docs/administrator/cd_setup.md`](./docs/administrator/cd_setup.md) をご参照ください。
