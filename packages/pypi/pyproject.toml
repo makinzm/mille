@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mille"
+version = "0.0.1"
+description = "Architecture Checker — Rust-based multi-language architecture linter"
+readme = "../../README.md"
+license = {text = "MIT"}
+authors = [{name = "makinzm"}]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/makinzm/mille"
+
+[project.scripts]
+mille = "mille:main"

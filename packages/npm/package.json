@@ -1,0 +1,20 @@
+{
+    "name": "mille",
+    "version": "0.0.1",
+    "description": "Architecture Checker — Rust-based multi-language architecture linter",
+    "main": "index.js",
+    "bin": {
+        "mille": "index.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/makinzm/mille.git"
+    },
+    "keywords": [
+        "architecture",
+        "linter",
+        "clean-architecture"
+    ],
+    "author": "makinzm",
+    "license": "MIT"
+}

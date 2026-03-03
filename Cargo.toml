@@ -1,0 +1,12 @@
+[package]
+name = "mille"
+version = "0.0.1"
+edition = "2021"
+description = "Architecture Checker — Rust-based multi-language architecture linter"
+license = "MIT"
+repository = "https://github.com/makinzm/mille"
+readme = "README.md"
+categories = ["development-tools"]
+keywords = ["architecture", "linter"]
+
+[dependencies]
