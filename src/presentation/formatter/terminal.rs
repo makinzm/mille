@@ -3,17 +3,45 @@ use crate::usecase::check_architecture::LayerStat;
 
 /// Format a single violation as a human-readable string.
 pub fn format_violation(v: &Violation) -> String {
-    todo!()
+    let marker = match v.severity {
+        Severity::Error => "❌ [ERROR]",
+        Severity::Warning => "⚠️  [WARN] ",
+        Severity::Info => "ℹ️  [INFO] ",
+    };
+    format!(
+        "{} Dependency violation\n   {}:{}\n   import: {}\n   '{}' → '{}' is not allowed\n\n",
+        marker, v.file, v.line, v.import_path, v.from_layer, v.to_layer
+    )
 }
 
 /// Format per-layer file/violation statistics.
 pub fn format_layer_stats(stats: &[LayerStat]) -> String {
-    todo!()
+    let mut out = String::new();
+    for stat in stats {
+        let marker = if stat.violation_count == 0 {
+            "✅"
+        } else {
+            "❌"
+        };
+        out.push_str(&format!(
+            "{} {:<20} ({:>3} file(s), {:>2} violation(s))\n",
+            marker, stat.name, stat.file_count, stat.violation_count
+        ));
+    }
+    out
 }
 
 /// Format the overall summary line (error/warning counts).
 pub fn format_summary(violations: &[Violation]) -> String {
-    todo!()
+    let errors = violations
+        .iter()
+        .filter(|v| v.severity == Severity::Error)
+        .count();
+    let warnings = violations
+        .iter()
+        .filter(|v| v.severity == Severity::Warning)
+        .count();
+    format!("Summary: {} error(s), {} warning(s)\n", errors, warnings)
 }
 
 #[cfg(test)]
@@ -46,8 +74,14 @@ mod tests {
         assert!(out.contains("❌"), "should contain error marker");
         assert!(out.contains("domain"), "should contain from_layer");
         assert!(out.contains("infrastructure"), "should contain to_layer");
-        assert!(out.contains("src/domain/service/foo.rs"), "should contain file path");
-        assert!(out.contains('5'.to_string().as_str()), "should contain line number");
+        assert!(
+            out.contains("src/domain/service/foo.rs"),
+            "should contain file path"
+        );
+        assert!(
+            out.contains('5'.to_string().as_str()),
+            "should contain line number"
+        );
     }
 
     #[test]
