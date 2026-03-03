@@ -6,7 +6,7 @@ fn main() {
 mod tests {
     #[test]
     fn dummy_test_for_ci() {
-        // Failing test for RED phase
-        assert_eq!(2 + 2, 5);
+        // Passing test for GREEN phase
+        assert_eq!(2 + 2, 4);
     }
 }
