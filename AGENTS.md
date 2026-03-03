@@ -29,3 +29,15 @@ RED -> GREEN -> REFACTORの順序を守ってください。
 - `[refactor] <リファクタリング内容> because of <なぜそのリファクタリングが妥当なのか>`
 
 ただ、１つ目のcommitについてはlefthookなどは必ず失敗してしまうため、`--no-verify` をつけてコミットしてください。
+
+---
+
+## 開発環境・CI/CD構築時のルール
+
+1. **特定の環境に依存させない（Devboxの利用）**
+   - 言語のバージョン指定やツールチェイン（`uv`, `volta`, `rustup`, `go` など）の導入は、可能な限り `devbox` を経由して行います。
+   - `rust-toolchain.toml` などにおいて `stable` のような暗黙の浮動バージョンは避け、マイナーバージョンまで固定（例: `1.85.0`）することで再現性を高めてください。
+
+2. **CI/CD周りの設定とドキュメント化**
+   - CI/CDパイプライン（とくにパッケージのPublishなどを伴うCD）を構築する際は、必ず **実行に必要なトークンや権限・取得元のURL** を `docs/administrator/` 以下のドキュメント（例: `cd_setup.md`）に明記してください。
+   - `lefthook` などのpre-commitフックを設定する場合は、LintやFormatだけでなく、テスト（例: `cargo test`）も含めて Regression テストを意識した構成にしてください。
