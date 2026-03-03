@@ -1,5 +1,5 @@
 {
-    "name": "mille",
+    "name": "@makinzm/mille",
     "version": "0.0.1",
     "description": "Architecture Checker — Rust-based multi-language architecture linter",
     "main": "index.js",
