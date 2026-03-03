@@ -1,7 +1,7 @@
 use crate::domain::entity::violation::Violation;
 use crate::domain::repository::config_repository::ConfigRepository;
 use crate::domain::service::violation_detector::ViolationDetector;
-use crate::infrastructure::parser::rust::parse_rust_imports;
+use crate::infrastructure::parser::rust::{parse_rust_call_exprs, parse_rust_imports};
 use crate::infrastructure::repository::toml_config_repository::TomlConfigRepository;
 use crate::infrastructure::resolver;
 
@@ -23,6 +23,7 @@ pub fn check(config_path: &str) -> Result<CheckResult, String> {
         .map_err(|e| e.to_string())?;
 
     let mut all_resolved = Vec::new();
+    let mut all_call_exprs = Vec::new();
     let mut layer_stats: Vec<LayerStat> = config
         .layers
         .iter()
@@ -41,11 +42,13 @@ pub fn check(config_path: &str) -> Result<CheckResult, String> {
                 .map_err(|e| format!("failed to read {}: {}", file_path, e))?;
             let raw = parse_rust_imports(&source, file_path);
             all_resolved.extend(raw.iter().map(resolver::rust::resolve));
+            all_call_exprs.extend(parse_rust_call_exprs(&source, file_path));
         }
     }
 
     let detector = ViolationDetector::new(&config.layers);
-    let violations = detector.detect(&all_resolved);
+    let mut violations = detector.detect(&all_resolved);
+    violations.extend(detector.detect_call_patterns(&all_call_exprs, &all_resolved));
 
     for stat in &mut layer_stats {
         stat.violation_count = violations

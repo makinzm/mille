@@ -1,3 +1,4 @@
+use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::layer::{DependencyMode, LayerConfig};
 use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
 use crate::domain::entity::violation::{Severity, Violation, ViolationKind};
@@ -49,6 +50,70 @@ impl<'a> ViolationDetector<'a> {
         })
     }
 
+    /// Check `allow_call_patterns` rules: for each static call (`Type::method()`) in `call_exprs`,
+    /// resolve the receiver type to its layer via `resolved_imports` and flag calls whose method
+    /// is not in the caller layer's `allow_methods` list for that `callee_layer`.
+    ///
+    /// Instance method calls (`var.method()`, `receiver_type == None`) are skipped because their
+    /// type cannot be determined without type inference.
+    pub fn detect_call_patterns(
+        &self,
+        call_exprs: &[RawCallExpr],
+        resolved_imports: &[ResolvedImport],
+    ) -> Vec<Violation> {
+        let mut violations = Vec::new();
+
+        for call in call_exprs {
+            // Only static calls with a known receiver type can be checked.
+            let Some(receiver_type) = &call.receiver_type else {
+                continue;
+            };
+
+            let Some(from_layer) = self.find_layer_for_file(&call.file) else {
+                continue;
+            };
+
+            if from_layer.allow_call_patterns.is_empty() {
+                continue;
+            }
+
+            // Collect imports in this file that resolve to each callee layer.
+            for pattern in &from_layer.allow_call_patterns {
+                let type_is_from_callee = resolved_imports.iter().any(|imp| {
+                    imp.raw.file == call.file
+                        && imp.category == ImportCategory::Internal
+                        && imp
+                            .resolved_path
+                            .as_deref()
+                            .and_then(|rp| self.find_layer_for_file(rp))
+                            .map(|l| l.name == pattern.callee_layer)
+                            .unwrap_or(false)
+                        && type_name_from_import(&imp.raw.path)
+                            .map(|n| n == receiver_type.as_str())
+                            .unwrap_or(false)
+                });
+
+                if !type_is_from_callee {
+                    continue;
+                }
+
+                if !pattern.allow_methods.contains(&call.method) {
+                    violations.push(Violation {
+                        file: call.file.clone(),
+                        line: call.line,
+                        from_layer: from_layer.name.clone(),
+                        to_layer: pattern.callee_layer.clone(),
+                        import_path: format!("{}::{}", receiver_type, call.method),
+                        kind: ViolationKind::CallPatternViolation,
+                        severity: Severity::Error,
+                    });
+                }
+            }
+        }
+
+        violations
+    }
+
     /// Check whether the dependency `from → to` is permitted.
     /// Returns `Some(Violation)` if it is not.
     fn check_violation(
@@ -78,6 +143,17 @@ impl<'a> ViolationDetector<'a> {
             severity: Severity::Error,
         })
     }
+}
+
+/// Extract the type name brought into scope by an import path.
+/// `"crate::infrastructure::Repo"` → `Some("Repo")`
+/// Returns `None` for wildcards (`*`) and grouped imports (`{…}`).
+fn type_name_from_import(path: &str) -> Option<&str> {
+    let last = path.split("::").last()?;
+    if last.starts_with('{') || last == "*" {
+        return None;
+    }
+    Some(last)
 }
 
 #[cfg(test)]
@@ -471,5 +547,200 @@ mod tests {
         let violations = detector.detect(&imports);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].from_layer, "domain");
+    }
+
+    // ------------------------------------------------------------------
+    // detect_call_patterns
+    // ------------------------------------------------------------------
+
+    fn make_layer_with_call_pattern(
+        name: &str,
+        paths: &[&str],
+        callee_layer: &str,
+        allow_methods: &[&str],
+    ) -> LayerConfig {
+        use crate::domain::entity::layer::CallPattern;
+        LayerConfig {
+            name: name.to_string(),
+            paths: paths.iter().map(|s| s.to_string()).collect(),
+            dependency_mode: DependencyMode::OptIn,
+            allow: vec![callee_layer.to_string()],
+            deny: vec![],
+            external_mode: DependencyMode::OptIn,
+            external_allow: vec![],
+            external_deny: vec![],
+            allow_call_patterns: vec![CallPattern {
+                callee_layer: callee_layer.to_string(),
+                allow_methods: allow_methods.iter().map(|s| s.to_string()).collect(),
+            }],
+        }
+    }
+
+    fn make_resolved_internal(file: &str, import_path: &str, resolved: &str) -> ResolvedImport {
+        ResolvedImport {
+            raw: RawImport {
+                path: import_path.to_string(),
+                line: 1,
+                file: file.to_string(),
+                kind: ImportKind::Use,
+            },
+            category: ImportCategory::Internal,
+            resolved_path: Some(resolved.to_string()),
+        }
+    }
+
+    fn make_static_call(file: &str, line: usize, receiver: &str, method: &str) -> RawCallExpr {
+        RawCallExpr {
+            file: file.to_string(),
+            line,
+            receiver_type: Some(receiver.to_string()),
+            method: method.to_string(),
+        }
+    }
+
+    fn make_instance_call(file: &str, line: usize, method: &str) -> RawCallExpr {
+        RawCallExpr {
+            file: file.to_string(),
+            line,
+            receiver_type: None,
+            method: method.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_no_allow_call_patterns_no_violations() {
+        // A layer without allow_call_patterns should never emit CallPatternViolation.
+        let layers = vec![
+            make_layer("main", &["src/main.rs"], DependencyMode::OptIn, &[], &[]),
+            make_layer(
+                "infrastructure",
+                &["src/infrastructure/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+        ];
+        let detector = ViolationDetector::new(&layers);
+        let calls = vec![make_static_call("src/main.rs", 5, "Repo", "find_user")];
+        let imports = vec![make_resolved_internal(
+            "src/main.rs",
+            "crate::infrastructure::Repo",
+            "src/infrastructure/Repo",
+        )];
+        assert!(detector.detect_call_patterns(&calls, &imports).is_empty());
+    }
+
+    #[test]
+    fn test_allowed_method_no_violation() {
+        // Repo::new() where "new" is in allow_methods → no violation.
+        let layers = vec![
+            make_layer_with_call_pattern(
+                "main",
+                &["src/main.rs"],
+                "infrastructure",
+                &["new", "build"],
+            ),
+            make_layer(
+                "infrastructure",
+                &["src/infrastructure/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+        ];
+        let detector = ViolationDetector::new(&layers);
+        let calls = vec![make_static_call("src/main.rs", 3, "Repo", "new")];
+        let imports = vec![make_resolved_internal(
+            "src/main.rs",
+            "crate::infrastructure::Repo",
+            "src/infrastructure/Repo",
+        )];
+        assert!(
+            detector.detect_call_patterns(&calls, &imports).is_empty(),
+            "Repo::new() should be allowed"
+        );
+    }
+
+    #[test]
+    fn test_disallowed_method_is_violation() {
+        // Repo::find_user() where only "new" is in allow_methods → violation.
+        let layers = vec![
+            make_layer_with_call_pattern("main", &["src/main.rs"], "infrastructure", &["new"]),
+            make_layer(
+                "infrastructure",
+                &["src/infrastructure/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+        ];
+        let detector = ViolationDetector::new(&layers);
+        let calls = vec![make_static_call("src/main.rs", 10, "Repo", "find_user")];
+        let imports = vec![make_resolved_internal(
+            "src/main.rs",
+            "crate::infrastructure::Repo",
+            "src/infrastructure/Repo",
+        )];
+        let violations = detector.detect_call_patterns(&calls, &imports);
+        assert_eq!(violations.len(), 1);
+        let v = &violations[0];
+        assert_eq!(v.from_layer, "main");
+        assert_eq!(v.to_layer, "infrastructure");
+        assert_eq!(v.kind, ViolationKind::CallPatternViolation);
+        assert_eq!(v.severity, Severity::Error);
+        assert_eq!(v.line, 10);
+    }
+
+    #[test]
+    fn test_instance_call_skipped_no_violation() {
+        // Instance calls (receiver_type = None) cannot be type-checked; must not emit violations.
+        let layers = vec![
+            make_layer_with_call_pattern("main", &["src/main.rs"], "infrastructure", &["new"]),
+            make_layer(
+                "infrastructure",
+                &["src/infrastructure/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+        ];
+        let detector = ViolationDetector::new(&layers);
+        let calls = vec![make_instance_call("src/main.rs", 12, "find_user")];
+        let imports = vec![make_resolved_internal(
+            "src/main.rs",
+            "crate::infrastructure::Repo",
+            "src/infrastructure/Repo",
+        )];
+        assert!(
+            detector.detect_call_patterns(&calls, &imports).is_empty(),
+            "instance calls should be skipped"
+        );
+    }
+
+    #[test]
+    fn test_receiver_type_not_from_callee_layer_no_violation() {
+        // Repo::new() but Repo is from "domain", not "infrastructure" → no violation.
+        let layers = vec![
+            make_layer_with_call_pattern("main", &["src/main.rs"], "infrastructure", &["new"]),
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+        ];
+        let detector = ViolationDetector::new(&layers);
+        let calls = vec![make_static_call("src/main.rs", 5, "Repo", "find_user")];
+        // import resolves to domain, not infrastructure
+        let imports = vec![make_resolved_internal(
+            "src/main.rs",
+            "crate::domain::Repo",
+            "src/domain/Repo",
+        )];
+        assert!(
+            detector.detect_call_patterns(&calls, &imports).is_empty(),
+            "Repo from domain should not be checked against infrastructure allow_call_patterns"
+        );
     }
 }
