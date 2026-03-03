@@ -6,7 +6,7 @@ on:
 jobs:
   publish-crates-io:
     runs-on: ubuntu-latest
-    environment: crates.io
+    environment: CARGO_REGISTRY_TOKEN
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
@@ -18,7 +18,7 @@ jobs:
 
   publish-npm:
     runs-on: ubuntu-latest
-    environment: npm
+    environment: NPM_TOKEN
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,7 +34,6 @@ jobs:
 
   publish-pypi:
     runs-on: ubuntu-latest
-    environment: pypi
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
