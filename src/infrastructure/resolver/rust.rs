@@ -3,18 +3,39 @@ use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
 
 /// Resolve a Rust `RawImport` into a categorised `ResolvedImport`.
 pub fn resolve(import: &RawImport) -> ResolvedImport {
-    todo!()
+    let category = classify(&import.path);
+    let resolved_path = if category == ImportCategory::Internal {
+        resolve_crate_path(&import.path)
+    } else {
+        None
+    };
+    ResolvedImport {
+        raw: import.clone(),
+        category,
+        resolved_path,
+    }
 }
 
 /// Classify the import category from its path string.
 fn classify(path: &str) -> ImportCategory {
-    todo!()
+    if path.starts_with("std::") || path.starts_with("core::") || path.starts_with("alloc::") {
+        return ImportCategory::Stdlib;
+    }
+    if path.starts_with("crate::") || path.starts_with("super::") || path.starts_with("self::") {
+        return ImportCategory::Internal;
+    }
+    ImportCategory::External
 }
 
 /// Normalise a `crate::` path to a file-system path relative to the repo root.
 /// Returns `None` for wildcards, grouped imports, or unresolvable paths.
 fn resolve_crate_path(path: &str) -> Option<String> {
-    todo!()
+    let relative = path.strip_prefix("crate::")?;
+    // Grouped imports (e.g. `crate::domain::{a, b}`) or wildcards cannot map to a single file.
+    if relative.contains('{') || relative.contains('*') {
+        return None;
+    }
+    Some(format!("src/{}", relative.replace("::", "/")))
 }
 
 #[cfg(test)]
@@ -54,7 +75,10 @@ mod tests {
 
     #[test]
     fn test_crate_is_internal() {
-        assert_eq!(classify("crate::domain::entity::config"), ImportCategory::Internal);
+        assert_eq!(
+            classify("crate::domain::entity::config"),
+            ImportCategory::Internal
+        );
     }
 
     #[test]
@@ -120,7 +144,10 @@ mod tests {
     fn test_resolve_crate_import() {
         let r = resolve(&raw("crate::domain::entity::config"));
         assert_eq!(r.category, ImportCategory::Internal);
-        assert_eq!(r.resolved_path, Some("src/domain/entity/config".to_string()));
+        assert_eq!(
+            r.resolved_path,
+            Some("src/domain/entity/config".to_string())
+        );
     }
 
     #[test]

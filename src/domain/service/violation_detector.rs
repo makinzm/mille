@@ -13,12 +13,40 @@ impl<'a> ViolationDetector<'a> {
 
     /// Inspect a list of resolved imports and return all dependency violations.
     pub fn detect(&self, imports: &[ResolvedImport]) -> Vec<Violation> {
-        todo!()
+        let mut violations = Vec::new();
+        for import in imports {
+            if import.category != ImportCategory::Internal {
+                continue;
+            }
+            let Some(from_layer) = self.find_layer_for_file(&import.raw.file) else {
+                continue;
+            };
+            let Some(resolved) = &import.resolved_path else {
+                continue;
+            };
+            let Some(to_layer) = self.find_layer_for_file(resolved) else {
+                continue;
+            };
+            if from_layer.name == to_layer.name {
+                continue;
+            }
+            if let Some(v) = self.check_violation(import, from_layer, to_layer) {
+                violations.push(v);
+            }
+        }
+        violations
     }
 
     /// Return the first layer whose `paths` glob patterns match `file_path`.
     fn find_layer_for_file(&self, file_path: &str) -> Option<&LayerConfig> {
-        todo!()
+        self.layers.iter().find(|layer| {
+            layer.paths.iter().any(|pattern| {
+                glob::Pattern::new(pattern)
+                    .ok()
+                    .map(|p| p.matches(file_path))
+                    .unwrap_or(false)
+            })
+        })
     }
 
     /// Check whether the dependency `from → to` is permitted.
@@ -29,7 +57,26 @@ impl<'a> ViolationDetector<'a> {
         from: &LayerConfig,
         to: &LayerConfig,
     ) -> Option<Violation> {
-        todo!()
+        // Imports within the same layer are always allowed.
+        if from.name == to.name {
+            return None;
+        }
+        let allowed = match from.dependency_mode {
+            DependencyMode::OptIn => from.allow.contains(&to.name),
+            DependencyMode::OptOut => !from.deny.contains(&to.name),
+        };
+        if allowed {
+            return None;
+        }
+        Some(Violation {
+            file: import.raw.file.clone(),
+            line: import.raw.line,
+            from_layer: from.name.clone(),
+            to_layer: to.name.clone(),
+            import_path: import.raw.path.clone(),
+            kind: ViolationKind::DependencyViolation,
+            severity: Severity::Error,
+        })
     }
 }
 
@@ -80,7 +127,13 @@ mod tests {
     #[test]
     fn test_find_layer_exact_glob() {
         let layers = vec![
-            make_layer("domain", &["src/domain/**"], DependencyMode::OptIn, &[], &[]),
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
             make_layer(
                 "infrastructure",
                 &["src/infrastructure/**"],
@@ -122,7 +175,13 @@ mod tests {
     fn test_opt_in_allowed_dependency_no_violation() {
         // infrastructure opt-in, allow = ["domain"]  →  infra→domain OK
         let layers = vec![
-            make_layer("domain", &["src/domain/**"], DependencyMode::OptIn, &[], &[]),
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
             make_layer(
                 "infrastructure",
                 &["src/infrastructure/**"],
@@ -147,7 +206,13 @@ mod tests {
     fn test_opt_in_disallowed_dependency_is_violation() {
         // domain opt-in, allow = []  →  domain→infrastructure VIOLATION
         let layers = vec![
-            make_layer("domain", &["src/domain/**"], DependencyMode::OptIn, &[], &[]),
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
             make_layer(
                 "infrastructure",
                 &["src/infrastructure/**"],
@@ -211,7 +276,13 @@ mod tests {
     fn test_opt_out_allowed_dependency_no_violation() {
         // infrastructure opt-out, deny = []  →  infra→domain OK
         let layers = vec![
-            make_layer("domain", &["src/domain/**"], DependencyMode::OptIn, &[], &[]),
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
             make_layer(
                 "infrastructure",
                 &["src/infrastructure/**"],
@@ -260,7 +331,13 @@ mod tests {
     #[test]
     fn test_detect_returns_only_internal_violations() {
         let layers = vec![
-            make_layer("domain", &["src/domain/**"], DependencyMode::OptIn, &[], &[]),
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
             make_layer(
                 "infrastructure",
                 &["src/infrastructure/**"],
