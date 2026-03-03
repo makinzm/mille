@@ -19,6 +19,9 @@ pub struct Violation {
 pub enum ViolationKind {
     /// `dependency_mode` rule was broken (opt-in: to_layer not in allow; opt-out: to_layer in deny).
     DependencyViolation,
+    /// `allow_call_patterns` rule was broken: a method not in `allow_methods` was called on a type
+    /// from `callee_layer`.
+    CallPatternViolation,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

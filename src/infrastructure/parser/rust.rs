@@ -1,5 +1,6 @@
 use tree_sitter::Node;
 
+use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
 
 /// Parse Rust source code and extract all `use` and external `mod` declarations.
@@ -56,6 +57,13 @@ fn collect_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Raw
             collect_imports(child, source, file_path, out);
         }
     }
+}
+
+/// Parse Rust source code and extract static call expressions (`Type::method()`).
+/// Instance method calls (`var.method()`) are extracted with `receiver_type = None`
+/// because their type cannot be determined without type inference.
+pub fn parse_rust_call_exprs(source: &str, file_path: &str) -> Vec<RawCallExpr> {
+    todo!("parse_rust_call_exprs: not yet implemented")
 }
 
 #[cfg(test)]
@@ -227,6 +235,93 @@ mod tests {
             use_paths.iter().any(|p| p.contains("ConfigRepository")),
             "should detect `use crate::domain::repository::config_repository::ConfigRepository`, got: {:?}",
             use_paths
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // parse_rust_call_exprs
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_static_call_new() {
+        let source = "fn main() { let r = Repo::new(); }";
+        let calls = parse_rust_call_exprs(source, "src/main.rs");
+        let found = calls
+            .iter()
+            .find(|c| c.receiver_type.as_deref() == Some("Repo") && c.method == "new");
+        assert!(
+            found.is_some(),
+            "should detect Repo::new() as a static call, got: {:#?}",
+            calls
+        );
+    }
+
+    #[test]
+    fn test_static_call_other_method() {
+        let source = "fn f() { UserRepo::find_user(1); }";
+        let calls = parse_rust_call_exprs(source, "src/main.rs");
+        let found = calls.iter().find(|c| {
+            c.receiver_type.as_deref() == Some("UserRepo") && c.method == "find_user"
+        });
+        assert!(
+            found.is_some(),
+            "should detect UserRepo::find_user() as a static call, got: {:#?}",
+            calls
+        );
+    }
+
+    #[test]
+    fn test_instance_call_has_no_receiver_type() {
+        let source = "fn f() { repo.save(&user); }";
+        let calls = parse_rust_call_exprs(source, "src/main.rs");
+        let found = calls.iter().find(|c| c.method == "save");
+        assert!(
+            found.is_some(),
+            "should detect repo.save() as a call, got: {:#?}",
+            calls
+        );
+        assert_eq!(
+            found.unwrap().receiver_type,
+            None,
+            "instance call receiver_type should be None"
+        );
+    }
+
+    #[test]
+    fn test_call_line_number() {
+        let source = "fn f() {\n    Repo::new();\n}";
+        let calls = parse_rust_call_exprs(source, "src/main.rs");
+        let found = calls
+            .iter()
+            .find(|c| c.receiver_type.as_deref() == Some("Repo") && c.method == "new");
+        assert!(found.is_some(), "should find Repo::new()");
+        assert_eq!(found.unwrap().line, 2, "should be on line 2");
+    }
+
+    #[test]
+    fn test_multiple_calls_in_file() {
+        let source =
+            "fn main() { let r = Repo::new(); let u = Usecase::new(r); r.execute(); }";
+        let calls = parse_rust_call_exprs(source, "src/main.rs");
+        let static_calls: Vec<_> = calls
+            .iter()
+            .filter(|c| c.receiver_type.is_some())
+            .collect();
+        assert!(
+            static_calls.len() >= 2,
+            "should detect at least 2 static calls, got: {:#?}",
+            calls
+        );
+    }
+
+    #[test]
+    fn test_dogfood_call_exprs_main_rs() {
+        let source = std::fs::read_to_string("src/main.rs").expect("src/main.rs should exist");
+        let calls = parse_rust_call_exprs(&source, "src/main.rs");
+        // main.rs should have at least one call expression (Cli::parse())
+        assert!(
+            !calls.is_empty(),
+            "main.rs should contain at least one call expression"
         );
     }
 }
