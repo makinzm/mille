@@ -12,7 +12,7 @@
 
 ## 必要な Environment と シークレット一覧
 
-| 作成する Environment | 登録するシークレット名 | 取得元 | 権限・スコープの設定 |
+| シークレット名 | 用途 | 取得元 | 権限・スコープの設定 |
 |---|---|---|---|
 | `CARGO_REGISTRY_TOKEN` | crates.io への `cargo publish` に使用 | [crates.io Settings](https://crates.io/settings/tokens) | `publish-update` など該当パッケージの公開権限 |
 | `NPM_TOKEN` | npm への `npm publish` に使用 | [npm Access Tokens](https://www.npmjs.com/settings/tokens) | `Publish` または `Automation` 権限 |
