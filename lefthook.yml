@@ -7,3 +7,6 @@ pre-commit:
     clippy:
       glob: "*.rs"
       run: cargo clippy -- -D warnings
+    test:
+      glob: "*.rs"
+      run: cargo test

@@ -3,7 +3,8 @@
   "packages": [
     "uv@latest",
     "volta@latest",
-    "rustup@latest"
+    "rustup@latest",
+    "go@latest"
   ],
   "shell": {
     "init_hook": [
