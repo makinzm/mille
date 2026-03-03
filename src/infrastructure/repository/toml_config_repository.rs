@@ -47,4 +47,23 @@ external_mode = "opt-in"
 
         fs::remove_file(temp_file).unwrap();
     }
+
+    #[test]
+    fn test_load_invalid_toml() {
+        let toml_content = r#"
+[project]
+# missing basic project configs
+
+[[layers]]
+        "#;
+        let temp_file = "test_invalid.toml";
+        fs::write(temp_file, toml_content).unwrap();
+
+        let repo = TomlConfigRepository;
+        let result = repo.load(temp_file);
+
+        assert!(result.is_err(), "Should return error for missing config");
+
+        fs::remove_file(temp_file).unwrap();
+    }
 }
