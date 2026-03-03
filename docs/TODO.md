@@ -14,11 +14,11 @@
 ## フェーズ 1: 基盤構築と最小PoC (RustをターゲットにしたDogfooding)
 mille自身のソースコード（Rust）を解析対象として、最速で「ファイルを入力して依存違反を検出・報告する CLI コマンド」が動くラインを目指します。セルフチェック（Dogfooding）によりTDDを推進します。
 
-### PR 2: 設定ファイル（`mille.toml`）のパースとコアエンティティ
-- [ ] `domain` レイヤーに `Layer`, `DependencyRule` などのエンティティとRepositoryトレイトを定義
-- [ ] `infrastructure` に `toml_config_repository` を実装
-- [ ] mille自身のアーキテクチャを定義した `mille.toml` の作成
-- [ ] 不正なTOMLの異常系テスト、正常系のパース機能をTDDで実装
+### [x] PR 2: 設定ファイル（`mille.toml`）のパースとコアエンティティ
+- [x] `domain` レイヤーに `Layer`, `DependencyRule` などのエンティティとRepositoryトレイトを定義
+- [x] `infrastructure` に `toml_config_repository` を実装
+- [x] mille自身のアーキテクチャを定義した `mille.toml` の作成
+- [x] 不正なTOMLの異常系テスト、正常系のパース機能をTDDで実装
 
 ### PR 3: tree-sitterによる import 抽出器 (Rust用)
 - [ ] `domain` に `RawImport` エンティティ定義

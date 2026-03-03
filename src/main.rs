@@ -1,3 +1,6 @@
+pub mod domain;
+pub mod infrastructure;
+
 fn main() {
     println!("Architecture Checker — mille");
 }
