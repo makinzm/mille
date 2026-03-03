@@ -145,8 +145,14 @@ mod tests {
 
         assert_eq!(imports.len(), 3);
 
-        let use_imports: Vec<_> = imports.iter().filter(|i| i.kind == ImportKind::Use).collect();
-        let mod_imports: Vec<_> = imports.iter().filter(|i| i.kind == ImportKind::Mod).collect();
+        let use_imports: Vec<_> = imports
+            .iter()
+            .filter(|i| i.kind == ImportKind::Use)
+            .collect();
+        let mod_imports: Vec<_> = imports
+            .iter()
+            .filter(|i| i.kind == ImportKind::Mod)
+            .collect();
         assert_eq!(use_imports.len(), 2);
         assert_eq!(mod_imports.len(), 1);
 
@@ -161,7 +167,10 @@ mod tests {
         let source = "mod tests {\n    use super::*;\n}";
         let imports = parse_rust_imports(source, "test.rs");
 
-        let use_imports: Vec<_> = imports.iter().filter(|i| i.kind == ImportKind::Use).collect();
+        let use_imports: Vec<_> = imports
+            .iter()
+            .filter(|i| i.kind == ImportKind::Use)
+            .collect();
         assert_eq!(use_imports.len(), 1);
         assert_eq!(use_imports[0].path, "super::*");
     }
@@ -172,8 +181,7 @@ mod tests {
 
     #[test]
     fn test_dogfood_main_rs() {
-        let source =
-            std::fs::read_to_string("src/main.rs").expect("src/main.rs should exist");
+        let source = std::fs::read_to_string("src/main.rs").expect("src/main.rs should exist");
         let imports = parse_rust_imports(&source, "src/main.rs");
 
         let mod_names: Vec<&str> = imports
@@ -196,11 +204,13 @@ mod tests {
 
     #[test]
     fn test_dogfood_toml_config_repository() {
-        let source = std::fs::read_to_string(
+        let source =
+            std::fs::read_to_string("src/infrastructure/repository/toml_config_repository.rs")
+                .expect("toml_config_repository.rs should exist");
+        let imports = parse_rust_imports(
+            &source,
             "src/infrastructure/repository/toml_config_repository.rs",
-        )
-        .expect("toml_config_repository.rs should exist");
-        let imports = parse_rust_imports(&source, "src/infrastructure/repository/toml_config_repository.rs");
+        );
 
         let use_paths: Vec<&str> = imports
             .iter()

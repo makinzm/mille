@@ -1,7 +1,7 @@
-use std::fs;
-use std::io::{Error, ErrorKind};
 use crate::domain::entity::config::MilleConfig;
 use crate::domain::repository::config_repository::ConfigRepository;
+use std::fs;
+use std::io::{Error, ErrorKind};
 
 pub struct TomlConfigRepository;
 
