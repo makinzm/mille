@@ -1,9 +1,12 @@
 # CI/CD トークン設定ガイド
 
 本プロジェクトでは GitHub Actions を用いて、各種パッケージマネージャ (crates.io, npm, PyPI 等) への自動デプロイを行っています。
-これらのジョブを成功させるためには、リポジトリの **Settings > Secrets and variables > Actions** に以下のシークレットを登録する必要があります。
+これらのジョブを成功させるためには、GitHub上のリポジトリの **Settings > Secrets and variables > Actions** を開き、**「Repository secrets」** に以下のシークレットを登録する必要があります。
 
-## 必要なシークレット一覧
+> **⚠️ 注意: Environment secrets ではなく Repository secrets に登録してください。**
+> Environment secrets 側に登録すると、CI/CDジョブ側で `environment` 指定がない限り参照できず失敗します。
+
+## 必要なシークレット一覧 (Repository secretsへ登録)
 
 | シークレット名 | 用途 | 取得元 | 権限・スコープの設定 |
 |---|---|---|---|
@@ -28,6 +31,7 @@
 1. PyPI にサインインします。
 2. [Account settings](https://pypi.org/manage/account/) の API tokens セクションに移動します。
 3. "Add API token" をクリックします。初めてパッケージを作成する場合は "Entire account" になりますが、ダミー作成後は該当パッケージのみに Scope を制限したトークンを発行することを推奨します。
+4. 発行されたトークン (`pypi-` から始まる文字列) をコピーし、GitHub の **Repository secrets** 画面にて `PYPI_TOKEN` という名前で保存してください。
 
 ### 4. Goパッケージ (go install)
 Go パッケージの公開は専用のレジストリ（npmやpypiなど）へのアップロードは不要で、GitHub リポジトリに適切な Git タグ （例: `packages/go/vX.Y.Z`）を Push するだけで完了します。
