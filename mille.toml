@@ -8,7 +8,7 @@ name = "domain"
 paths = ["src/domain/**"]
 dependency_mode = "opt-out"
 allow = []
-deny = ["infrastructure"]
+deny = ["infrastructure", "usecase", "presentation"]
 external_mode = "opt-in"
 external_allow = []
 
@@ -18,4 +18,28 @@ paths = ["src/infrastructure/**"]
 dependency_mode = "opt-in"
 allow = ["domain"]
 external_mode = "opt-in"
-external_allow = ["serde", "toml"]
+external_allow = ["serde", "toml", "tree_sitter", "glob"]
+
+[[layers]]
+name = "usecase"
+paths = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "infrastructure"]
+external_mode = "opt-in"
+external_allow = ["glob"]
+
+[[layers]]
+name = "presentation"
+paths = ["src/presentation/**"]
+dependency_mode = "opt-in"
+allow = ["usecase", "domain"]
+external_mode = "opt-in"
+external_allow = ["clap"]
+
+[[layers]]
+name = "main"
+paths = ["src/main.rs"]
+dependency_mode = "opt-in"
+allow = ["domain", "infrastructure", "usecase", "presentation"]
+external_mode = "opt-in"
+external_allow = ["clap"]
