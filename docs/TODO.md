@@ -2,16 +2,14 @@
 
 本リストは、`spec.md` に定義された仕様に基づき、スクラム開発でイテレーティブに動くもの（価値）を段階的につくることができるよう、PRの粒度で縦切りにしたタスクリストです。
 
-※ `docs/TODO.md` はプロジェクト全体のロードマップやマイルストーンを管理するドキュメントです。一方 `tasks/todo.md` は、現在進行中のタスクをより細かな粒度（サブタスクレベル）でトラッキングし、AIエージェントの作業状態や次回のアクションを管理するためのスクラッチパッド的なファイルです。
-
 ## フェーズ 0: プロジェクト初期設定と名前確保
 各パッケージマネージャーでの名前（`mille`等）を早期に確保するため、ダミーパッケージによるプレリリースを行います。
 
-### PR 1: パッケージ名予約のためのダミーCD構築とリリース
-- [ ] `cargo init` によるRustプロジェクトの初期化と最小の `Cargo.toml` 設定
-- [ ] GitHub Actions (`.github/workflows/release-dummy.yml` 等) を用いたプレリリース（空パッケージ）のCI/CDパイプライン構築
-- [ ] npm, pypi, crates.io, (必要に応じて go/Homebrew 等) への `mille` (または類似の利用可能名) パッケージの初版デプロイ
-- [ ] ※ この段階で `rust-toolchain.toml` や `lefthook` などの基本的な開発環境もあわせて整備する
+### [x] PR 1: パッケージ名予約のためのダミーCD構築とリリース
+- [x] `cargo init` によるRustプロジェクトの初期化と最小の `Cargo.toml` 設定
+- [x] GitHub Actions (`.github/workflows/cd-reserve.yml` 等) を用いたプレリリース（空パッケージ）のCI/CDパイプライン構築
+- [x] npm, pypi, crates.io, (必要に応じて go/Homebrew 等) への `mille` (または類似の利用可能名) パッケージの初版デプロイ
+- [x] ※ この段階で `rust-toolchain.toml` や `lefthook` などの基本的な開発環境もあわせて整備する
 
 ## フェーズ 1: 基盤構築と最小PoC (RustをターゲットにしたDogfooding)
 mille自身のソースコード（Rust）を解析対象として、最速で「ファイルを入力して依存違反を検出・報告する CLI コマンド」が動くラインを目指します。セルフチェック（Dogfooding）によりTDDを推進します。
