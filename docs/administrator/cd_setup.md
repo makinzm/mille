@@ -29,6 +29,10 @@
 2. [Account settings](https://pypi.org/manage/account/) の API tokens セクションに移動します。
 3. "Add API token" をクリックします。初めてパッケージを作成する場合は "Entire account" になりますが、ダミー作成後は該当パッケージのみに Scope を制限したトークンを発行することを推奨します。
 
+### 4. Goパッケージ (go install)
+Go パッケージの公開は専用のレジストリ（npmやpypiなど）ではなく、ソースコードに付与された Git タグ （例: `packages/go/vX.Y.Z`） を通じて行われます。
+上記のようにCDパイプライン上で該当タグを発行して `git push` するため、個別のAPIトークンは必要ありませんが、GitHub Actions がリポジトリへ書き込むための `contents: write` 権限を利用しています。
+
 ---
 
 ## 設定が完了したら
