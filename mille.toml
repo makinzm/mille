@@ -1,0 +1,21 @@
+[project]
+name = "mille"
+root = "."
+languages = ["rust"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-out"
+allow = []
+deny = ["infrastructure"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["serde", "toml"]
