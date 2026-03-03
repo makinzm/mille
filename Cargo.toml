@@ -9,6 +9,18 @@ readme = "README.md"
 categories = ["development-tools"]
 keywords = ["architecture", "linter"]
 
+[package.metadata.deb]
+maintainer = "makinzm <makinzm@users.noreply.github.com>"
+copyright = "2024 makinzm"
+license-file = ["LICENSE", "4"]
+depends = "$auto"
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/mille", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/mille/README", "644"],
+]
+
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.0.3"

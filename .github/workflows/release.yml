@@ -1,0 +1,385 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # 1. Cross-compile binaries for all targets                           #
+  # ------------------------------------------------------------------ #
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+            use_cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (aarch64-linux only)
+        if: matrix.use_cross == true
+        run: cargo install cross --locked
+
+      - name: Build with cross
+        if: matrix.use_cross == true
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build with cargo
+        if: matrix.use_cross != true
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          ARTIFACT="mille-${VERSION}-${{ matrix.target }}"
+          mkdir dist
+          cp target/${{ matrix.target }}/release/mille dist/
+          tar -C dist -czf "${ARTIFACT}.tar.gz" mille
+          echo "ARTIFACT=${ARTIFACT}.tar.gz" >> $GITHUB_ENV
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $artifact = "mille-${version}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path dist
+          Copy-Item target/${{ matrix.target }}/release/mille.exe dist/
+          Compress-Archive -Path dist/mille.exe -DestinationPath "${artifact}.zip"
+          "ARTIFACT=${artifact}.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.target }}
+          path: ${{ env.ARTIFACT }}
+
+  # ------------------------------------------------------------------ #
+  # 2. Build .deb packages (amd64 + arm64)                             #
+  # ------------------------------------------------------------------ #
+  build-deb:
+    name: Build .deb (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: amd64
+          - target: aarch64-unknown-linux-gnu
+            arch: arm64
+            use_cross: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (arm64 only)
+        if: matrix.use_cross == true
+        run: cargo install cross --locked
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build with cross
+        if: matrix.use_cross == true
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build with cargo
+        if: matrix.use_cross != true
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build .deb package
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          cargo deb --no-build --target ${{ matrix.target }}
+          DEB=$(ls target/${{ matrix.target }}/debian/*.deb)
+          VERSIONED="mille_${VERSION}_${{ matrix.arch }}.deb"
+          cp "$DEB" "$VERSIONED"
+          echo "DEB_FILE=$VERSIONED" >> $GITHUB_ENV
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: ${{ env.DEB_FILE }}
+
+  # ------------------------------------------------------------------ #
+  # 3. Create GitHub Release and attach all artifacts                  #
+  # ------------------------------------------------------------------ #
+  release:
+    name: Create GitHub Release
+    needs: [build, build-deb]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**
+          generate_release_notes: true
+
+  # ------------------------------------------------------------------ #
+  # 4a. Publish to crates.io                                           #
+  # ------------------------------------------------------------------ #
+  publish-crates:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    environment: CARGO_REGISTRY_TOKEN
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+
+      - name: Sync version in Cargo.toml
+        run: |
+          VERSION=${{ needs.release.outputs.version }}
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+
+      - name: Publish
+        run: cargo publish --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ------------------------------------------------------------------ #
+  # 4b. Publish to npm                                                 #
+  # ------------------------------------------------------------------ #
+  publish-npm:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    environment: NPM_TOKEN
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Sync version in package.json
+        run: |
+          cd packages/npm
+          npm version ${{ needs.release.outputs.version }} --no-git-tag-version
+
+      - name: Publish
+        run: |
+          cd packages/npm
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ------------------------------------------------------------------ #
+  # 4c. Publish to PyPI                                                #
+  # ------------------------------------------------------------------ #
+  publish-pypi:
+    name: Publish to PyPI
+    needs: release
+    runs-on: ubuntu-latest
+    environment: PYPI_TOKEN
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Sync version in pyproject.toml
+        run: |
+          cd packages/pypi
+          sed -i "s/^version = \".*\"/version = \"${{ needs.release.outputs.version }}\"/" pyproject.toml
+
+      - name: Build and publish
+        run: |
+          cd packages/pypi
+          python -m build
+          twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+
+  # ------------------------------------------------------------------ #
+  # 4d. Update Homebrew tap formula                                    #
+  # ------------------------------------------------------------------ #
+  update-homebrew:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download macOS x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bin-x86_64-apple-darwin
+          path: artifacts/
+
+      - name: Download macOS aarch64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bin-aarch64-apple-darwin
+          path: artifacts/
+
+      - name: Download Linux x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bin-x86_64-unknown-linux-gnu
+          path: artifacts/
+
+      - name: Compute SHA256 checksums
+        id: sha
+        run: |
+          VERSION=${{ needs.release.outputs.version }}
+          SHA_MAC_X86=$(sha256sum "artifacts/mille-${VERSION}-x86_64-apple-darwin.tar.gz" | awk '{print $1}')
+          SHA_MAC_ARM=$(sha256sum "artifacts/mille-${VERSION}-aarch64-apple-darwin.tar.gz" | awk '{print $1}')
+          SHA_LINUX=$(sha256sum "artifacts/mille-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" | awk '{print $1}')
+          echo "MAC_X86=${SHA_MAC_X86}" >> $GITHUB_OUTPUT
+          echo "MAC_ARM=${SHA_MAC_ARM}" >> $GITHUB_OUTPUT
+          echo "LINUX=${SHA_LINUX}" >> $GITHUB_OUTPUT
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: makinzm/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          VERSION=${{ needs.release.outputs.version }}
+          mkdir -p homebrew-tap/Formula
+          cat > homebrew-tap/Formula/mille.rb << FORMULA
+          class Mille < Formula
+            desc "Architecture Checker — Rust-based multi-language architecture linter"
+            homepage "https://github.com/makinzm/mille"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/makinzm/mille/releases/download/v${VERSION}/mille-${VERSION}-aarch64-apple-darwin.tar.gz"
+                sha256 "${{ steps.sha.outputs.MAC_ARM }}"
+              else
+                url "https://github.com/makinzm/mille/releases/download/v${VERSION}/mille-${VERSION}-x86_64-apple-darwin.tar.gz"
+                sha256 "${{ steps.sha.outputs.MAC_X86 }}"
+              end
+            end
+
+            on_linux do
+              url "https://github.com/makinzm/mille/releases/download/v${VERSION}/mille-${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+              sha256 "${{ steps.sha.outputs.LINUX }}"
+            end
+
+            def install
+              bin.install "mille"
+            end
+
+            test do
+              system "#{bin}/mille", "--version"
+            end
+          end
+          FORMULA
+
+      - name: Commit and push formula update
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/mille.rb
+          git commit -m "chore: update mille to v${{ needs.release.outputs.version }}"
+          git push
+
+  # ------------------------------------------------------------------ #
+  # 4e. Publish to Nix binary cache (Cachix)                           #
+  # ------------------------------------------------------------------ #
+  publish-nix:
+    name: Publish to Nix (Cachix)
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixpkgs-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: mille
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build and push to Cachix
+        run: nix build .#mille --print-build-logs
