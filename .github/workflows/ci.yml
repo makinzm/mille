@@ -15,9 +15,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - name: Install lefthook
-        run: npm install -g @evilmartians/lefthook
+      - name: Install devbox
+        uses: jetify-com/devbox-install-action@v0.11.0
+        with:
+          enable-cache: 'true'
+      - name: Setup toolchains via devbox
+        run: devbox run -- cargo --version
+      - name: Install lefthook via npm (volta)
+        run: devbox run -- npm install -g @evilmartians/lefthook
       - name: Check Formatting (Lefthook)
-        run: lefthook run pre-commit
+        run: devbox run -- lefthook run pre-commit
       - name: Run tests
-        run: cargo test
+        run: devbox run -- cargo test
