@@ -156,9 +156,10 @@ devbox add github:makinzm/mille/v1.2.3#mille
 
 手順の概要:
 1. [nixpkgs](https://github.com/NixOS/nixpkgs) をフォーク
-2. `pkgs/tools/misc/mille/default.nix` に derivation を追加
-3. `pkgs/top-level/all-packages.nix` にエントリを追加
-4. nixpkgs の [CONTRIBUTING.md](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md) に従って PR を提出
+2. `pkgs/by-name/mi/mille/package.nix` に derivation を追加（by-name 方式）
+   - パスは先頭 2 文字のディレクトリ `mi/` の下に配置する
+   - `all-packages.nix` への追記は不要（by-name は自動検出される）
+3. nixpkgs の [CONTRIBUTING.md](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md) に従って PR を提出
 
 > nixpkgs のレビュープロセスは数週間かかる場合があります。
 > それまでの間は `github:makinzm/mille` 経由で利用できます。
