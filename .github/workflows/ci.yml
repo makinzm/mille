@@ -32,13 +32,10 @@ jobs:
         run: devbox run -- cargo test
 
   # ------------------------------------------------------------------ #
-  # 2. Dogfooding — build mille and run `mille check` on real projects #
-  #    Rust: mille's own source (mille.toml)                           #
-  #    Go:   tests/fixtures/go_sample  (Go fixture)                    #
-  #    Go:   packages/go               (Go wrapper package)            #
+  # 2a. Dogfooding-rust — cargo build → mille check on all projects   #
   # ------------------------------------------------------------------ #
-  dogfood:
-    name: Dogfooding (mille check)
+  dogfood-rust:
+    name: Dogfooding-rust (mille check)
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -49,16 +46,55 @@ jobs:
       - name: Build mille (release)
         run: cargo build --release
 
-      # Rust self-check: verify mille's own Clean Architecture rules
       - name: Self-check — Rust project
         run: ./target/release/mille check
 
-      # Go fixture check: a sample multi-layer Go project
       - name: Self-check — Go fixture (tests/fixtures/go_sample)
         working-directory: tests/fixtures/go_sample
         run: ${{ github.workspace }}/target/release/mille check
 
-      # Go wrapper check: the packages/go/ binary wrapper
       - name: Self-check — Go wrapper (packages/go)
         working-directory: packages/go
         run: ${{ github.workspace }}/target/release/mille check
+
+  # ------------------------------------------------------------------ #
+  # 2b. Dogfooding-go — go build → Go wrapper binary → mille check    #
+  #   Build the Rust binary first, seed the wrapper's cache, then      #
+  #   compile the Go wrapper and run it end-to-end against Go projects. #
+  # ------------------------------------------------------------------ #
+  dogfood-go:
+    name: Dogfooding-go (go build + mille check via Go wrapper)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/go/go.mod
+
+      - name: Build mille (release)
+        run: cargo build --release
+
+      # NOTE: The Go wrapper checks ~/.mille/bin/<version>/mille before
+      #       attempting a network download. Pre-seed the cache with the
+      #       binary we just built so CI works without a published release.
+      - name: Seed wrapper cache with locally-built binary
+        run: |
+          VERSION=$(grep 'version = "' packages/go/main.go | head -1 | sed 's/.*version = "//;s/".*//')
+          mkdir -p ~/.mille/bin/$VERSION
+          cp target/release/mille ~/.mille/bin/$VERSION/mille
+
+      - name: go build — packages/go
+        working-directory: packages/go
+        run: go build -o mille_go .
+
+      - name: Self-check via Go wrapper — Go fixture (tests/fixtures/go_sample)
+        working-directory: tests/fixtures/go_sample
+        run: ${{ github.workspace }}/packages/go/mille_go check
+
+      - name: Self-check via Go wrapper — Go wrapper (packages/go)
+        working-directory: packages/go
+        run: ./mille_go check
