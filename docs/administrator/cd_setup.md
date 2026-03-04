@@ -23,7 +23,6 @@ git tag v1.2.3 && git push origin v1.2.3
 │ publish-npm     → npm (@makinzm/mille)  │
 │ publish-pypi    → PyPI (mille)          │
 │ update-homebrew → homebrew-tap リポジトリ │
-│ publish-nix     → Cachix バイナリキャッシュ │
 └─────────────────────────────────────────┘
 ```
 
@@ -46,9 +45,8 @@ git tag v1.2.3 && git push origin v1.2.3
 | `NPM_TOKEN`            | `NPM_TOKEN`            | npm への `npm publish`                 | [npm Access Tokens](https://www.npmjs.com/settings/tokens)                 | `Automation`（2FA 回避のため）           |
 | `PYPI_TOKEN`           | `PYPI_TOKEN`           | PyPI への `twine upload`               | [PyPI Account Settings](https://pypi.org/manage/account/)                  | 該当パッケージのみに scope 限定          |
 | `HOMEBREW_TAP_TOKEN`   | *(Repository secret)*  | `makinzm/homebrew-tap` へのプッシュ    | [GitHub Personal Access Tokens](https://github.com/settings/tokens)       | `repo` スコープ（`homebrew-tap` リポのみ）|
-| `CACHIX_AUTH_TOKEN`    | *(Repository secret)*  | Cachix バイナリキャッシュへのプッシュ  | [Cachix Dashboard](https://app.cachix.org/)                                | キャッシュ名 `mille` への write 権限     |
 
-> **注意:** `HOMEBREW_TAP_TOKEN` と `CACHIX_AUTH_TOKEN` は特定の Environment に紐づけず、Repository secrets に登録してください。
+> **注意:** `HOMEBREW_TAP_TOKEN` は特定の Environment に紐づけず、Repository secrets に登録してください。
 
 ---
 
@@ -71,14 +69,8 @@ git tag v1.2.3 && git push origin v1.2.3
 
 ### 4. `HOMEBREW_TAP_TOKEN`
 1. GitHub で `makinzm/homebrew-tap` リポジトリを作成（空で可）
-2. [Personal Access Tokens (classic)](https://github.com/settings/tokens) → "Generate new token"
-3. スコープ: `repo`
-4. Repository secret として登録
-
-### 5. `CACHIX_AUTH_TOKEN`
-1. [Cachix](https://app.cachix.org/) にサインイン
-2. "Create cache" → キャッシュ名 `mille`（パブリックで可）
-3. "Auth Tokens" → "Create Token" → write 権限
+2. [Personal Access Tokens](https://github.com/settings/tokens) → "Generate new token"
+3. スコープ: `repo`（`homebrew-tap` リポジトリへの `Read and Write` 権限）
 4. Repository secret として登録
 
 ---
@@ -125,26 +117,120 @@ sudo dpkg -i "mille_${VERSION}_amd64.deb"
 
 ### Nix / devbox
 
-**`nix profile` で直接インストール（タグ指定）:**
+本プロジェクトは `flake.nix` でパッケージを公開しているため、**Nix flake の URL を直接指定**することで利用できます。
+
+#### nix search（flake 経由）
+
 ```sh
-nix profile install github:makinzm/mille/v1.2.3
+nix search github:makinzm/mille mille
 ```
 
-**`nix run` で一時実行:**
+> **なぜ `nix search nixpkgs mille` では出ないのか**
+> `nix search nixpkgs` は nixpkgs リポジトリに取り込まれたパッケージのみ対象です。
+> `github:makinzm/mille` を直接検索することで、nixpkgs への取り込みなしに `nix search` が使えます。
+
+#### nix profile でインストール（タグ指定）
+
+```sh
+nix profile install github:makinzm/mille/v1.2.3
+# または最新 HEAD
+nix profile install github:makinzm/mille
+```
+
+#### nix run で一時実行
+
 ```sh
 nix run github:makinzm/mille -- check
 ```
 
-**devbox プロジェクトへ追加:**
+#### devbox プロジェクトへ追加
+
 ```sh
 devbox add github:makinzm/mille/v1.2.3#mille
 ```
 
-**Cachix キャッシュを有効化（コンパイル不要にする）:**
-```sh
-cachix use mille
-# その後 nix profile install / nix run が高速になる
+#### nixpkgs への取り込み（`nix search nixpkgs mille` を実現する場合）
+
+`nix search nixpkgs mille` で検索に出るようにするには、nixpkgs 本体へのマージが必要です。
+これは CI/CD では自動化できない手動プロセスです。
+
+手順の概要:
+1. [nixpkgs](https://github.com/NixOS/nixpkgs) をフォーク・クローン
+2. `pkgs/by-name/mi/mille/package.nix` に derivation を追加（by-name 方式）
+   - パスは先頭 2 文字のディレクトリ `mi/` の下に配置する
+   - `all-packages.nix` への追記は不要（by-name は自動検出される）
+3. **ハッシュ計算と `nix build` 動作確認**（後述）
+4. nixpkgs の [CONTRIBUTING.md](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md) に従って PR を提出
+
+> nixpkgs のレビュープロセスは数週間かかる場合があります。
+> それまでの間は `github:makinzm/mille` 経由で利用できます。
+
+##### `package.nix` のひな形
+
+```nix
+{ lib, rustPlatform, fetchFromGitHub }:
+
+rustPlatform.buildRustPackage {
+  pname = "mille";
+  version = "x.y.z";  # リリースバージョンに合わせる
+
+  src = fetchFromGitHub {
+    owner = "makinzm";
+    repo = "mille";
+    rev = "vx.y.z";
+    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";  # 手順 A で置き換える
+  };
+
+  cargoHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";  # 手順 B で置き換える
+
+  meta = with lib; {
+    description = "Architecture Checker — Rust-based multi-language architecture linter";
+    homepage = "https://github.com/makinzm/mille";
+    license = licenses.mit;
+    maintainers = with maintainers; [ ];
+    mainProgram = "mille";
+  };
+}
 ```
+
+##### ハッシュ計算手順
+
+**手順 A: ソースハッシュの取得**
+
+```sh
+# nixpkgs フォークのルートで実行
+nix-prefetch-github makinzm mille --rev vx.y.z
+# → hash フィールドに使う sha256 が出力される
+```
+
+または `lib.fakeHash` を仮置きして `nix build` を走らせると、
+エラーメッセージに正しいハッシュが表示される（手順 B と同時に取得可能）。
+
+**手順 B: Cargo 依存ハッシュの取得**
+
+`hash` を正しい値に更新した後、`cargoHash` に `lib.fakeHash` を仮置きしてビルドすると
+エラーメッセージに正しい `cargoHash` が表示される：
+
+```sh
+# nixpkgs フォークのルートで実行（lib.fakeHash を仮置きした状態）
+nix build -f . mille
+# → error: hash mismatch ... got: sha256-XXXXX...
+# 表示されたハッシュを cargoHash に設定する
+```
+
+##### `nix build` による動作確認
+
+ハッシュを両方正しい値に置き換えた後、**nixpkgs フォークのルートで**以下を実行：
+
+```sh
+# ビルドが通ることを確認
+nix build -f . mille
+
+# バイナリが動くことを確認
+./result/bin/mille --version
+```
+
+ビルドが成功したら PR を提出する。
 
 ---
 

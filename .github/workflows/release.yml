@@ -355,31 +355,3 @@ jobs:
           git commit -m "chore: update mille to v${{ needs.release.outputs.version }}"
           git push
 
-  # ------------------------------------------------------------------ #
-  # 4e. Publish to Nix binary cache (Cachix)                           #
-  # ------------------------------------------------------------------ #
-  publish-nix:
-    name: Publish to Nix (Cachix)
-    needs: release
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v30
-        with:
-          nix_path: nixpkgs=channel:nixpkgs-unstable
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v15
-        with:
-          name: mille
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-
-      - name: Build and push to Cachix
-        run: nix build .#mille --print-build-logs
