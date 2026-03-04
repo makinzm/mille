@@ -61,6 +61,34 @@ PR を完成させる前に、spec.md や `LayerConfig` などの既存エンテ
 今回の例: `LayerConfig.allow_call_patterns` は定義済みだが `ViolationDetector` でチェックされていなかった。
 → このような「データ構造はあるが動作していない」漏れは PR 説明の **注意事項** セクションに明記し、対応する TODO 番号を記録する。
 
+### Dogfooding の E2E テスト設計原則
+
+ツール自身のコードを検査する「dogfooding」テストは、**ハッピーパス（正常系）だけでなく、意図的にエラーになる設定でも動作確認を行う**。具体的には：
+
+1. **正常系**: 正しい `mille.toml` を使ったとき、違反が 0 件であることを確認する。
+2. **異常系（レイヤー設定を壊す）**: 各レイヤーの `allow` / `deny` を意図的に誤りにして、期待通りの違反が検出されることを確認する。
+   - 例: `main` レイヤーの `allow` から `infrastructure` を除いたとき → `src/main.rs` の `infrastructure` インポートが違反として検出される。
+3. **レイヤーごとのバリエーション**: `domain` のみ、`usecase` のみ、`main` のみなど、層ごとに独立したテストケースを用意する。
+
+> ⚠️ 正常系のみでは「ツールが実際に機能しているか」を確認できない。意図的に壊したときにエラーが出なければ、そのツールはテストとして無価値。
+
+---
+
+### 自クレートインポートの分類（lib + bin 分割時の注意）
+
+Rust で `src/lib.rs` と `src/main.rs` が共存するプロジェクトでは、`main.rs` はライブラリクレートを `<crate_name>::` プレフィックス付きで参照する（例: `use mille::infrastructure::…`）。
+
+**問題**: インポート分類器が `crate::` しか「内部」として認識しない場合、`mille::infrastructure::…` は「外部クレート」として扱われ、**依存関係違反が検出されない**。
+
+**対策**: Resolver（または分類器）には、プロジェクトの自クレート名（`mille.toml` の `project.name`）を渡し、`<crate_name>::` で始まるパスも `ImportCategory::Internal` として分類する。
+
+実装パターン:
+- `Resolver` トレイトに `resolve_for_project(&self, import, own_crate)` を追加（デフォルト実装は `resolve()` に委譲）
+- `RustResolver` でオーバーライドして `<own_crate>::` を `crate::` と同等に扱う
+- `check_architecture::check()` 内で `config.project.name` を `resolve_for_project` に渡す
+
+**また、`main.rs` は二段階インポート（`use mille::infrastructure; use infrastructure::…`）を避け、完全修飾パス（`use mille::infrastructure::parser::…`）を使用する**。二段階インポートでは tree-sitter が `infrastructure::…` を外部クレートと誤認する。
+
 ---
 
 ## 開発環境・CI/CD構築時のルール

@@ -1,17 +1,14 @@
-use mille::domain;
-use mille::infrastructure;
-use mille::presentation;
-use mille::usecase;
-
 use clap::Parser;
-use domain::entity::violation::Severity;
-use infrastructure::parser::rust::RustParser;
-use infrastructure::repository::fs_source_file_repository::FsSourceFileRepository;
-use infrastructure::repository::toml_config_repository::TomlConfigRepository;
-use infrastructure::resolver::rust::RustResolver;
-use presentation::cli::args::{Cli, Command};
-use presentation::formatter::terminal::{format_layer_stats, format_summary, format_violation};
-use usecase::check_architecture;
+use mille::domain::entity::violation::Severity;
+use mille::infrastructure::parser::rust::RustParser;
+use mille::infrastructure::repository::fs_source_file_repository::FsSourceFileRepository;
+use mille::infrastructure::repository::toml_config_repository::TomlConfigRepository;
+use mille::infrastructure::resolver::rust::RustResolver;
+use mille::presentation::cli::args::{Cli, Command};
+use mille::presentation::formatter::terminal::{
+    format_layer_stats, format_summary, format_violation,
+};
+use mille::usecase::check_architecture;
 
 fn main() {
     let cli = Cli::parse();

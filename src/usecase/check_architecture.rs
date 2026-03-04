@@ -46,7 +46,10 @@ pub fn check(
             let source = std::fs::read_to_string(file_path)
                 .map_err(|e| format!("failed to read {}: {}", file_path, e))?;
             let raw = parser.parse_imports(&source, file_path);
-            all_resolved.extend(raw.iter().map(|r| resolver.resolve(r)));
+            all_resolved.extend(
+                raw.iter()
+                    .map(|r| resolver.resolve_for_project(r, &config.project.name)),
+            );
             all_call_exprs.extend(parser.parse_call_exprs(&source, file_path));
         }
     }
