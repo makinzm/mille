@@ -2,6 +2,20 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::repository::parser::Parser;
+
+/// Concrete implementation of the `Parser` port for Rust source files.
+pub struct RustParser;
+
+impl Parser for RustParser {
+    fn parse_imports(&self, source: &str, file_path: &str) -> Vec<RawImport> {
+        parse_rust_imports(source, file_path)
+    }
+
+    fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
+        parse_rust_call_exprs(source, file_path)
+    }
+}
 
 /// Parse Rust source code and extract all `use` and external `mod` declarations.
 pub fn parse_rust_imports(source: &str, file_path: &str) -> Vec<RawImport> {
@@ -258,8 +272,9 @@ mod tests {
 
     #[test]
     fn test_dogfood_main_rs() {
-        let source = std::fs::read_to_string("src/main.rs").expect("src/main.rs should exist");
-        let imports = parse_rust_imports(&source, "src/main.rs");
+        // main.rs now imports from the library crate; module declarations live in lib.rs.
+        let source = std::fs::read_to_string("src/lib.rs").expect("src/lib.rs should exist");
+        let imports = parse_rust_imports(&source, "src/lib.rs");
 
         let mod_names: Vec<&str> = imports
             .iter()
@@ -269,12 +284,12 @@ mod tests {
 
         assert!(
             mod_names.contains(&"domain"),
-            "`pub mod domain` should be detected in main.rs, got: {:?}",
+            "`pub mod domain` should be detected in lib.rs, got: {:?}",
             mod_names
         );
         assert!(
             mod_names.contains(&"infrastructure"),
-            "`pub mod infrastructure` should be detected in main.rs, got: {:?}",
+            "`pub mod infrastructure` should be detected in lib.rs, got: {:?}",
             mod_names
         );
     }

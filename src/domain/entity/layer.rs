@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct LayerConfig {
     pub name: String,
     pub paths: Vec<String>,
@@ -25,7 +25,7 @@ pub enum DependencyMode {
     OptOut,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct CallPattern {
     pub callee_layer: String,
     pub allow_methods: Vec<String>,
