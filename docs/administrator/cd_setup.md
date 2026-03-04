@@ -71,8 +71,8 @@ git tag v1.2.3 && git push origin v1.2.3
 
 ### 4. `HOMEBREW_TAP_TOKEN`
 1. GitHub で `makinzm/homebrew-tap` リポジトリを作成（空で可）
-2. [Personal Access Tokens (classic)](https://github.com/settings/tokens) → "Generate new token"
-3. スコープ: `repo`
+2. [Personal Access Tokens](https://github.com/settings/tokens) → "Generate new token"
+3. スコープ: `repo`（`homebrew-tap` リポジトリへの `Read and Write` 権限）
 4. Repository secret として登録
 
 ### 5. `CACHIX_AUTH_TOKEN`
