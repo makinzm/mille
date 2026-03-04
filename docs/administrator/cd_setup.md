@@ -23,7 +23,6 @@ git tag v1.2.3 && git push origin v1.2.3
 │ publish-npm     → npm (@makinzm/mille)  │
 │ publish-pypi    → PyPI (mille)          │
 │ update-homebrew → homebrew-tap リポジトリ │
-│ publish-nix     → Cachix バイナリキャッシュ │
 └─────────────────────────────────────────┘
 ```
 
@@ -46,9 +45,8 @@ git tag v1.2.3 && git push origin v1.2.3
 | `NPM_TOKEN`            | `NPM_TOKEN`            | npm への `npm publish`                 | [npm Access Tokens](https://www.npmjs.com/settings/tokens)                 | `Automation`（2FA 回避のため）           |
 | `PYPI_TOKEN`           | `PYPI_TOKEN`           | PyPI への `twine upload`               | [PyPI Account Settings](https://pypi.org/manage/account/)                  | 該当パッケージのみに scope 限定          |
 | `HOMEBREW_TAP_TOKEN`   | *(Repository secret)*  | `makinzm/homebrew-tap` へのプッシュ    | [GitHub Personal Access Tokens](https://github.com/settings/tokens)       | `repo` スコープ（`homebrew-tap` リポのみ）|
-| `CACHIX_AUTH_TOKEN`    | *(Repository secret)*  | Cachix バイナリキャッシュへのプッシュ  | [Cachix Dashboard](https://app.cachix.org/)                                | キャッシュ名 `mille` への write 権限     |
 
-> **注意:** `HOMEBREW_TAP_TOKEN` と `CACHIX_AUTH_TOKEN` は特定の Environment に紐づけず、Repository secrets に登録してください。
+> **注意:** `HOMEBREW_TAP_TOKEN` は特定の Environment に紐づけず、Repository secrets に登録してください。
 
 ---
 
@@ -73,12 +71,6 @@ git tag v1.2.3 && git push origin v1.2.3
 1. GitHub で `makinzm/homebrew-tap` リポジトリを作成（空で可）
 2. [Personal Access Tokens](https://github.com/settings/tokens) → "Generate new token"
 3. スコープ: `repo`（`homebrew-tap` リポジトリへの `Read and Write` 権限）
-4. Repository secret として登録
-
-### 5. `CACHIX_AUTH_TOKEN`
-1. [Cachix](https://app.cachix.org/) にサインイン
-2. "Create cache" → キャッシュ名 `mille`（パブリックで可）
-3. "Auth Tokens" → "Create Token" → write 権限
 4. Repository secret として登録
 
 ---
@@ -125,26 +117,51 @@ sudo dpkg -i "mille_${VERSION}_amd64.deb"
 
 ### Nix / devbox
 
-**`nix profile` で直接インストール（タグ指定）:**
+本プロジェクトは `flake.nix` でパッケージを公開しているため、**Nix flake の URL を直接指定**することで利用できます。
+
+#### nix search（flake 経由）
+
 ```sh
-nix profile install github:makinzm/mille/v1.2.3
+nix search github:makinzm/mille mille
 ```
 
-**`nix run` で一時実行:**
+> **なぜ `nix search nixpkgs mille` では出ないのか**
+> `nix search nixpkgs` は nixpkgs リポジトリに取り込まれたパッケージのみ対象です。
+> `github:makinzm/mille` を直接検索することで、nixpkgs への取り込みなしに `nix search` が使えます。
+
+#### nix profile でインストール（タグ指定）
+
+```sh
+nix profile install github:makinzm/mille/v1.2.3
+# または最新 HEAD
+nix profile install github:makinzm/mille
+```
+
+#### nix run で一時実行
+
 ```sh
 nix run github:makinzm/mille -- check
 ```
 
-**devbox プロジェクトへ追加:**
+#### devbox プロジェクトへ追加
+
 ```sh
 devbox add github:makinzm/mille/v1.2.3#mille
 ```
 
-**Cachix キャッシュを有効化（コンパイル不要にする）:**
-```sh
-cachix use mille
-# その後 nix profile install / nix run が高速になる
-```
+#### nixpkgs への取り込み（`nix search nixpkgs mille` を実現する場合）
+
+`nix search nixpkgs mille` で検索に出るようにするには、nixpkgs 本体へのマージが必要です。
+これは CI/CD では自動化できない手動プロセスです。
+
+手順の概要:
+1. [nixpkgs](https://github.com/NixOS/nixpkgs) をフォーク
+2. `pkgs/tools/misc/mille/default.nix` に derivation を追加
+3. `pkgs/top-level/all-packages.nix` にエントリを追加
+4. nixpkgs の [CONTRIBUTING.md](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md) に従って PR を提出
+
+> nixpkgs のレビュープロセスは数週間かかる場合があります。
+> それまでの間は `github:makinzm/mille` 経由で利用できます。
 
 ---
 
