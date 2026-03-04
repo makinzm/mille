@@ -82,7 +82,7 @@ const VALID_CONFIG: &str = "mille.toml";
 /// this config will return exit 1 — that is the RED signal for the architecture fix.
 const USECASE_DOMAIN_ONLY_TOML: &str = r#"
 [project]
-name = "mille-e2e"
+name = "mille"
 root = "."
 languages = ["rust"]
 
@@ -92,7 +92,7 @@ paths = ["src/domain/**"]
 dependency_mode = "opt-out"
 deny = ["infrastructure", "usecase", "presentation"]
 external_mode = "opt-in"
-external_allow = []
+external_allow = ["serde"]
 
 [[layers]]
 name = "infrastructure"
@@ -647,7 +647,7 @@ paths = ["src/domain/**"]
 dependency_mode = "opt-out"
 deny = ["infrastructure", "usecase", "presentation"]
 external_mode = "opt-in"
-external_allow = []
+external_allow = ["serde"]
 
 [[layers]]
 name = "infrastructure"

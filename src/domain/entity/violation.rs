@@ -19,6 +19,9 @@ pub struct Violation {
 pub enum ViolationKind {
     /// `dependency_mode` rule was broken (opt-in: to_layer not in allow; opt-out: to_layer in deny).
     DependencyViolation,
+    /// `external_mode` rule was broken: an external crate not in `external_allow` (opt-in) or in
+    /// `external_deny` (opt-out) was imported. `to_layer` holds the crate name.
+    ExternalViolation,
     /// `allow_call_patterns` rule was broken: a method not in `allow_methods` was called on a type
     /// from `callee_layer`.
     CallPatternViolation,

@@ -1,4 +1,4 @@
-use crate::domain::entity::violation::{Severity, Violation};
+use crate::domain::entity::violation::{Severity, Violation, ViolationKind};
 use crate::usecase::check_architecture::LayerStat;
 
 /// Format a single violation as a human-readable string.
@@ -8,10 +8,20 @@ pub fn format_violation(v: &Violation) -> String {
         Severity::Warning => "⚠️  [WARN] ",
         Severity::Info => "ℹ️  [INFO] ",
     };
-    format!(
-        "{} Dependency violation\n   {}:{}\n   import: {}\n   '{}' → '{}' is not allowed\n\n",
-        marker, v.file, v.line, v.import_path, v.from_layer, v.to_layer
-    )
+    match v.kind {
+        ViolationKind::DependencyViolation => format!(
+            "{} Dependency violation\n   {}:{}\n   import: {}\n   '{}' → '{}' is not allowed\n\n",
+            marker, v.file, v.line, v.import_path, v.from_layer, v.to_layer
+        ),
+        ViolationKind::ExternalViolation => format!(
+            "{} External violation\n   {}:{}\n   import: {}\n   '{}' では '{}' は許可されていません\n\n",
+            marker, v.file, v.line, v.import_path, v.from_layer, v.to_layer
+        ),
+        ViolationKind::CallPatternViolation => format!(
+            "{} Call pattern violation\n   {}:{}\n   call: {}\n   '{}' is not in allow_methods\n\n",
+            marker, v.file, v.line, v.import_path, v.to_layer
+        ),
+    }
 }
 
 /// Format per-layer file/violation statistics.

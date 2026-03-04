@@ -1,4 +1,5 @@
 use crate::domain::entity::call_expr::RawCallExpr;
+use crate::domain::entity::import::ImportKind;
 use crate::domain::entity::layer::{DependencyMode, LayerConfig};
 use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
 use crate::domain::entity::violation::{Severity, Violation, ViolationKind};
@@ -48,6 +49,56 @@ impl<'a> ViolationDetector<'a> {
                     .unwrap_or(false)
             })
         })
+    }
+
+    /// Inspect a list of resolved imports and return all external-dependency violations.
+    ///
+    /// For each `ImportCategory::External` import, the crate name (first `::` component) is
+    /// matched against `external_allow` (opt-in) or `external_deny` (opt-out) using the patterns
+    /// as full-string regular expressions.
+    pub fn detect_external(&self, imports: &[ResolvedImport]) -> Vec<Violation> {
+        let mut violations = Vec::new();
+        for import in imports {
+            if import.category != ImportCategory::External {
+                continue;
+            }
+            // `mod X;` declarations are internal module structure declarations, not external
+            // library imports. They must not be checked against external_allow/external_deny.
+            if import.raw.kind == ImportKind::Mod {
+                continue;
+            }
+            let Some(from_layer) = self.find_layer_for_file(&import.raw.file) else {
+                continue;
+            };
+            let crate_name = import
+                .raw
+                .path
+                .split("::")
+                .next()
+                .unwrap_or(&import.raw.path);
+            let allowed = match from_layer.external_mode {
+                DependencyMode::OptIn => from_layer
+                    .external_allow
+                    .iter()
+                    .any(|p| matches_external_pattern(p, crate_name)),
+                DependencyMode::OptOut => !from_layer
+                    .external_deny
+                    .iter()
+                    .any(|p| matches_external_pattern(p, crate_name)),
+            };
+            if !allowed {
+                violations.push(Violation {
+                    file: import.raw.file.clone(),
+                    line: import.raw.line,
+                    from_layer: from_layer.name.clone(),
+                    to_layer: crate_name.to_string(),
+                    import_path: import.raw.path.clone(),
+                    kind: ViolationKind::ExternalViolation,
+                    severity: Severity::Error,
+                });
+            }
+        }
+        violations
     }
 
     /// Check `allow_call_patterns` rules: for each static call (`Type::method()`) in `call_exprs`,
@@ -143,6 +194,16 @@ impl<'a> ViolationDetector<'a> {
             severity: Severity::Error,
         })
     }
+}
+
+/// Match `crate_name` against a full-string regex pattern.
+/// The pattern is anchored (`^(?:…)$`) so that `"serde"` matches exactly `serde`.
+/// Returns `false` if the regex is invalid.
+fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
+    regex::Regex::new(&format!("^(?:{})$", pattern))
+        .ok()
+        .map(|re| re.is_match(crate_name))
+        .unwrap_or(false)
 }
 
 /// Extract the type name brought into scope by an import path.
@@ -547,6 +608,222 @@ mod tests {
         let violations = detector.detect(&imports);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].from_layer, "domain");
+    }
+
+    // ------------------------------------------------------------------
+    // detect_external
+    // ------------------------------------------------------------------
+
+    fn make_layer_with_external(
+        name: &str,
+        paths: &[&str],
+        mode: DependencyMode,
+        external_allow: &[&str],
+        external_deny: &[&str],
+    ) -> LayerConfig {
+        LayerConfig {
+            name: name.to_string(),
+            paths: paths.iter().map(|s| s.to_string()).collect(),
+            dependency_mode: DependencyMode::OptIn,
+            allow: vec![],
+            deny: vec![],
+            external_mode: mode,
+            external_allow: external_allow.iter().map(|s| s.to_string()).collect(),
+            external_deny: external_deny.iter().map(|s| s.to_string()).collect(),
+            allow_call_patterns: vec![],
+        }
+    }
+
+    fn make_external(file: &str, line: usize, path: &str) -> ResolvedImport {
+        ResolvedImport {
+            raw: RawImport {
+                path: path.to_string(),
+                line,
+                file: file.to_string(),
+                kind: ImportKind::Use,
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+        }
+    }
+
+    #[test]
+    fn test_detect_external_opt_in_allowed_crate_no_violation() {
+        // domain opt-in, external_allow=["serde"] → serde import OK
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &["serde"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![make_external(
+            "src/domain/entity/config.rs",
+            1,
+            "serde::Deserialize",
+        )];
+        assert!(detector.detect_external(&imports).is_empty());
+    }
+
+    #[test]
+    fn test_detect_external_opt_in_disallowed_crate_is_violation() {
+        // domain opt-in, external_allow=[] → any external import is a violation
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![make_external(
+            "src/domain/entity/config.rs",
+            1,
+            "serde::Deserialize",
+        )];
+        let violations = detector.detect_external(&imports);
+        assert_eq!(violations.len(), 1);
+        let v = &violations[0];
+        assert_eq!(v.from_layer, "domain");
+        assert_eq!(v.to_layer, "serde"); // crate name
+        assert_eq!(v.kind, ViolationKind::ExternalViolation);
+        assert_eq!(v.severity, Severity::Error);
+        assert_eq!(v.line, 1);
+    }
+
+    #[test]
+    fn test_detect_external_opt_out_allowed_no_violation() {
+        // infrastructure opt-out, external_deny=[] → any external import is OK
+        let layers = vec![make_layer_with_external(
+            "infrastructure",
+            &["src/infrastructure/**"],
+            DependencyMode::OptOut,
+            &[],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![make_external(
+            "src/infrastructure/parser/rust.rs",
+            1,
+            "tree_sitter::Node",
+        )];
+        assert!(detector.detect_external(&imports).is_empty());
+    }
+
+    #[test]
+    fn test_detect_external_opt_out_denied_crate_is_violation() {
+        // infrastructure opt-out, external_deny=["sqlx"] → sqlx import is a violation
+        let layers = vec![make_layer_with_external(
+            "infrastructure",
+            &["src/infrastructure/**"],
+            DependencyMode::OptOut,
+            &[],
+            &["sqlx"],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![make_external("src/infrastructure/db.rs", 5, "sqlx::query")];
+        let violations = detector.detect_external(&imports);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].from_layer, "infrastructure");
+        assert_eq!(violations[0].to_layer, "sqlx");
+        assert_eq!(violations[0].kind, ViolationKind::ExternalViolation);
+    }
+
+    #[test]
+    fn test_detect_external_regex_alternation_pattern() {
+        // external_allow=["sqlx|sea-orm"] → both sqlx and sea-orm are allowed
+        let layers = vec![make_layer_with_external(
+            "infra",
+            &["src/infra/**"],
+            DependencyMode::OptIn,
+            &["sqlx|sea_orm"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![
+            make_external("src/infra/db.rs", 1, "sqlx::query"),
+            make_external("src/infra/orm.rs", 2, "sea_orm::DatabaseConnection"),
+        ];
+        assert!(detector.detect_external(&imports).is_empty());
+    }
+
+    #[test]
+    fn test_detect_external_skips_mod_declarations() {
+        // `pub mod X;` declarations are module structure, not external library imports.
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "entity".to_string(),
+                line: 1,
+                file: "src/domain/mod.rs".to_string(),
+                kind: ImportKind::Mod, // pub mod entity;
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+        }];
+        assert!(
+            detector.detect_external(&imports).is_empty(),
+            "pub mod X; must not be treated as an external library import"
+        );
+    }
+
+    #[test]
+    fn test_detect_external_skips_internal_and_stdlib() {
+        // Internal and Stdlib imports must not generate external violations.
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![
+            ResolvedImport {
+                raw: RawImport {
+                    path: "crate::domain::entity::config".to_string(),
+                    line: 1,
+                    file: "src/domain/service/foo.rs".to_string(),
+                    kind: ImportKind::Use,
+                },
+                category: ImportCategory::Internal,
+                resolved_path: Some("src/domain/entity/config".to_string()),
+            },
+            ResolvedImport {
+                raw: RawImport {
+                    path: "std::fmt".to_string(),
+                    line: 2,
+                    file: "src/domain/service/foo.rs".to_string(),
+                    kind: ImportKind::Use,
+                },
+                category: ImportCategory::Stdlib,
+                resolved_path: None,
+            },
+        ];
+        assert!(detector.detect_external(&imports).is_empty());
+    }
+
+    #[test]
+    fn test_detect_external_crate_name_extracted_from_path() {
+        // "tree_sitter::Node" → crate name is "tree_sitter"
+        let layers = vec![make_layer_with_external(
+            "infra",
+            &["src/infra/**"],
+            DependencyMode::OptIn,
+            &["tree_sitter"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![make_external("src/infra/parser.rs", 3, "tree_sitter::Node")];
+        assert!(detector.detect_external(&imports).is_empty());
     }
 
     // ------------------------------------------------------------------

@@ -10,7 +10,7 @@ dependency_mode = "opt-out"
 allow = []
 deny = ["infrastructure", "usecase", "presentation"]
 external_mode = "opt-in"
-external_allow = []
+external_allow = ["serde"]
 
 [[layers]]
 name = "infrastructure"
