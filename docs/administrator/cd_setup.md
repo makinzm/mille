@@ -155,14 +155,82 @@ devbox add github:makinzm/mille/v1.2.3#mille
 これは CI/CD では自動化できない手動プロセスです。
 
 手順の概要:
-1. [nixpkgs](https://github.com/NixOS/nixpkgs) をフォーク
+1. [nixpkgs](https://github.com/NixOS/nixpkgs) をフォーク・クローン
 2. `pkgs/by-name/mi/mille/package.nix` に derivation を追加（by-name 方式）
    - パスは先頭 2 文字のディレクトリ `mi/` の下に配置する
    - `all-packages.nix` への追記は不要（by-name は自動検出される）
-3. nixpkgs の [CONTRIBUTING.md](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md) に従って PR を提出
+3. **ハッシュ計算と `nix build` 動作確認**（後述）
+4. nixpkgs の [CONTRIBUTING.md](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md) に従って PR を提出
 
 > nixpkgs のレビュープロセスは数週間かかる場合があります。
 > それまでの間は `github:makinzm/mille` 経由で利用できます。
+
+##### `package.nix` のひな形
+
+```nix
+{ lib, rustPlatform, fetchFromGitHub }:
+
+rustPlatform.buildRustPackage {
+  pname = "mille";
+  version = "x.y.z";  # リリースバージョンに合わせる
+
+  src = fetchFromGitHub {
+    owner = "makinzm";
+    repo = "mille";
+    rev = "vx.y.z";
+    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";  # 手順 A で置き換える
+  };
+
+  cargoHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";  # 手順 B で置き換える
+
+  meta = with lib; {
+    description = "Architecture Checker — Rust-based multi-language architecture linter";
+    homepage = "https://github.com/makinzm/mille";
+    license = licenses.mit;
+    maintainers = with maintainers; [ ];
+    mainProgram = "mille";
+  };
+}
+```
+
+##### ハッシュ計算手順
+
+**手順 A: ソースハッシュの取得**
+
+```sh
+# nixpkgs フォークのルートで実行
+nix-prefetch-github makinzm mille --rev vx.y.z
+# → hash フィールドに使う sha256 が出力される
+```
+
+または `lib.fakeHash` を仮置きして `nix build` を走らせると、
+エラーメッセージに正しいハッシュが表示される（手順 B と同時に取得可能）。
+
+**手順 B: Cargo 依存ハッシュの取得**
+
+`hash` を正しい値に更新した後、`cargoHash` に `lib.fakeHash` を仮置きしてビルドすると
+エラーメッセージに正しい `cargoHash` が表示される：
+
+```sh
+# nixpkgs フォークのルートで実行（lib.fakeHash を仮置きした状態）
+nix build -f . mille
+# → error: hash mismatch ... got: sha256-XXXXX...
+# 表示されたハッシュを cargoHash に設定する
+```
+
+##### `nix build` による動作確認
+
+ハッシュを両方正しい値に置き換えた後、**nixpkgs フォークのルートで**以下を実行：
+
+```sh
+# ビルドが通ることを確認
+nix build -f . mille
+
+# バイナリが動くことを確認
+./result/bin/mille --version
+```
+
+ビルドが成功したら PR を提出する。
 
 ---
 
