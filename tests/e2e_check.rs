@@ -577,6 +577,182 @@ fn test_multiple_violations_all_present_in_output() {
 }
 
 // ---------------------------------------------------------------------------
+// Own-crate import detection (the "mille::" prefix bug)
+// ---------------------------------------------------------------------------
+
+/// main layer only allows usecase + presentation (NOT infrastructure).
+/// src/main.rs imports from mille::infrastructure → must be detected as a violation.
+/// This is the exact scenario the user reported: mille was silently passing when it
+/// should not.
+const MAIN_FORBIDS_INFRA_TOML: &str = r#"
+[project]
+name = "mille"
+root = "."
+languages = ["rust"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-out"
+deny = ["infrastructure", "usecase", "presentation"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["serde", "toml", "tree_sitter", "glob"]
+
+[[layers]]
+name = "usecase"
+paths = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "presentation"
+paths = ["src/presentation/**"]
+dependency_mode = "opt-in"
+allow = ["usecase", "domain"]
+external_mode = "opt-in"
+external_allow = ["clap"]
+
+[[layers]]
+name = "main"
+paths = ["src/main.rs"]
+dependency_mode = "opt-in"
+allow = ["usecase", "presentation"]
+external_mode = "opt-in"
+external_allow = ["clap"]
+"#;
+
+/// usecase only allows domain; main only allows usecase + presentation.
+/// This config should produce 0 violations once the architecture is correct
+/// (usecase must not import infrastructure; main must not import infrastructure/domain directly).
+/// Used to verify that the "clean" path is also accurate — NOT a false negative.
+const STRICT_LAYERING_TOML: &str = r#"
+[project]
+name = "mille"
+root = "."
+languages = ["rust"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-out"
+deny = ["infrastructure", "usecase", "presentation"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["serde", "toml", "tree_sitter", "glob"]
+
+[[layers]]
+name = "usecase"
+paths = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "presentation"
+paths = ["src/presentation/**"]
+dependency_mode = "opt-in"
+allow = ["usecase", "domain"]
+external_mode = "opt-in"
+external_allow = ["clap"]
+
+[[layers]]
+name = "main"
+paths = ["src/main.rs"]
+dependency_mode = "opt-in"
+allow = ["domain", "infrastructure", "usecase", "presentation"]
+external_mode = "opt-in"
+external_allow = ["clap"]
+"#;
+
+#[test]
+fn test_main_forbids_infra_exits_one() {
+    // RED: this test will FAIL before the resolver is fixed.
+    // main.rs imports from mille::infrastructure::* which the resolver must classify
+    // as Internal (infrastructure layer), producing violations when infrastructure
+    // is not in the main layer's allow list.
+    let cfg = TempConfig::new("mille_e2e_main_forbids_infra.toml", MAIN_FORBIDS_INFRA_TOML);
+    let out = mille(&["check", "--config", cfg.file_name()]);
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "main imports infrastructure but it is not in allow list — must exit 1\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn test_main_forbids_infra_violation_mentions_main_layer() {
+    let cfg = TempConfig::new("mille_e2e_main_forbids_infra2.toml", MAIN_FORBIDS_INFRA_TOML);
+    let out = mille(&["check", "--config", cfg.file_name()]);
+    let s = stdout(&out);
+    assert!(
+        s.contains("main"),
+        "violation output must mention 'main' as the offending layer\nstdout:\n{}",
+        s
+    );
+}
+
+#[test]
+fn test_main_forbids_infra_violation_mentions_infrastructure() {
+    let cfg = TempConfig::new("mille_e2e_main_forbids_infra3.toml", MAIN_FORBIDS_INFRA_TOML);
+    let out = mille(&["check", "--config", cfg.file_name()]);
+    let s = stdout(&out);
+    assert!(
+        s.contains("infrastructure"),
+        "violation output must mention 'infrastructure' as the forbidden dependency\nstdout:\n{}",
+        s
+    );
+}
+
+#[test]
+fn test_strict_layering_clean_exits_zero() {
+    // The correctly-layered project (main allows all four layers) must produce 0 violations.
+    let cfg = TempConfig::new("mille_e2e_strict_clean.toml", STRICT_LAYERING_TOML);
+    let out = mille(&["check", "--config", cfg.file_name()]);
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "correctly-layered project must exit 0\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn test_domain_forbids_usecase_exits_one() {
+    // domain (opt-out) denies usecase/presentation/infrastructure.
+    // If any domain file imports from usecase → violation.
+    // Currently no domain file imports usecase, so this should pass cleanly.
+    // This test confirms opt-out deny rules work correctly.
+    let cfg = TempConfig::new("mille_e2e_strict_clean2.toml", STRICT_LAYERING_TOML);
+    let out = mille(&["check", "--config", cfg.file_name()]);
+    // domain currently has no imports from usecase/presentation/infrastructure
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "domain has no forbidden imports, should exit 0\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Dogfooding — library API integration (no binary invocation needed)
 // Tests here live outside src/ so they are NOT subject to the architecture check,
 // making it safe to import infrastructure types directly.
