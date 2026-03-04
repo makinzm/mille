@@ -123,6 +123,17 @@ jobs:
         if: matrix.use_cross == true
         run: cargo install cross --locked
 
+      # arm64 バイナリを cargo deb が strip するとき、ホストの strip (x86_64) では
+      # ELF フォーマット不一致で失敗する。.cargo/config.toml で指定している
+      # aarch64-linux-gnu-strip を使えるよう binutils-aarch64-linux-gnu を入れる。
+      - name: Install cross-compilation tools (arm64 only)
+        if: matrix.use_cross == true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu
+
       - name: Install cargo-deb
         run: cargo install cargo-deb --locked
 

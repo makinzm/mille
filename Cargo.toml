@@ -13,7 +13,9 @@ keywords = ["architecture", "linter"]
 maintainer = "makinzm <makinzm@users.noreply.github.com>"
 copyright = "2024 makinzm"
 license-file = ["LICENSE", "4"]
-depends = "$auto"
+# $auto は cross コンパイル時に x86_64 ホストで arm64 ライブラリを解決できず
+# dpkg-shlibdeps が失敗する。glibc 依存を明示して $auto を回避する。
+depends = "libc6 (>= 2.17)"
 section = "utility"
 priority = "optional"
 assets = [

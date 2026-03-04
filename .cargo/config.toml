@@ -1,0 +1,12 @@
+# arm64 クロスコンパイル設定
+#
+# cargo deb は `[target.<triple>] strip` の設定を参照してバイナリを strip する。
+# aarch64 向けバイナリをホスト (x86_64) の `strip` で処理すると ELF フォーマット不一致で
+# "Unable to recognise the format of the input file" エラーになるため、
+# aarch64-linux-gnu-strip を明示的に指定する。
+#
+# 必要なパッケージ (Ubuntu):
+#   sudo apt-get install gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+strip = { path = "aarch64-linux-gnu-strip" }
