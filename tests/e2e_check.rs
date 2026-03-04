@@ -700,7 +700,10 @@ fn test_main_forbids_infra_exits_one() {
 
 #[test]
 fn test_main_forbids_infra_violation_mentions_main_layer() {
-    let cfg = TempConfig::new("mille_e2e_main_forbids_infra2.toml", MAIN_FORBIDS_INFRA_TOML);
+    let cfg = TempConfig::new(
+        "mille_e2e_main_forbids_infra2.toml",
+        MAIN_FORBIDS_INFRA_TOML,
+    );
     let out = mille(&["check", "--config", cfg.file_name()]);
     let s = stdout(&out);
     assert!(
@@ -712,7 +715,10 @@ fn test_main_forbids_infra_violation_mentions_main_layer() {
 
 #[test]
 fn test_main_forbids_infra_violation_mentions_infrastructure() {
-    let cfg = TempConfig::new("mille_e2e_main_forbids_infra3.toml", MAIN_FORBIDS_INFRA_TOML);
+    let cfg = TempConfig::new(
+        "mille_e2e_main_forbids_infra3.toml",
+        MAIN_FORBIDS_INFRA_TOML,
+    );
     let out = mille(&["check", "--config", cfg.file_name()]);
     let s = stdout(&out);
     assert!(

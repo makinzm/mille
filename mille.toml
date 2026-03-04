@@ -43,3 +43,15 @@ dependency_mode = "opt-in"
 allow = ["domain", "infrastructure", "usecase", "presentation"]
 external_mode = "opt-in"
 external_allow = ["clap"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "infrastructure"
+  allow_methods = ["new", "build", "create", "init", "setup"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "usecase"
+  allow_methods = ["check"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "presentation"
+  allow_methods = ["parse"]
