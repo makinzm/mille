@@ -17,4 +17,6 @@ pub enum ImportKind {
     Use,
     /// `mod foo;` or `pub mod foo;` — external module declaration (no inline body)
     Mod,
+    /// `import "pkg/path"` — Go import declaration
+    Import,
 }
