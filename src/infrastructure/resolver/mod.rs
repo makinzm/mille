@@ -1,11 +1,11 @@
 pub mod go;
 pub mod rust;
 
+use self::go::GoResolver;
+use self::rust::RustResolver;
 use crate::domain::entity::import::RawImport;
 use crate::domain::entity::resolved_import::ResolvedImport;
 use crate::domain::repository::resolver::Resolver;
-use go::GoResolver;
-use rust::RustResolver;
 
 /// Dispatches to the appropriate resolver based on file extension.
 pub struct DispatchingResolver {

@@ -1,9 +1,11 @@
 use clap::Parser;
 use mille::domain::entity::violation::Severity;
-use mille::infrastructure::parser::rust::RustParser;
+use mille::domain::repository::config_repository::ConfigRepository;
+use mille::infrastructure::parser::DispatchingParser;
 use mille::infrastructure::repository::fs_source_file_repository::FsSourceFileRepository;
 use mille::infrastructure::repository::toml_config_repository::TomlConfigRepository;
-use mille::infrastructure::resolver::rust::RustResolver;
+use mille::infrastructure::resolver::go::GoResolver;
+use mille::infrastructure::resolver::DispatchingResolver;
 use mille::presentation::cli::args::{Cli, Command};
 use mille::presentation::formatter::terminal::{
     format_layer_stats, format_summary, format_violation,
@@ -14,12 +16,34 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Check { config } => {
+            // Pre-load config to extract the Go module name for GoResolver.
+            // NOTE: Double-load is acceptable for a CLI tool — the first load
+            // extracts the module_name to construct GoResolver, the second
+            // load happens inside check_architecture::check().
+            let config_repo = TomlConfigRepository;
+            let app_config = match config_repo.load(&config) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(3);
+                }
+            };
+            let go_module = app_config
+                .resolve
+                .as_ref()
+                .and_then(|r| r.go.as_ref())
+                .map(|g| g.module_name.clone())
+                .unwrap_or_default();
+
+            let parser = DispatchingParser::new();
+            let resolver = DispatchingResolver::new(GoResolver::new(go_module));
+
             match check_architecture::check(
                 &config,
-                &TomlConfigRepository,
+                &config_repo,
                 &FsSourceFileRepository,
-                &RustParser,
-                &RustResolver,
+                &parser,
+                &resolver,
             ) {
                 Ok(result) => {
                     for v in &result.violations {

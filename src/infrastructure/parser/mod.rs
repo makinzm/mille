@@ -1,11 +1,11 @@
 pub mod go;
 pub mod rust;
 
+use self::go::GoParser;
+use self::rust::RustParser;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::RawImport;
 use crate::domain::repository::parser::Parser;
-use go::GoParser;
-use rust::RustParser;
 
 /// Dispatches to the appropriate parser based on file extension.
 pub struct DispatchingParser {

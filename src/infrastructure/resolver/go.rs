@@ -30,12 +30,47 @@ impl Resolver for GoResolver {
 }
 
 fn resolve_go_impl(import: &RawImport, module_name: &str) -> ResolvedImport {
-    todo!("GoResolver not yet implemented: import={:?}, module_name={:?}", import, module_name)
+    let category = classify_go(&import.path, module_name);
+    // For internal Go imports, compute a synthetic resolved path so the
+    // ViolationDetector can match it against layer glob patterns.
+    // e.g. "github.com/example/gosample/domain" (module="github.com/example/gosample")
+    //   → resolved_path = "domain/_.go"  (matches layer glob "domain/**")
+    let resolved_path = if category == ImportCategory::Internal && !module_name.is_empty() {
+        let prefix = format!("{}/", module_name);
+        import
+            .path
+            .strip_prefix(&prefix)
+            .map(|rel| format!("{}/_.go", rel))
+    } else {
+        None
+    };
+    ResolvedImport {
+        raw: import.clone(),
+        category,
+        resolved_path,
+    }
 }
 
 /// Classify a Go import path.
+///
+/// - stdlib: first path segment has no `.` (e.g. `fmt`, `net/http`)
+/// - internal: path starts with `module_name`
+/// - external: everything else
 pub fn classify_go(path: &str, module_name: &str) -> ImportCategory {
-    todo!("classify_go not yet implemented: path={:?}, module_name={:?}", path, module_name)
+    // stdlib: no dot in the first segment
+    let first_segment = path.split('/').next().unwrap_or(path);
+    if !first_segment.contains('.') {
+        return ImportCategory::Stdlib;
+    }
+
+    // internal: starts with the project's module name
+    if !module_name.is_empty()
+        && (path == module_name || path.starts_with(&format!("{}/", module_name)))
+    {
+        return ImportCategory::Internal;
+    }
+
+    ImportCategory::External
 }
 
 #[cfg(test)]
@@ -105,6 +140,8 @@ mod tests {
         let import = raw_go("github.com/example/myapp/domain");
         let resolved = resolver.resolve(&import);
         assert_eq!(resolved.category, ImportCategory::Internal);
+        // resolved_path should enable ViolationDetector to match "domain/**"
+        assert_eq!(resolved.resolved_path, Some("domain/_.go".to_string()));
     }
 
     #[test]
@@ -113,6 +150,7 @@ mod tests {
         let import = raw_go("github.com/other/lib");
         let resolved = resolver.resolve(&import);
         assert_eq!(resolved.category, ImportCategory::External);
+        assert!(resolved.resolved_path.is_none());
     }
 
     #[test]
@@ -123,5 +161,6 @@ mod tests {
         let r1 = resolver.resolve_for_project(&import, "ignored");
         let r2 = resolver.resolve(&import);
         assert_eq!(r1.category, r2.category);
+        assert_eq!(r1.resolved_path, r2.resolved_path);
     }
 }

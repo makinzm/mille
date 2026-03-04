@@ -1,27 +1,32 @@
 use crate::domain::repository::source_file_repository::SourceFileRepository;
 
 /// Concrete implementation of the `SourceFileRepository` port.
-/// Expands glob patterns and returns `.rs` file paths relative to the working directory.
+/// Expands glob patterns and returns `.rs` and `.go` file paths relative to the working directory.
 pub struct FsSourceFileRepository;
 
 impl SourceFileRepository for FsSourceFileRepository {
     fn collect(&self, patterns: &[String]) -> Vec<String> {
         let mut files = Vec::new();
         for pattern in patterns {
-            if pattern.ends_with(".rs") {
+            if pattern.ends_with(".rs") || pattern.ends_with(".go") {
                 if std::path::Path::new(pattern).exists() {
                     files.push(pattern.clone());
                 }
                 continue;
             }
             let base = pattern.trim_end_matches("/**").trim_end_matches('/');
-            for search in [format!("{}/**/*.rs", base), format!("{}/*.rs", base)] {
-                if let Ok(entries) = glob::glob(&search) {
-                    files.extend(
-                        entries
-                            .filter_map(|e| e.ok())
-                            .map(|p| p.to_string_lossy().to_string()),
-                    );
+            for ext in ["rs", "go"] {
+                for search in [
+                    format!("{}/**/*.{}", base, ext),
+                    format!("{}/*.{}", base, ext),
+                ] {
+                    if let Ok(entries) = glob::glob(&search) {
+                        files.extend(
+                            entries
+                                .filter_map(|e| e.ok())
+                                .map(|p| p.to_string_lossy().to_string()),
+                        );
+                    }
                 }
             }
         }
@@ -65,5 +70,26 @@ mod tests {
         let mut sorted = files.clone();
         sorted.dedup();
         assert_eq!(files.len(), sorted.len(), "duplicates must be removed");
+    }
+
+    #[test]
+    fn test_collects_go_files_from_pattern() {
+        let repo = FsSourceFileRepository;
+        let files = repo.collect(&["tests/fixtures/go_sample/domain/**".to_string()]);
+        assert!(
+            !files.is_empty(),
+            "should find .go files under go_sample/domain/"
+        );
+        assert!(files.iter().any(|f| f.ends_with(".go")));
+    }
+
+    #[test]
+    fn test_collects_specific_go_file() {
+        let repo = FsSourceFileRepository;
+        let files = repo.collect(&["tests/fixtures/go_sample/domain/user.go".to_string()]);
+        assert_eq!(
+            files,
+            vec!["tests/fixtures/go_sample/domain/user.go".to_string()]
+        );
     }
 }
