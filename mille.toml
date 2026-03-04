@@ -45,10 +45,6 @@ external_mode = "opt-in"
 external_allow = ["clap"]
 
   [[layers.allow_call_patterns]]
-  callee_layer = "infrastructure"
-  allow_methods = ["new", "build", "create", "init", "setup"]
-
-  [[layers.allow_call_patterns]]
   callee_layer = "usecase"
   allow_methods = ["check"]
 
