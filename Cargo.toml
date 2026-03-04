@@ -13,8 +13,13 @@ keywords = ["architecture", "linter"]
 maintainer = "makinzm <makinzm@users.noreply.github.com>"
 copyright = "2024 makinzm"
 license-file = ["LICENSE", "4"]
-# $auto は cross コンパイル時に x86_64 ホストで arm64 ライブラリを解決できず
-# dpkg-shlibdeps が失敗する。glibc 依存を明示して $auto を回避する。
+# NOTE: "$auto" にすると、.deb を作るときに dpkg-shlibdeps というツールが
+#       「このバイナリが依存している共有ライブラリ(.so)は何か」を自動検出しようとする。
+#       しかし GitHub Actions の x86_64 ランナーで arm64 向けにクロスコンパイルした場合、
+#       arm64 用の .so ファイルがランナーに存在しないため検出に失敗する。
+#       結果として .deb に依存情報が入らず、インストール先で libc6 が見つからないトラブルが起きうる。
+#       そのため、このバイナリが実際に必要とする libc6 を直接指定している。
+#       参考: https://github.com/makinzm/mille/actions/runs/22662654715/job/65686494078
 depends = "libc6 (>= 2.17)"
 section = "utility"
 priority = "optional"
