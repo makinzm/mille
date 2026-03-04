@@ -137,7 +137,11 @@ jobs:
       - name: Build .deb package
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          cargo deb --no-build --target ${{ matrix.target }}
+          # NOTE: arm64 クロスコンパイル時、ホストの strip (x86_64) は arm64 ELF を認識できず
+          #       cargo deb が失敗する。--no-strip でその処理をスキップする。
+          #       参考: https://github.com/makinzm/mille/actions/runs/22662654715/job/65686494078
+          STRIP_FLAG=$([[ "${{ matrix.use_cross }}" == "true" ]] && echo "--no-strip" || echo "")
+          cargo deb --no-build ${STRIP_FLAG} --target ${{ matrix.target }}
           DEB=$(ls target/${{ matrix.target }}/debian/*.deb)
           VERSIONED="mille_${VERSION}_${{ matrix.arch }}.deb"
           cp "$DEB" "$VERSIONED"
