@@ -1,0 +1,19 @@
+[project]
+name = "mille-go-wrapper"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/makinzm/mille/packages/go"
+
+# NOTE: packages/go is a single-package CLI wrapper.
+# All imports (archive/tar, archive/zip, compress/gzip, net/http, etc.)
+# are Go stdlib — classified as Stdlib by GoResolver (no dot in first segment).
+# external_allow intentionally empty: no third-party dependencies allowed.
+[[layers]]
+name = "main"
+paths = ["."]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-in"
+external_allow = []

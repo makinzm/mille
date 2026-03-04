@@ -1,0 +1,39 @@
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["database/sql"]
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = ["fmt", "os"]

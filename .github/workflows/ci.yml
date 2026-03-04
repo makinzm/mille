@@ -7,6 +7,9 @@ on:
     branches: [ "main" ]
 
 jobs:
+  # ------------------------------------------------------------------ #
+  # 1. Unit / integration tests (lefthook: fmt + clippy + cargo test)  #
+  # ------------------------------------------------------------------ #
   test:
     runs-on: ubuntu-latest
     steps:
@@ -27,3 +30,35 @@ jobs:
         run: devbox run -- lefthook run pre-commit
       - name: Run tests
         run: devbox run -- cargo test
+
+  # ------------------------------------------------------------------ #
+  # 2. Dogfooding — build mille and run `mille check` on real projects #
+  #    Rust: mille's own source (mille.toml)                           #
+  #    Go:   tests/fixtures/go_sample  (Go fixture)                    #
+  #    Go:   packages/go               (Go wrapper package)            #
+  # ------------------------------------------------------------------ #
+  dogfood:
+    name: Dogfooding (mille check)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build mille (release)
+        run: cargo build --release
+
+      # Rust self-check: verify mille's own Clean Architecture rules
+      - name: Self-check — Rust project
+        run: ./target/release/mille check
+
+      # Go fixture check: a sample multi-layer Go project
+      - name: Self-check — Go fixture (tests/fixtures/go_sample)
+        working-directory: tests/fixtures/go_sample
+        run: ${{ github.workspace }}/target/release/mille check
+
+      # Go wrapper check: the packages/go/ binary wrapper
+      - name: Self-check — Go wrapper (packages/go)
+        working-directory: packages/go
+        run: ${{ github.workspace }}/target/release/mille check
