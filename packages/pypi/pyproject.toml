@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "mille"
 version = "0.0.1"
 description = "Architecture Checker — Rust-based multi-language architecture linter"
-readme = "../../README.md"
+readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "makinzm"}]
 classifiers = [

@@ -260,6 +260,9 @@ jobs:
           cd packages/pypi
           sed -i "s/^version = \".*\"/version = \"${{ needs.release.outputs.version }}\"/" pyproject.toml
 
+      - name: Copy README for sdist
+        run: cp README.md packages/pypi/README.md
+
       - name: Build and publish
         run: |
           cd packages/pypi
