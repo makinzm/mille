@@ -126,17 +126,6 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb --locked
 
-      # arm64 向けに binutils をインストール。
-      # ローカル開発への影響を避けるため .cargo/config.toml には書かず、
-      # CI 内でバイナリを先に aarch64-linux-gnu-strip で strip してから
-      # cargo deb --no-strip を使う方式にしている。
-      - name: Install cross-compilation tools (arm64 only)
-        if: matrix.use_cross == true
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            binutils-aarch64-linux-gnu
-
       - name: Build with cross
         if: matrix.use_cross == true
         run: cross build --release --target ${{ matrix.target }}
@@ -145,21 +134,13 @@ jobs:
         if: matrix.use_cross != true
         run: cargo build --release --target ${{ matrix.target }}
 
-      # arm64 の場合: ホストの strip は arm64 ELF を認識できないため、
-      # aarch64-linux-gnu-strip で先に strip してから cargo deb --no-strip を渡す。
-      - name: Strip binary (arm64 only)
-        if: matrix.use_cross == true
-        run: aarch64-linux-gnu-strip target/${{ matrix.target }}/release/mille
-
       - name: Build .deb package
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          # arm64 は上のステップで strip 済みなので --no-strip を付ける
-          if [ "${{ matrix.use_cross }}" = "true" ]; then
-            STRIP_FLAG="--no-strip"
-          else
-            STRIP_FLAG=""
-          fi
+          # NOTE: arm64 クロスコンパイル時、ホストの strip (x86_64) は arm64 ELF を認識できず
+          #       cargo deb が失敗する。--no-strip でその処理をスキップする。
+          #       参考: https://github.com/makinzm/mille/actions/runs/22662654715/job/65686494078
+          STRIP_FLAG=$([[ "${{ matrix.use_cross }}" == "true" ]] && echo "--no-strip" || echo "")
           cargo deb --no-build ${STRIP_FLAG} --target ${{ matrix.target }}
           DEB=$(ls target/${{ matrix.target }}/debian/*.deb)
           VERSIONED="mille_${VERSION}_${{ matrix.arch }}.deb"
