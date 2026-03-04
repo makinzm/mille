@@ -1,0 +1,69 @@
+use crate::domain::repository::source_file_repository::SourceFileRepository;
+
+/// Concrete implementation of the `SourceFileRepository` port.
+/// Expands glob patterns and returns `.rs` file paths relative to the working directory.
+pub struct FsSourceFileRepository;
+
+impl SourceFileRepository for FsSourceFileRepository {
+    fn collect(&self, patterns: &[String]) -> Vec<String> {
+        let mut files = Vec::new();
+        for pattern in patterns {
+            if pattern.ends_with(".rs") {
+                if std::path::Path::new(pattern).exists() {
+                    files.push(pattern.clone());
+                }
+                continue;
+            }
+            let base = pattern.trim_end_matches("/**").trim_end_matches('/');
+            for search in [format!("{}/**/*.rs", base), format!("{}/*.rs", base)] {
+                if let Ok(entries) = glob::glob(&search) {
+                    files.extend(
+                        entries
+                            .filter_map(|e| e.ok())
+                            .map(|p| p.to_string_lossy().to_string()),
+                    );
+                }
+            }
+        }
+        files.sort();
+        files.dedup();
+        files
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_collects_rs_files_from_pattern() {
+        let repo = FsSourceFileRepository;
+        let files = repo.collect(&["src/domain/**".to_string()]);
+        assert!(!files.is_empty(), "should find .rs files under src/domain/");
+        assert!(files.iter().all(|f| f.ends_with(".rs")));
+        assert!(files.iter().any(|f| f.contains("src/domain/")));
+    }
+
+    #[test]
+    fn test_collects_specific_file() {
+        let repo = FsSourceFileRepository;
+        let files = repo.collect(&["src/main.rs".to_string()]);
+        assert_eq!(files, vec!["src/main.rs".to_string()]);
+    }
+
+    #[test]
+    fn test_nonexistent_pattern_returns_empty() {
+        let repo = FsSourceFileRepository;
+        let files = repo.collect(&["src/nonexistent_layer/**".to_string()]);
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn test_deduplicates_overlapping_patterns() {
+        let repo = FsSourceFileRepository;
+        let files = repo.collect(&["src/domain/**".to_string(), "src/domain/**".to_string()]);
+        let mut sorted = files.clone();
+        sorted.dedup();
+        assert_eq!(files.len(), sorted.len(), "duplicates must be removed");
+    }
+}

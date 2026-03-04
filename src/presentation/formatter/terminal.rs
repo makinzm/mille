@@ -47,7 +47,6 @@ pub fn format_summary(violations: &[Violation]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::entity::import::{ImportKind, RawImport};
     use crate::domain::entity::violation::{Severity, Violation, ViolationKind};
     use crate::usecase::check_architecture::LayerStat;
 

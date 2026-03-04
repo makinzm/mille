@@ -1,5 +1,15 @@
 use crate::domain::entity::import::RawImport;
 use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
+use crate::domain::repository::resolver::Resolver;
+
+/// Concrete implementation of the `Resolver` port for Rust imports.
+pub struct RustResolver;
+
+impl Resolver for RustResolver {
+    fn resolve(&self, import: &RawImport) -> ResolvedImport {
+        resolve(import)
+    }
+}
 
 /// Resolve a Rust `RawImport` into a categorised `ResolvedImport`.
 pub fn resolve(import: &RawImport) -> ResolvedImport {
