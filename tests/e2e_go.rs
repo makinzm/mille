@@ -128,8 +128,7 @@ fn test_go_infra_empty_external_allow_exits_one() {
     let config_path = go_fixture_dir().join("mille_e2e_infra_ext_allow.toml");
     fs::write(&config_path, INFRA_EMPTY_EXTERNAL_ALLOW_TOML).expect("failed to write config");
 
-    let out =
-        mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow.toml"]);
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow.toml"]);
     let _ = fs::remove_file(&config_path);
 
     assert_eq!(
@@ -147,8 +146,7 @@ fn test_go_infra_empty_external_allow_mentions_database_sql() {
     let config_path = go_fixture_dir().join("mille_e2e_infra_ext_allow2.toml");
     fs::write(&config_path, INFRA_EMPTY_EXTERNAL_ALLOW_TOML).expect("failed to write config");
 
-    let out =
-        mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow2.toml"]);
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow2.toml"]);
     let _ = fs::remove_file(&config_path);
 
     let s = stdout(&out);
@@ -272,8 +270,7 @@ fn test_go_cmd_partial_external_allow_os_is_violation() {
     let config_path = go_fixture_dir().join("mille_e2e_cmd_partial_ext.toml");
     fs::write(&config_path, CMD_PARTIAL_EXTERNAL_ALLOW_TOML).expect("failed to write config");
 
-    let out =
-        mille_in_go_fixture(&["check", "--config", "mille_e2e_cmd_partial_ext.toml"]);
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_cmd_partial_ext.toml"]);
     let _ = fs::remove_file(&config_path);
 
     assert_eq!(
@@ -488,8 +485,7 @@ fn test_go_cmd_missing_infra_allow_exits_one() {
     let config_path = go_fixture_dir().join("mille_e2e_cmd_blocks_infra.toml");
     fs::write(&config_path, CMD_BLOCKS_INFRA_TOML).expect("failed to write config");
 
-    let out =
-        mille_in_go_fixture(&["check", "--config", "mille_e2e_cmd_blocks_infra.toml"]);
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_cmd_blocks_infra.toml"]);
     let _ = fs::remove_file(&config_path);
 
     assert_eq!(

@@ -53,16 +53,11 @@ fn resolve_go_impl(import: &RawImport, module_name: &str) -> ResolvedImport {
 
 /// Classify a Go import path.
 ///
-/// - stdlib: first path segment has no `.` (e.g. `fmt`, `net/http`)
 /// - internal: path starts with `module_name`
-/// - external: everything else
+/// - external: everything else, including Go stdlib packages like `fmt`, `net/http`,
+///             `database/sql`. Go architecture rules apply to all non-internal imports,
+///             so stdlib packages are subject to `external_allow` / `external_deny` checks.
 pub fn classify_go(path: &str, module_name: &str) -> ImportCategory {
-    // stdlib: no dot in the first segment
-    let first_segment = path.split('/').next().unwrap_or(path);
-    if !first_segment.contains('.') {
-        return ImportCategory::Stdlib;
-    }
-
     // internal: starts with the project's module name
     if !module_name.is_empty()
         && (path == module_name || path.starts_with(&format!("{}/", module_name)))
@@ -90,11 +85,20 @@ mod tests {
     const MODULE: &str = "github.com/example/myapp";
 
     #[test]
-    fn test_go_stdlib_is_stdlib() {
-        assert_eq!(classify_go("fmt", MODULE), ImportCategory::Stdlib);
-        assert_eq!(classify_go("net/http", MODULE), ImportCategory::Stdlib);
-        assert_eq!(classify_go("os", MODULE), ImportCategory::Stdlib);
-        assert_eq!(classify_go("encoding/json", MODULE), ImportCategory::Stdlib);
+    fn test_go_stdlib_is_external() {
+        // Go stdlib packages (no dot in first segment) are treated as External
+        // so that external_allow / external_deny rules can control them.
+        assert_eq!(classify_go("fmt", MODULE), ImportCategory::External);
+        assert_eq!(classify_go("net/http", MODULE), ImportCategory::External);
+        assert_eq!(classify_go("os", MODULE), ImportCategory::External);
+        assert_eq!(
+            classify_go("encoding/json", MODULE),
+            ImportCategory::External
+        );
+        assert_eq!(
+            classify_go("database/sql", MODULE),
+            ImportCategory::External
+        );
     }
 
     #[test]
@@ -130,7 +134,7 @@ mod tests {
         let resolver = GoResolver::new(MODULE.to_string());
         let import = raw_go("fmt");
         let resolved = resolver.resolve(&import);
-        assert_eq!(resolved.category, ImportCategory::Stdlib);
+        assert_eq!(resolved.category, ImportCategory::External);
         assert!(resolved.resolved_path.is_none());
     }
 
