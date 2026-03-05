@@ -74,6 +74,92 @@ fn test_go_valid_config_all_layers_clean() {
 }
 
 // ---------------------------------------------------------------------------
+// Broken config: external_allow=[] → violation when importing stdlib/external packages
+// ---------------------------------------------------------------------------
+
+/// infrastructure imports "database/sql" (Go stdlib).
+/// With external_allow=[], this must trigger an ExternalViolation.
+const INFRA_EMPTY_EXTERNAL_ALLOW_TOML: &str = r#"
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = ["fmt", "os"]
+"#;
+
+#[test]
+fn test_go_infra_empty_external_allow_exits_one() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_infra_ext_allow.toml");
+    fs::write(&config_path, INFRA_EMPTY_EXTERNAL_ALLOW_TOML).expect("failed to write config");
+
+    let out =
+        mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "infrastructure imports database/sql with external_allow=[]: must trigger violation\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn test_go_infra_empty_external_allow_mentions_database_sql() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_infra_ext_allow2.toml");
+    fs::write(&config_path, INFRA_EMPTY_EXTERNAL_ALLOW_TOML).expect("failed to write config");
+
+    let out =
+        mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow2.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    let s = stdout(&out);
+    assert!(
+        s.contains("database/sql") || s.contains("database"),
+        "violation output must mention 'database/sql'\nstdout:\n{}",
+        s
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Broken config: usecase allow=[] → violation when importing domain
 // ---------------------------------------------------------------------------
 
