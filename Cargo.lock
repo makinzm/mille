@@ -175,7 +175,6 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "glob",
- "regex",
  "serde",
  "toml",
  "tree-sitter",

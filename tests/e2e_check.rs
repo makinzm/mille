@@ -802,3 +802,86 @@ fn test_dogfood_layer_stats_populated() {
         "at least one layer must have files"
     );
 }
+
+// ---------------------------------------------------------------------------
+// External violation cases (Rust)
+// ---------------------------------------------------------------------------
+
+/// infrastructure with external_allow=[] — src/infrastructure uses tree_sitter, toml, glob, serde.
+/// All of these must be detected as ExternalViolations.
+const INFRA_EMPTY_EXTERNAL_ALLOW_TOML: &str = r#"
+[project]
+name = "mille-e2e"
+root = "."
+languages = ["rust"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-out"
+deny = ["infrastructure", "usecase", "presentation"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "presentation"
+paths = ["src/presentation/**"]
+dependency_mode = "opt-in"
+allow = ["usecase", "domain"]
+external_mode = "opt-in"
+external_allow = ["clap"]
+
+[[layers]]
+name = "main"
+paths = ["src/main.rs"]
+dependency_mode = "opt-in"
+allow = ["domain", "infrastructure", "usecase", "presentation"]
+external_mode = "opt-in"
+external_allow = ["clap"]
+"#;
+
+#[test]
+fn test_rust_infra_empty_external_allow_exits_one() {
+    let cfg = TempConfig::new(
+        "mille_e2e_rust_infra_ext_allow.toml",
+        INFRA_EMPTY_EXTERNAL_ALLOW_TOML,
+    );
+    let out = mille(&["check", "--config", cfg.file_name()]);
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "infrastructure uses tree_sitter/toml/glob with external_allow=[]: must trigger violation\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn test_rust_infra_empty_external_allow_mentions_tree_sitter() {
+    let cfg = TempConfig::new(
+        "mille_e2e_rust_infra_ext_allow2.toml",
+        INFRA_EMPTY_EXTERNAL_ALLOW_TOML,
+    );
+    let out = mille(&["check", "--config", cfg.file_name()]);
+    let s = stdout(&out);
+    assert!(
+        s.contains("tree_sitter"),
+        "violation output must mention 'tree_sitter'\nstdout:\n{}",
+        s
+    );
+}

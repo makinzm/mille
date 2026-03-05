@@ -196,14 +196,10 @@ impl<'a> ViolationDetector<'a> {
     }
 }
 
-/// Match `crate_name` against a full-string regex pattern.
-/// The pattern is anchored (`^(?:…)$`) so that `"serde"` matches exactly `serde`.
-/// Returns `false` if the regex is invalid.
+/// Match `crate_name` against a pattern using exact string equality.
+/// Users write patterns as plain strings (e.g. `"github.com/foo/bar"`), no regex escaping needed.
 fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
-    regex::Regex::new(&format!("^(?:{})$", pattern))
-        .ok()
-        .map(|re| re.is_match(crate_name))
-        .unwrap_or(false)
+    pattern == crate_name
 }
 
 /// Extract the type name brought into scope by an import path.
@@ -731,13 +727,13 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_regex_alternation_pattern() {
-        // external_allow=["sqlx|sea-orm"] → both sqlx and sea-orm are allowed
+    fn test_detect_external_each_crate_listed_separately() {
+        // external_allow=["sqlx", "sea_orm"] → each crate needs its own exact entry
         let layers = vec![make_layer_with_external(
             "infra",
             &["src/infra/**"],
             DependencyMode::OptIn,
-            &["sqlx|sea_orm"],
+            &["sqlx", "sea_orm"],
             &[],
         )];
         let detector = ViolationDetector::new(&layers);
@@ -746,6 +742,22 @@ mod tests {
             make_external("src/infra/orm.rs", 2, "sea_orm::DatabaseConnection"),
         ];
         assert!(detector.detect_external(&imports).is_empty());
+    }
+
+    #[test]
+    fn test_detect_external_pattern_is_exact_not_regex() {
+        // "sqlx|sea_orm" as a single entry must NOT match "sqlx" — patterns are not regex
+        let layers = vec![make_layer_with_external(
+            "infra",
+            &["src/infra/**"],
+            DependencyMode::OptIn,
+            &["sqlx|sea_orm"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![make_external("src/infra/db.rs", 1, "sqlx::query")];
+        // "sqlx|sea_orm" is not "sqlx", so this must be a violation
+        assert_eq!(detector.detect_external(&imports).len(), 1);
     }
 
     #[test]

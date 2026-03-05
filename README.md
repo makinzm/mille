@@ -32,7 +32,7 @@ cargo install mille
 go install github.com/makinzm/mille/packages/go@latest
 ```
 
-On first run, the Go wrapper downloads the pre-built binary from GitHub Releases and caches it at `~/.mille/bin/<version>/mille`. Subsequent runs use the cached binary directly — performance is equivalent to `cargo install`.
+The Go wrapper embeds `mille.wasm` (the compiled Rust core) and runs it via [wazero](https://wazero.io/) — a zero-dependency WebAssembly runtime. No network access or caching required; the binary is fully self-contained.
 
 ### Direct binary download
 

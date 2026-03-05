@@ -74,6 +74,214 @@ fn test_go_valid_config_all_layers_clean() {
 }
 
 // ---------------------------------------------------------------------------
+// Broken config: external_allow=[] → violation when importing stdlib/external packages
+// ---------------------------------------------------------------------------
+
+/// infrastructure imports "database/sql" (Go stdlib).
+/// With external_allow=[], this must trigger an ExternalViolation.
+const INFRA_EMPTY_EXTERNAL_ALLOW_TOML: &str = r#"
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = ["fmt", "os"]
+"#;
+
+#[test]
+fn test_go_infra_empty_external_allow_exits_one() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_infra_ext_allow.toml");
+    fs::write(&config_path, INFRA_EMPTY_EXTERNAL_ALLOW_TOML).expect("failed to write config");
+
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "infrastructure imports database/sql with external_allow=[]: must trigger violation\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn test_go_infra_empty_external_allow_mentions_database_sql() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_infra_ext_allow2.toml");
+    fs::write(&config_path, INFRA_EMPTY_EXTERNAL_ALLOW_TOML).expect("failed to write config");
+
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_ext_allow2.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    let s = stdout(&out);
+    assert!(
+        s.contains("database/sql") || s.contains("database"),
+        "violation output must mention 'database/sql'\nstdout:\n{}",
+        s
+    );
+}
+
+/// cmd imports "fmt" and "os" (Go stdlib).
+/// With external_allow=[], both must trigger ExternalViolations.
+const CMD_EMPTY_EXTERNAL_ALLOW_TOML: &str = r#"
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["database/sql"]
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = []
+"#;
+
+/// cmd allows only "fmt" but imports "os" too.
+/// "os" must be detected as a violation.
+const CMD_PARTIAL_EXTERNAL_ALLOW_TOML: &str = r#"
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["database/sql"]
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = ["fmt"]
+"#;
+
+#[test]
+fn test_go_cmd_empty_external_allow_exits_one() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_cmd_ext_allow.toml");
+    fs::write(&config_path, CMD_EMPTY_EXTERNAL_ALLOW_TOML).expect("failed to write config");
+
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_cmd_ext_allow.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "cmd imports fmt/os with external_allow=[]: must trigger violation\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn test_go_cmd_partial_external_allow_os_is_violation() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_cmd_partial_ext.toml");
+    fs::write(&config_path, CMD_PARTIAL_EXTERNAL_ALLOW_TOML).expect("failed to write config");
+
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_cmd_partial_ext.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "cmd allows only fmt but imports os: os must trigger violation\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Broken config: usecase allow=[] → violation when importing domain
 // ---------------------------------------------------------------------------
 
@@ -154,5 +362,136 @@ fn test_go_broken_usecase_violation_mentions_usecase() {
         s.contains("usecase"),
         "violation output must mention 'usecase'\nstdout:\n{}",
         s
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Broken config: infrastructure allow=[] → violation when importing domain
+// ---------------------------------------------------------------------------
+
+/// infrastructure is opt-in with allow=[] → imports domain must be a violation.
+const INFRA_BLOCKS_ALL_INTERNAL_TOML: &str = r#"
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-in"
+external_allow = ["database/sql"]
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = ["fmt", "os"]
+"#;
+
+#[test]
+fn test_go_infra_allow_empty_exits_one() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_infra_no_allow.toml");
+    fs::write(&config_path, INFRA_BLOCKS_ALL_INTERNAL_TOML).expect("failed to write config");
+
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_infra_no_allow.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "infrastructure imports domain with allow=[]: must trigger dependency violation\nstdout:\n{}",
+        stdout(&out)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Broken config: cmd allow missing infrastructure → violation
+// ---------------------------------------------------------------------------
+
+/// cmd is opt-in but allow does not include "infrastructure".
+/// cmd/main.go imports github.com/example/gosample/infrastructure → violation.
+const CMD_BLOCKS_INFRA_TOML: &str = r#"
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["database/sql"]
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase"]
+external_mode = "opt-in"
+external_allow = ["fmt", "os"]
+"#;
+
+#[test]
+fn test_go_cmd_missing_infra_allow_exits_one() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_cmd_blocks_infra.toml");
+    fs::write(&config_path, CMD_BLOCKS_INFRA_TOML).expect("failed to write config");
+
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_cmd_blocks_infra.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "cmd imports infrastructure but it is not in allow list: must trigger violation\nstdout:\n{}",
+        stdout(&out)
     );
 }
