@@ -14,8 +14,8 @@ pub fn format_violation(v: &Violation) -> String {
             marker, v.file, v.line, v.import_path, v.from_layer, v.to_layer
         ),
         ViolationKind::ExternalViolation => format!(
-            "{} External violation\n   {}:{}\n   import: {}\n   '{}' では '{}' は許可されていません\n\n",
-            marker, v.file, v.line, v.import_path, v.from_layer, v.to_layer
+            "{} External violation\n   {}:{}\n   import: {}\n   '{}' is not allowed in '{}'\n\n",
+            marker, v.file, v.line, v.import_path, v.to_layer, v.from_layer
         ),
         ViolationKind::CallPatternViolation => format!(
             "{} Call pattern violation\n   {}:{}\n   call: {}\n   '{}' is not in allow_methods\n\n",
