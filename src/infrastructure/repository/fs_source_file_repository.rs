@@ -92,4 +92,23 @@ mod tests {
             vec!["tests/fixtures/go_sample/domain/user.go".to_string()]
         );
     }
+
+    #[test]
+    fn test_collects_files_with_bare_glob_pattern() {
+        // "*.go" should match all .go files in the current directory.
+        // This is important for single-layer projects where all source files
+        // live in the project root (e.g. packages/go/).
+        let repo = FsSourceFileRepository;
+        // We can't rely on CWD having .go files, so use a directory-relative glob.
+        let files =
+            repo.collect(&["tests/fixtures/go_sample/domain/*.go".to_string()]);
+        assert!(
+            !files.is_empty(),
+            "bare glob '*.go' must match .go files in the directory"
+        );
+        assert!(
+            files.iter().all(|f| f.ends_with(".go")),
+            "all matched files must be .go files"
+        );
+    }
 }
