@@ -19,6 +19,7 @@ external_allow = [
   "fmt",
   "os",
   "path/filepath",
+  "strings",
   "testing",
   "github.com/makinzm/mille/packages/wasm",
   "github.com/tetratelabs/wazero",
