@@ -132,6 +132,26 @@ mod tests {
         assert!(out.contains("usecase"));
     }
 
+    #[test]
+    fn test_format_layer_stats_zero_files_shows_warning() {
+        let stats = vec![LayerStat {
+            name: "main".to_string(),
+            file_count: 0,
+            violation_count: 0,
+        }];
+        let out = format_layer_stats(&stats);
+        assert!(
+            out.contains('⚠'),
+            "layer with 0 files should show ⚠ (possible misconfigured paths)\nout: {}",
+            out
+        );
+        assert!(
+            !out.contains("✅"),
+            "layer with 0 files must NOT show ✅\nout: {}",
+            out
+        );
+    }
+
     // ------------------------------------------------------------------
     // format_summary
     // ------------------------------------------------------------------
