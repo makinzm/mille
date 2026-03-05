@@ -4,7 +4,8 @@
     "uv@latest",
     "volta@latest",
     "rustup@latest",
-    "go@latest"
+    "go@latest",
+    "wget@latest"
   ],
   "shell": {
     "init_hook": [
