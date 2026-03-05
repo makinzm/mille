@@ -7,11 +7,20 @@ languages = ["go"]
 module_name = "github.com/makinzm/mille/packages/go"
 
 # NOTE: packages/go embeds mille.wasm and runs it via wazero (WASI runtime).
-# wazero and its transitive dep golang.org/x/sys are the only external packages.
+# After the Go classifier change (stdlib is treated as External), all non-internal
+# imports must be listed in external_allow.
 [[layers]]
 name = "main"
-paths = ["."]
+paths = ["*.go"]
 dependency_mode = "opt-out"
 deny = []
 external_mode = "opt-in"
-external_allow = ["github.com/tetratelabs/wazero", "golang.org/x/sys"]
+external_allow = [
+  "context",
+  "fmt",
+  "os",
+  "path/filepath",
+  "testing",
+  "github\\.com/makinzm/mille/packages/wasm",
+  "github\\.com/tetratelabs/wazero(/.*)?",
+]
