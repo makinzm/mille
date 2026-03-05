@@ -58,12 +58,14 @@ rustup target add "${WASM_TARGET}" 2>/dev/null || true
 cargo build --target "${WASM_TARGET}" --release
 
 # ---------------------------------------------------------------------------
-# Distribute .wasm to packages/
+# Distribute .wasm to packages/wasm (single canonical copy)
 # ---------------------------------------------------------------------------
-mkdir -p packages/wasm packages/go
+# NOTE: packages/wasm is a Go module that exports var Wasm []byte via
+#       //go:embed. Other language packages (packages/go etc.) import it as a
+#       Go module dependency — no additional copies are committed to git.
+#       See packages/wasm/wasm.go and go.work for the workspace setup.
+mkdir -p packages/wasm
 
 cp "${RELEASE_WASM}" packages/wasm/mille.wasm
-cp packages/wasm/mille.wasm packages/go/mille.wasm
 
 echo "✓ packages/wasm/mille.wasm"
-echo "✓ packages/go/mille.wasm"

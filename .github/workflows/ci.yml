@@ -66,9 +66,27 @@ jobs:
           export AR_wasm32_wasip1="${WASI_SDK_PATH}/bin/llvm-ar"
           export CFLAGS_wasm32_wasip1="--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot -Wno-implicit-function-declaration"
           cargo build --target wasm32-wasip1 --release
-          mkdir -p packages/wasm packages/go
+
+      # NOTE: Overwrite the committed packages/wasm/mille.wasm with the fresh
+      #       CI build and use `git diff --exit-code` to detect any divergence.
+      #       packages/wasm is the ONLY committed copy of the .wasm file;
+      #       packages/go imports it as a Go module dependency (no copy there).
+      #       A non-empty diff means the committed .wasm is out of sync with
+      #       the current Rust source. The developer must run
+      #       `bash scripts/build-wasm.sh` and re-commit.
+      - name: Verify committed mille.wasm matches CI build
+        run: |
           cp target/wasm32-wasip1/release/mille.wasm packages/wasm/mille.wasm
-          cp packages/wasm/mille.wasm packages/go/mille.wasm
+          if ! git diff --exit-code packages/wasm/mille.wasm; then
+            echo ""
+            echo "ERROR: Committed packages/wasm/mille.wasm is out of sync with the current Rust source."
+            echo "Run the following locally and push the updated file:"
+            echo ""
+            echo "  bash scripts/build-wasm.sh"
+            echo "  git add packages/wasm/mille.wasm"
+            echo "  git commit -m '[fix] mille.wasm を更新 because of Rust ソース変更'"
+            exit 1
+          fi
 
       - name: Upload wasm artifact
         uses: actions/upload-artifact@v4
@@ -110,6 +128,9 @@ jobs:
   # ------------------------------------------------------------------ #
   dogfood-go:
     name: Dogfooding-go (wazero wrapper + mille check)
+    # NOTE: depends on build-wasm so this job is skipped when the committed
+    #       .wasm is stale. build-wasm verifies committed == CI build, so the
+    #       checked-out .wasm is guaranteed correct here — no artifact download needed.
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:
@@ -119,13 +140,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: packages/go/go.mod
-
-      # Restore the .wasm built by build-wasm job so //go:embed works.
-      - name: Download wasm artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mille-wasm
-          path: packages/go/
 
       - name: go test — packages/go
         working-directory: packages/go

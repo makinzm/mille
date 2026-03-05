@@ -24,4 +24,5 @@ target
 #.idea/
 
 packages/go/go
+packages/go/mille.wasm
 

@@ -3,9 +3,22 @@
 ## 概要
 
 `mille` のコアロジック（Rust）を `wasm32-wasip1`（WASI Preview 1）ターゲットでビルドし、
-`packages/go/mille.wasm` として埋め込みます。
-Go ラッパーは `//go:embed mille.wasm` でバイナリに同梱するため、
+Go ラッパー（wazero）に埋め込みます。
 `go install` 後はネットワーク接続不要で動作します。
+
+### .wasm ファイルのリポジトリ構造
+
+| ファイル | 役割 |
+|----------|------|
+| `packages/wasm/mille.wasm` | **唯一のコミット済み .wasm**。`//go:embed` でエクスポート |
+| `packages/go/` | `packages/wasm` を Go モジュール依存として import。.wasm のコピーなし |
+
+`packages/wasm` は独立した Go モジュール (`github.com/makinzm/mille/packages/wasm`) として
+`var Wasm []byte` をエクスポートします。`packages/go` はこれを通常の Go 依存として参照します。
+
+ローカル開発・CI では `go.work`（Go Workspaces）が `packages/wasm` をローカルパスで解決します。
+npm/pypi などの将来のパッケージは `packages/wasm/mille.wasm` を publish 時にバンドルします
+（コピーをリポジトリには持たない）。
 
 ---
 
@@ -32,27 +45,28 @@ bash scripts/build-wasm.sh
 2 回目以降はキャッシュを再利用します（`WASI_SDK_PATH` 環境変数で上書きも可）。
 
 **出力ファイル:**
-- `packages/wasm/mille.wasm` — canonical の Wasm バイナリ
-- `packages/go/mille.wasm` — Go ラッパー埋め込み用コピー
+- `packages/wasm/mille.wasm` — 唯一の canonical Wasm バイナリ（Git 管理）
 
 ### Step 2: Go ラッパーをビルド
 
 ```bash
+# リポジトリ root で実行（go.work が参照される）
 cd packages/go
-go build -o mille_wasm-cli .
+go build -o mille_go .
 ```
 
-`//go:embed mille.wasm` により Step 1 の成果物がバイナリに埋め込まれます。
+`packages/wasm` モジュールが `go.work` 経由でローカル解決され、
+`packages/wasm/mille.wasm` が Go バイナリに埋め込まれます。
 
 ### Step 3: 動作確認
 
 ```bash
 # packages/go ディレクトリで実行（mille.toml が必要）
-./mille_wasm-cli check
+./mille_go check
 
 # リポジトリ root の Rust プロジェクトを確認する場合
 cd /path/to/your/project
-/path/to/mille-cli check
+/path/to/mille_go check
 ```
 
 ### テスト実行
@@ -103,24 +117,65 @@ Wasm バイナリに含まれません。
 test → build-wasm → dogfood-go
 ```
 
-- `build-wasm`: wasi-sdk-30 をダウンロードし `cargo build --target wasm32-wasip1 --release`
-- 成果物は `actions/upload-artifact` で `mille-wasm` として保存
-- `dogfood-go`: artifact をダウンロードして `go test ./...` + `go build` + self-check
+- **`build-wasm`**: wasi-sdk-30 で `cargo build --target wasm32-wasip1 --release` を実行し、
+  **コミット済みの `.wasm` と CI ビルド結果を `git diff` で比較する**。
+  差異があれば CI を失敗させ、開発者に再コミットを促す。
+- **`dogfood-go`**: `build-wasm` が通った場合のみ実行（checkout 済みの `.wasm` を使用）。
+
+### CI が失敗した場合
+
+`build-wasm` で以下のエラーが出たとき：
+
+```
+ERROR: Committed packages/wasm/mille.wasm is out of sync with the current Rust source.
+```
+
+Rust コアを変更したのに `.wasm` を更新していないことを意味します。
+ローカルで以下を実行して再プッシュしてください：
+
+```bash
+bash scripts/build-wasm.sh
+git add packages/wasm/mille.wasm
+git commit -m "[fix] mille.wasm を更新 because of <変更内容>"
+git push
+```
 
 ---
 
 ## .wasm ファイルの Git 管理
 
-`packages/go/mille.wasm` と `packages/wasm/mille.wasm` は Git で追跡されています。
+### なぜバイナリを Git に含めるのか（3MB の根拠）
 
-- **理由**: `go install github.com/makinzm/mille/packages/go@latest` が動作するには
-  `mille.wasm` がモジュール内に存在する必要があります
-- **更新タイミング**: Rust コアに変更があった場合、`bash scripts/build-wasm.sh` を再実行して
-  生成された `.wasm` を `git add` してコミットしてください
+`packages/wasm/mille.wasm`（約 3MB）は Git で追跡されています。
+これが **リポジトリ内で唯一の .wasm ファイル** です（`packages/go/` にはコピーを持ちません）。
+
+バイナリをリポジトリに含める理由と代替案の比較は以下のとおりです。
+
+| 方式 | `go install` 時の動作 | 外部通信 | ランタイム依存 |
+|------|----------------------|----------|---------------|
+| **Git 管理（採用）** | そのまま動く | なし | なし |
+| GitHub Releases 配布 | 初回に自動ダウンロード | あり | なし |
+| 実行時ビルド | Rust + wasi-sdk が必要 | なし | あり |
+
+`go install` が成功した後、エンドユーザーは **追加ツールなし・ネットワークなし** で
+`mille check` を実行できる必要があります。
+これを実現するために `packages/wasm` モジュールが `//go:embed mille.wasm` で
+バイナリに埋め込み、`packages/go` がそれを Go 依存として参照します。
+
+3MB という サイズについては：
+
+- Rust の release ビルドには標準ライブラリ（`std`）が静的リンクされる
+- tree-sitter の C ランタイムが含まれる
+- `wasm-opt` による最適化を将来検討できるが、現時点では未適用
+
+### 更新タイミング
+
+Rust コア（`src/`）に変更があった場合は必ず `.wasm` を再ビルドしてコミットしてください。
+CI の `build-wasm` ジョブがこれを自動検出します。
 
 ```bash
 bash scripts/build-wasm.sh
-git add packages/wasm/mille.wasm packages/go/mille.wasm
+git add packages/wasm/mille.wasm
 git commit -m "[fix] mille.wasm を更新 because of <変更内容>"
 ```
 
@@ -162,4 +217,5 @@ start(store)
 ```
 
 `.wasm` ファイルは `packages/wasm/mille.wasm` が正規ソースです。
-各パッケージディレクトリにコピーして `//go:embed` または組み込みで利用してください。
+npm/pypi は publish 時のビルドフックで `packages/wasm/mille.wasm` をパッケージにバンドルします。
+リポジトリには **コピーを持たない** ため .wasm ファイルが言語パッケージ数だけ増えません。
