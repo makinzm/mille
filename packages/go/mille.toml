@@ -7,11 +7,16 @@ languages = ["go"]
 module_name = "github.com/makinzm/mille/packages/go"
 
 # NOTE: packages/go embeds mille.wasm and runs it via wazero (WASI runtime).
-# This is a single-layer utility wrapper — external dependencies are unrestricted.
+# external_allow uses exact import path matching — no regex escaping needed.
 [[layers]]
 name = "main"
 paths = ["*.go"]
 dependency_mode = "opt-out"
 deny = []
-external_mode = "opt-out"
-external_deny = []
+external_mode = "opt-in"
+external_allow = [
+  "context",
+  "fmt",
+  "os",
+  "github.com/makinzm/mille/packages/wasm",
+]

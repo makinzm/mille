@@ -196,14 +196,10 @@ impl<'a> ViolationDetector<'a> {
     }
 }
 
-/// Match `crate_name` against a full-string regex pattern.
-/// The pattern is anchored (`^(?:…)$`) so that `"serde"` matches exactly `serde`.
-/// Returns `false` if the regex is invalid.
+/// Match `crate_name` against a pattern using exact string equality.
+/// Users write patterns as plain strings (e.g. `"github.com/foo/bar"`), no regex escaping needed.
 fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
-    regex::Regex::new(&format!("^(?:{})$", pattern))
-        .ok()
-        .map(|re| re.is_match(crate_name))
-        .unwrap_or(false)
+    pattern == crate_name
 }
 
 /// Extract the type name brought into scope by an import path.
