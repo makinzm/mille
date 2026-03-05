@@ -44,7 +44,7 @@ jobs:
 
       # NOTE: devbox を使って test ジョブと同一の Rust バージョン（rust-toolchain.toml 準拠）を
       #       使用する。dtolnay/rust-toolchain@stable を直接使うと stable（≠ 固定バージョン）が
-      #       インストールされ、ローカルビルドと異なるバイナリが生成されて stale 検知が誤検知する。
+      #       インストールされ、ローカルビルドと異なるバイナリが生成される。
       - name: Install devbox
         uses: jetify-com/devbox-install-action@v0.12.0
         with:
@@ -59,26 +59,11 @@ jobs:
       - name: Build mille.wasm
         run: devbox run -- bash scripts/build-wasm.sh
 
-      # NOTE: Overwrite the committed packages/wasm/mille.wasm with the fresh
-      #       CI build and use `git diff --exit-code` to detect any divergence.
-      #       packages/wasm is the ONLY committed copy of the .wasm file;
-      #       packages/go imports it as a Go module dependency (no copy there).
-      #       A non-empty diff means the committed .wasm is out of sync with
-      #       the current Rust source. The developer must run
-      #       `bash scripts/build-wasm.sh` and re-commit.
-      - name: Verify committed mille.wasm matches CI build
-        run: |
-          if ! git diff --exit-code packages/wasm/mille.wasm; then
-            echo ""
-            echo "ERROR: Committed packages/wasm/mille.wasm is out of sync with the current Rust source."
-            echo "Run the following locally and push the updated file:"
-            echo ""
-            echo "  bash scripts/build-wasm.sh"
-            echo "  git add packages/wasm/mille.wasm"
-            echo "  git commit -m '[fix] mille.wasm を更新 because of Rust ソース変更'"
-            exit 1
-          fi
-
+      # NOTE: バイナリ比較による stale 検知は行わない。
+      #       Rust の wasm ビルドはビット単位での再現性（reproducibility）が保証されないため、
+      #       同一ソース・同一バージョンでも環境差（LLVM 最適化パス順序等）で異なるバイナリが生成される。
+      #       代わりに build-wasm artifact を dogfood-go に渡してテストし、
+      #       main へのマージ後は update-wasm ジョブが CI ビルド結果で自動上書きコミットする。
       - name: Upload wasm artifact
         uses: actions/upload-artifact@v4
         with:
@@ -114,18 +99,24 @@ jobs:
 
   # ------------------------------------------------------------------ #
   # 3b. Dogfooding-go — wazero wrapper → mille check                  #
-  #   The .wasm built in build-wasm is embedded via //go:embed.        #
-  #   No network access or binary seeding is required.                 #
+  #   CI ビルドの .wasm を artifact 経由で取得して使用する。            #
+  #   ローカルコミット済み .wasm との差異は問わない（再現性がないため）。#
   # ------------------------------------------------------------------ #
   dogfood-go:
     name: Dogfooding-go (wazero wrapper + mille check)
-    # NOTE: depends on build-wasm so this job is skipped when the committed
-    #       .wasm is stale. build-wasm verifies committed == CI build, so the
-    #       checked-out .wasm is guaranteed correct here — no artifact download needed.
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # NOTE: CI でビルドした .wasm を使う。
+      #       コミット済みの .wasm はローカル環境依存であり、CI ビルドと異なる場合があるため、
+      #       artifact を上書きしてから go test / go build を実行する。
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/wasm
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -147,3 +138,39 @@ jobs:
       - name: Self-check via wazero wrapper — packages/go itself
         working-directory: packages/go
         run: ./mille_go check
+
+  # ------------------------------------------------------------------ #
+  # 4. Update committed mille.wasm with CI build result (main only)   #
+  #   main マージ後、CI ビルドの .wasm でコミット済みファイルを上書き。 #
+  #   これにより「ローカル環境依存の .wasm」がリポジトリに残らない。   #
+  # ------------------------------------------------------------------ #
+  update-wasm:
+    name: Update mille.wasm (main only)
+    needs: [build-wasm, dogfood-go, dogfood-rust]
+    # NOTE: main への push のみ実行。PR では dogfood-go が検証を担当する。
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/wasm
+
+      # NOTE: .wasm が変化した場合のみコミット。変化がなければスキップ。
+      #       [skip ci] をコミットメッセージに含めることで再トリガーを防ぐ。
+      - name: Commit CI-built mille.wasm if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --exit-code packages/wasm/mille.wasm; then
+            echo "mille.wasm is already up to date. No commit needed."
+          else
+            git add packages/wasm/mille.wasm
+            git commit -m "[fix] mille.wasm を CI ビルドで更新 [skip ci]"
+            git push
+          fi

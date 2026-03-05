@@ -112,23 +112,35 @@ Wasm バイナリに含まれません。
 
 ## CI での Wasm ビルド
 
-`.github/workflows/ci.yml` の `build-wasm` ジョブが担当します。
+`.github/workflows/ci.yml` のジョブ構成:
 
 ```
-test → build-wasm → dogfood-go
+test → build-wasm → dogfood-go ┐
+                               ├→ update-wasm (main push 時のみ)
+              dogfood-rust ────┘
 ```
 
-- **`build-wasm`**: **devbox 経由**で `bash scripts/build-wasm.sh` を実行し、
-  **コミット済みの `.wasm` と CI ビルド結果を `git diff` で比較する**。
-  差異があれば CI を失敗させ、開発者に再コミットを促す。
-- **`dogfood-go`**: `build-wasm` が通った場合のみ実行（checkout 済みの `.wasm` を使用）。
+| ジョブ | 役割 | 実行タイミング |
+|--------|------|--------------|
+| `build-wasm` | devbox 経由で wasm をビルドし artifact にアップロード | PR・main push |
+| `dogfood-go` | artifact の wasm を使って go test / self-check | PR・main push |
+| `update-wasm` | artifact の wasm でコミット済みファイルを上書きコミット | **main push のみ** |
+
+### なぜバイナリ比較による stale 検知をしないか
+
+Rust の wasm ビルドはビット単位の再現性（reproducibility）が保証されません。
+同一ソース・同一 Rust バージョン（1.85.0）・同一 wasi-sdk-30 でも、
+LLVM の最適化パス順序や host 環境の差異で異なるバイナリが生成されます。
+
+代わりに以下の方針を採用します：
+- `dogfood-go` が CI ビルドの wasm でテストを実行し、**動作の正しさ**を検証する
+- main マージ後は `update-wasm` が CI ビルド結果で自動上書きコミットし、
+  リポジトリの wasm を常に CI 環境で生成したものに保つ
 
 ### なぜ devbox 経由で実行するか
 
 `dtolnay/rust-toolchain@stable` で直接 Rust をインストールすると、その時点の `stable`
 （例: 1.93.1）が使われ、`rust-toolchain.toml` の固定バージョン（1.85.0）が無視されます。
-ローカルは devbox 経由で `rust-toolchain.toml` を参照するため、
-**CI と異なる Rust バージョンで .wasm がビルドされ、stale 検知が誤検知します**。
 
 CI で実行されるコマンド（`build-wasm` ジョブの核心部分）:
 
@@ -140,32 +152,25 @@ devbox run -- bash scripts/build-wasm.sh
 ローカルでの等価コマンド:
 
 ```bash
-# devbox shell に入っている場合はそのまま
-bash scripts/build-wasm.sh
-
 # devbox shell 外から実行する場合
 devbox run -- bash scripts/build-wasm.sh
 ```
 
-devbox を使うことで CI もローカルも同一の Rust バージョンが保証されます。
+### update-wasm ジョブの動作
 
-### CI が失敗した場合
-
-`build-wasm` で以下のエラーが出たとき：
-
-```
-ERROR: Committed packages/wasm/mille.wasm is out of sync with the current Rust source.
-```
-
-Rust コアを変更したのに `.wasm` を更新していないことを意味します。
-ローカルで以下を実行して再プッシュしてください：
+main に push されたとき、全テストが通った後に自動実行されます。
 
 ```bash
-devbox run -- bash scripts/build-wasm.sh
+# CI 内で実行される処理のイメージ
+git config user.name "github-actions[bot]"
+git config user.email "github-actions[bot]@users.noreply.github.com"
+# 変化があればコミット（変化なければスキップ）
 git add packages/wasm/mille.wasm
-git commit -m "[fix] mille.wasm を更新 because of <変更内容>"
+git commit -m "[fix] mille.wasm を CI ビルドで更新 [skip ci]"
 git push
 ```
+
+`[skip ci]` をコミットメッセージに含めることで、bot commit による CI の再トリガーを防ぎます。
 
 ---
 
