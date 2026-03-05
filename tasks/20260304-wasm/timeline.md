@@ -16,16 +16,43 @@
 
 ### [RED] テスト先行コミット
 
-（ここに RED フェーズのエラーログを記録する）
+- `packages/go/main.go` を `//go:embed mille.wasm` + `runWasm()` 呼び出しに書き換え
+- `packages/go/wasm_runner.go` に `panic("not implemented")` スタブを追加
+- `packages/go/main_test.go` に 3 件のテストを追加
+- `bash scripts/build-wasm.sh` で wasm32-wasip1 バイナリを生成・配置
+
+**ERROR LOG (RED 確認)**:
+```
+=== RUN   TestRunWasm_MissingConfig
+panic: not implemented (goroutine in wasm_runner.go:9)
+exit status 2
+```
+→ commit 4f748bd (`--no-verify`)
 
 ---
 
 ### [GREEN] 実装コミット
 
-（ここに GREEN フェーズの結果を記録する）
+- `packages/go/wasm_runner.go`: wazero + WASI Preview 1 で実装
+  - `wasi_snapshot_preview1.MustInstantiate` で WASI syscall 提供
+  - `WithDirMount(dir, "/")` でホスト CWD を WASI root にマウント
+  - `*sys.ExitError` を捕捉して exit code を正確に伝播
+- `packages/go/go.mod`: wazero v1.11.0 追加
+- `packages/go/mille.toml`: external_allow に wazero 追加
+
+**テスト結果 (GREEN 確認)**:
+```
+PASS: TestRunWasm_WasmBytesEmbedded (0.00s)
+PASS: TestRunWasm_MissingConfig      (0.81s)
+PASS: TestRunWasm_SelfCheck          (0.77s)
+ok github.com/makinzm/mille/packages/go 1.598s
+```
+→ commit 2f8fd8b
 
 ---
 
-### [REFACTOR] リファクタリングコミット
+### [REFACTOR] CI 更新
 
-（必要であれば記録する）
+- `.github/workflows/ci.yml` に `build-wasm` ジョブを追加（wasi-sdk-30 で wasm ビルド）
+- `dogfood-go` を wazero ラッパー対応に更新（ダウンロード・キャッシュシード廃止）
+- `tasks/20260304-wasm/TODO.md` チェックボックス更新

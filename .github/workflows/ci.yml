@@ -32,7 +32,53 @@ jobs:
         run: devbox run -- cargo test
 
   # ------------------------------------------------------------------ #
-  # 2a. Dogfooding-rust — cargo build → mille check on all projects   #
+  # 2. Build mille.wasm (wasm32-wasip1)                                #
+  #    Requires wasi-sdk-30 for tree-sitter C cross-compilation.       #
+  # ------------------------------------------------------------------ #
+  build-wasm:
+    name: Build mille.wasm (wasm32-wasip1)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (with wasm32-wasip1 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      # NOTE: tree-sitter compiles C via cc crate. For wasm32-wasip1,
+      #       the Nix-wrapped clang cannot be used (injects glibc sysroot).
+      #       wasi-sdk-30 provides a self-contained clang + WASI sysroot.
+      #       -Wno-implicit-function-declaration suppresses the dup() error
+      #       in ts_tree_print_dot_graph (dead code; removed by --gc-sections).
+      - name: Download wasi-sdk-30
+        run: |
+          WASI_VER=30
+          ARCHIVE="wasi-sdk-${WASI_VER}.0-x86_64-linux.tar.gz"
+          curl -fsSL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_VER}/${ARCHIVE}" \
+            | tar xz
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-${WASI_VER}.0-x86_64-linux" >> "$GITHUB_ENV"
+
+      - name: Build mille.wasm
+        run: |
+          export CC_wasm32_wasip1="${WASI_SDK_PATH}/bin/clang"
+          export AR_wasm32_wasip1="${WASI_SDK_PATH}/bin/llvm-ar"
+          export CFLAGS_wasm32_wasip1="--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot -Wno-implicit-function-declaration"
+          cargo build --target wasm32-wasip1 --release
+          mkdir -p packages/wasm packages/go
+          cp target/wasm32-wasip1/release/mille.wasm packages/wasm/mille.wasm
+          cp packages/wasm/mille.wasm packages/go/mille.wasm
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/wasm/mille.wasm
+          retention-days: 7
+
+  # ------------------------------------------------------------------ #
+  # 3a. Dogfooding-rust — cargo build → mille check on all projects   #
   # ------------------------------------------------------------------ #
   dogfood-rust:
     name: Dogfooding-rust (mille check)
@@ -58,43 +104,41 @@ jobs:
         run: ${{ github.workspace }}/target/release/mille check
 
   # ------------------------------------------------------------------ #
-  # 2b. Dogfooding-go — go build → Go wrapper binary → mille check    #
-  #   Build the Rust binary first, seed the wrapper's cache, then      #
-  #   compile the Go wrapper and run it end-to-end against Go projects. #
+  # 3b. Dogfooding-go — wazero wrapper → mille check                  #
+  #   The .wasm built in build-wasm is embedded via //go:embed.        #
+  #   No network access or binary seeding is required.                 #
   # ------------------------------------------------------------------ #
   dogfood-go:
-    name: Dogfooding-go (go build + mille check via Go wrapper)
-    needs: test
+    name: Dogfooding-go (wazero wrapper + mille check)
+    needs: build-wasm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: packages/go/go.mod
 
-      - name: Build mille (release)
-        run: cargo build --release
+      # Restore the .wasm built by build-wasm job so //go:embed works.
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/go/
 
-      # NOTE: The Go wrapper checks ~/.mille/bin/<version>/mille before
-      #       attempting a network download. Pre-seed the cache with the
-      #       binary we just built so CI works without a published release.
-      - name: Seed wrapper cache with locally-built binary
-        run: |
-          VERSION=$(grep 'version = "' packages/go/main.go | head -1 | sed 's/.*version = "//;s/".*//')
-          mkdir -p ~/.mille/bin/$VERSION
-          cp target/release/mille ~/.mille/bin/$VERSION/mille
+      - name: go test — packages/go
+        working-directory: packages/go
+        run: go test -v -timeout 60s ./...
 
       - name: go build — packages/go
         working-directory: packages/go
         run: go build -o mille_go .
 
-      - name: Self-check via Go wrapper — Go fixture (tests/fixtures/go_sample)
+      - name: Self-check via wazero wrapper — Go fixture
         working-directory: tests/fixtures/go_sample
         run: ${{ github.workspace }}/packages/go/mille_go check
 
-      - name: Self-check via Go wrapper — Go wrapper (packages/go)
+      - name: Self-check via wazero wrapper — packages/go itself
         working-directory: packages/go
         run: ./mille_go check
