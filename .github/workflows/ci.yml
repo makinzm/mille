@@ -42,30 +42,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Rust (with wasm32-wasip1 target)
-        uses: dtolnay/rust-toolchain@stable
+      # NOTE: devbox を使って test ジョブと同一の Rust バージョン（rust-toolchain.toml 準拠）を
+      #       使用する。dtolnay/rust-toolchain@stable を直接使うと stable（≠ 固定バージョン）が
+      #       インストールされ、ローカルビルドと異なるバイナリが生成されて stale 検知が誤検知する。
+      - name: Install devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
         with:
-          targets: wasm32-wasip1
+          enable-cache: 'true'
 
       # NOTE: tree-sitter compiles C via cc crate. For wasm32-wasip1,
       #       the Nix-wrapped clang cannot be used (injects glibc sysroot).
       #       wasi-sdk-30 provides a self-contained clang + WASI sysroot.
+      #       scripts/build-wasm.sh handles the download and env setup.
       #       -Wno-implicit-function-declaration suppresses the dup() error
       #       in ts_tree_print_dot_graph (dead code; removed by --gc-sections).
-      - name: Download wasi-sdk-30
-        run: |
-          WASI_VER=30
-          ARCHIVE="wasi-sdk-${WASI_VER}.0-x86_64-linux.tar.gz"
-          curl -fsSL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_VER}/${ARCHIVE}" \
-            | tar xz
-          echo "WASI_SDK_PATH=$PWD/wasi-sdk-${WASI_VER}.0-x86_64-linux" >> "$GITHUB_ENV"
-
       - name: Build mille.wasm
-        run: |
-          export CC_wasm32_wasip1="${WASI_SDK_PATH}/bin/clang"
-          export AR_wasm32_wasip1="${WASI_SDK_PATH}/bin/llvm-ar"
-          export CFLAGS_wasm32_wasip1="--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot -Wno-implicit-function-declaration"
-          cargo build --target wasm32-wasip1 --release
+        run: devbox run -- bash scripts/build-wasm.sh
 
       # NOTE: Overwrite the committed packages/wasm/mille.wasm with the fresh
       #       CI build and use `git diff --exit-code` to detect any divergence.
@@ -76,7 +68,6 @@ jobs:
       #       `bash scripts/build-wasm.sh` and re-commit.
       - name: Verify committed mille.wasm matches CI build
         run: |
-          cp target/wasm32-wasip1/release/mille.wasm packages/wasm/mille.wasm
           if ! git diff --exit-code packages/wasm/mille.wasm; then
             echo ""
             echo "ERROR: Committed packages/wasm/mille.wasm is out of sync with the current Rust source."

@@ -37,10 +37,11 @@ npm/pypi などの将来のパッケージは `packages/wasm/mille.wasm` を pub
 ### Step 1: mille.wasm をビルド
 
 ```bash
-# リポジトリ root で実行
-bash scripts/build-wasm.sh
+# リポジトリ root で実行（devbox shell 内、または devbox run -- 経由）
+devbox run -- bash scripts/build-wasm.sh
 ```
 
+devbox が `rust-toolchain.toml` の Rust バージョン（1.85.0）を使ってビルドします。
 初回は `.wasi-sdk/` ディレクトリに wasi-sdk-30 を自動ダウンロードします（約 130MB）。
 2 回目以降はキャッシュを再利用します（`WASI_SDK_PATH` 環境変数で上書きも可）。
 
@@ -117,10 +118,36 @@ Wasm バイナリに含まれません。
 test → build-wasm → dogfood-go
 ```
 
-- **`build-wasm`**: wasi-sdk-30 で `cargo build --target wasm32-wasip1 --release` を実行し、
+- **`build-wasm`**: **devbox 経由**で `bash scripts/build-wasm.sh` を実行し、
   **コミット済みの `.wasm` と CI ビルド結果を `git diff` で比較する**。
   差異があれば CI を失敗させ、開発者に再コミットを促す。
 - **`dogfood-go`**: `build-wasm` が通った場合のみ実行（checkout 済みの `.wasm` を使用）。
+
+### なぜ devbox 経由で実行するか
+
+`dtolnay/rust-toolchain@stable` で直接 Rust をインストールすると、その時点の `stable`
+（例: 1.93.1）が使われ、`rust-toolchain.toml` の固定バージョン（1.85.0）が無視されます。
+ローカルは devbox 経由で `rust-toolchain.toml` を参照するため、
+**CI と異なる Rust バージョンで .wasm がビルドされ、stale 検知が誤検知します**。
+
+CI で実行されるコマンド（`build-wasm` ジョブの核心部分）:
+
+```bash
+# devbox が rust-toolchain.toml を参照して Rust 1.85.0 を使用する
+devbox run -- bash scripts/build-wasm.sh
+```
+
+ローカルでの等価コマンド:
+
+```bash
+# devbox shell に入っている場合はそのまま
+bash scripts/build-wasm.sh
+
+# devbox shell 外から実行する場合
+devbox run -- bash scripts/build-wasm.sh
+```
+
+devbox を使うことで CI もローカルも同一の Rust バージョンが保証されます。
 
 ### CI が失敗した場合
 
@@ -134,7 +161,7 @@ Rust コアを変更したのに `.wasm` を更新していないことを意味
 ローカルで以下を実行して再プッシュしてください：
 
 ```bash
-bash scripts/build-wasm.sh
+devbox run -- bash scripts/build-wasm.sh
 git add packages/wasm/mille.wasm
 git commit -m "[fix] mille.wasm を更新 because of <変更内容>"
 git push
