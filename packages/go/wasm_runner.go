@@ -19,8 +19,8 @@ import (
 //	1  — at least one error-severity violation
 //	3  — configuration or runtime error
 func runWasm(ctx context.Context, wasmBytes []byte, dir string, args []string) int {
-	rt := wazero.NewRuntime(ctx)
-	defer rt.Close(ctx)
+	rt, closeRT := newRuntime(ctx, compilationCacheDir())
+	defer closeRT()
 
 	// NOTE: mille.wasm targets wasm32-wasip1 (WASI Preview 1).
 	//       MustInstantiate registers the wasi_snapshot_preview1 host module

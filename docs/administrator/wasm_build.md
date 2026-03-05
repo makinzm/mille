@@ -213,6 +213,43 @@ git commit -m "[fix] mille.wasm を更新 because of <変更内容>"
 
 ---
 
+## CompilationCache（起動高速化）
+
+wazero は起動のたびに `.wasm` を機械語へ変換（JIT コンパイル）します。
+`CompilationCache` を使うと変換結果をファイルに保存し、2 回目以降の起動でキャッシュを再利用できます。
+
+### キャッシュディレクトリ
+
+| OS | パス |
+|----|------|
+| Linux | `~/.cache/mille/wazero/` |
+| macOS | `~/Library/Caches/mille/wazero/` |
+| Windows | `%LOCALAPPDATA%\mille\wazero\` |
+
+`packages/go` の Go ラッパーは起動時に自動でキャッシュを作成・利用します。
+ディレクトリが存在しない場合は自動で作成されます。
+キャッシュの作成に失敗した場合はキャッシュなしで動作します（フォールバック）。
+
+### キャッシュのクリア
+
+起動が遅くなった・キャッシュが壊れた場合は削除してください：
+
+```bash
+# Linux
+rm -rf ~/.cache/mille/wazero/
+
+# macOS
+rm -rf ~/Library/Caches/mille/wazero/
+```
+
+### 実装
+
+`packages/go/wasm_cache.go` の `compilationCacheDir()` と `newRuntime()` が担当します。
+`newRuntime()` は `CompilationCache` の作成に失敗しても必ず `wazero.Runtime` を返すため、
+キャッシュの有無に関わらず動作します。
+
+---
+
 ## 将来の拡張: Node.js / Python への展開
 
 同じ `mille.wasm` を Node.js と Python でも再利用できます。
