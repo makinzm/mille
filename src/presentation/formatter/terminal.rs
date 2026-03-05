@@ -28,7 +28,9 @@ pub fn format_violation(v: &Violation) -> String {
 pub fn format_layer_stats(stats: &[LayerStat]) -> String {
     let mut out = String::new();
     for stat in stats {
-        let marker = if stat.violation_count == 0 {
+        let marker = if stat.file_count == 0 {
+            "⚠️ " // 0 files likely means the paths pattern matched nothing
+        } else if stat.violation_count == 0 {
             "✅"
         } else {
             "❌"
