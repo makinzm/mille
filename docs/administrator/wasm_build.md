@@ -39,7 +39,7 @@ bash scripts/build-wasm.sh
 
 ```bash
 cd packages/go
-go build -o mille_wasm .
+go build -o mille_wasm-cli .
 ```
 
 `//go:embed mille.wasm` により Step 1 の成果物がバイナリに埋め込まれます。
@@ -48,11 +48,11 @@ go build -o mille_wasm .
 
 ```bash
 # packages/go ディレクトリで実行（mille.toml が必要）
-./mille_wasm check
+./mille_wasm-cli check
 
 # リポジトリ root の Rust プロジェクトを確認する場合
 cd /path/to/your/project
-/path/to/mille_wasm check
+/path/to/mille-cli check
 ```
 
 ### テスト実行
