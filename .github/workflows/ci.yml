@@ -32,7 +32,47 @@ jobs:
         run: devbox run -- cargo test
 
   # ------------------------------------------------------------------ #
-  # 2a. Dogfooding-rust — cargo build → mille check on all projects   #
+  # 2. Build mille.wasm (wasm32-wasip1)                                #
+  #    Requires wasi-sdk-30 for tree-sitter C cross-compilation.       #
+  # ------------------------------------------------------------------ #
+  build-wasm:
+    name: Build mille.wasm (wasm32-wasip1)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # NOTE: devbox を使って test ジョブと同一の Rust バージョン（rust-toolchain.toml 準拠）を
+      #       使用する。dtolnay/rust-toolchain@stable を直接使うと stable（≠ 固定バージョン）が
+      #       インストールされ、ローカルビルドと異なるバイナリが生成される。
+      - name: Install devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
+        with:
+          enable-cache: 'true'
+
+      # NOTE: tree-sitter compiles C via cc crate. For wasm32-wasip1,
+      #       the Nix-wrapped clang cannot be used (injects glibc sysroot).
+      #       wasi-sdk-30 provides a self-contained clang + WASI sysroot.
+      #       scripts/build-wasm.sh handles the download and env setup.
+      #       -Wno-implicit-function-declaration suppresses the dup() error
+      #       in ts_tree_print_dot_graph (dead code; removed by --gc-sections).
+      - name: Build mille.wasm
+        run: devbox run -- bash scripts/build-wasm.sh
+
+      # NOTE: バイナリ比較による stale 検知は行わない。
+      #       Rust の wasm ビルドはビット単位での再現性（reproducibility）が保証されないため、
+      #       同一ソース・同一バージョンでも環境差（LLVM 最適化パス順序等）で異なるバイナリが生成される。
+      #       代わりに build-wasm artifact を dogfood-go に渡してテストし、
+      #       main へのマージ後は update-wasm ジョブが CI ビルド結果で自動上書きコミットする。
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/wasm/mille.wasm
+          retention-days: 7
+
+  # ------------------------------------------------------------------ #
+  # 3a. Dogfooding-rust — cargo build → mille check on all projects   #
   # ------------------------------------------------------------------ #
   dogfood-rust:
     name: Dogfooding-rust (mille check)
@@ -58,43 +98,79 @@ jobs:
         run: ${{ github.workspace }}/target/release/mille check
 
   # ------------------------------------------------------------------ #
-  # 2b. Dogfooding-go — go build → Go wrapper binary → mille check    #
-  #   Build the Rust binary first, seed the wrapper's cache, then      #
-  #   compile the Go wrapper and run it end-to-end against Go projects. #
+  # 3b. Dogfooding-go — wazero wrapper → mille check                  #
+  #   CI ビルドの .wasm を artifact 経由で取得して使用する。            #
+  #   ローカルコミット済み .wasm との差異は問わない（再現性がないため）。#
   # ------------------------------------------------------------------ #
   dogfood-go:
-    name: Dogfooding-go (go build + mille check via Go wrapper)
-    needs: test
+    name: Dogfooding-go (wazero wrapper + mille check)
+    needs: build-wasm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+
+      # NOTE: CI でビルドした .wasm を使う。
+      #       コミット済みの .wasm はローカル環境依存であり、CI ビルドと異なる場合があるため、
+      #       artifact を上書きしてから go test / go build を実行する。
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/wasm
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: packages/go/go.mod
 
-      - name: Build mille (release)
-        run: cargo build --release
-
-      # NOTE: The Go wrapper checks ~/.mille/bin/<version>/mille before
-      #       attempting a network download. Pre-seed the cache with the
-      #       binary we just built so CI works without a published release.
-      - name: Seed wrapper cache with locally-built binary
-        run: |
-          VERSION=$(grep 'version = "' packages/go/main.go | head -1 | sed 's/.*version = "//;s/".*//')
-          mkdir -p ~/.mille/bin/$VERSION
-          cp target/release/mille ~/.mille/bin/$VERSION/mille
+      - name: go test — packages/go
+        working-directory: packages/go
+        run: go test -v -timeout 60s ./...
 
       - name: go build — packages/go
         working-directory: packages/go
         run: go build -o mille_go .
 
-      - name: Self-check via Go wrapper — Go fixture (tests/fixtures/go_sample)
+      - name: Self-check via wazero wrapper — Go fixture
         working-directory: tests/fixtures/go_sample
         run: ${{ github.workspace }}/packages/go/mille_go check
 
-      - name: Self-check via Go wrapper — Go wrapper (packages/go)
+      - name: Self-check via wazero wrapper — packages/go itself
         working-directory: packages/go
         run: ./mille_go check
+
+  # ------------------------------------------------------------------ #
+  # 4. Update committed mille.wasm with CI build result (main only)   #
+  #   main マージ後、CI ビルドの .wasm でコミット済みファイルを上書き。 #
+  #   これにより「ローカル環境依存の .wasm」がリポジトリに残らない。   #
+  # ------------------------------------------------------------------ #
+  update-wasm:
+    name: Update mille.wasm (main only)
+    needs: [build-wasm, dogfood-go, dogfood-rust]
+    # NOTE: main への push のみ実行。PR では dogfood-go が検証を担当する。
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/wasm
+
+      # NOTE: .wasm が変化した場合のみコミット。変化がなければスキップ。
+      #       [skip ci] をコミットメッセージに含めることで再トリガーを防ぐ。
+      - name: Commit CI-built mille.wasm if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --exit-code packages/wasm/mille.wasm; then
+            echo "mille.wasm is already up to date. No commit needed."
+          else
+            git add packages/wasm/mille.wasm
+            git commit -m "[fix] mille.wasm を CI ビルドで更新 [skip ci]"
+            git push
+          fi
