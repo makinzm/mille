@@ -26,7 +26,7 @@
 ### 0. ドキュメント整備
 
 - [x] `tasks/20260305-external-allow-e2e/TODO.md` 作成（本ファイル）
-- [ ] `AGENTS.md` に「E2E テスト追加・変更時は本チェックリストを参照すること」を追記
+- [x] `AGENTS.md` に「E2E テスト追加・変更時は本チェックリストを参照すること」を追記
 
 ---
 
@@ -36,15 +36,15 @@
 
 対象フィクスチャ:
 - Go: `tests/fixtures/go_sample/` + `tests/e2e_go.rs`
-- Rust: mille 自身 + `tests/e2e.rs`（または相当するテスト）
+- Rust: mille 自身 + `tests/e2e_check.rs`
 
 #### 1-1. `dependency_mode = "opt-in"` + `allow`
 
 | ケース | 壊す設定 | 期待する違反 | Go | Rust |
 |--------|----------|-------------|-----|------|
 | usecase が domain を参照できない | `usecase.allow = []` | usecase → domain 違反 | ✅ 既存 | [ ] |
-| infrastructure が domain を参照できない | `infrastructure.allow = []` | infrastructure → domain 違反 | [ ] | [ ] |
-| cmd/main が下位レイヤーを参照できない | `cmd.allow` から一部除く | cmd → 除いたレイヤー 違反 | [ ] | [ ] |
+| infrastructure が domain を参照できない | `infrastructure.allow = []` | infrastructure → domain 違反 | ✅ 追加済 | ✅ 既存 (INFRA_BLOCKS_DOMAIN_TOML) |
+| cmd/main が下位レイヤーを参照できない | `cmd.allow` から一部除く | cmd → 除いたレイヤー 違反 | ✅ 追加済 | ✅ 既存 (MAIN_FORBIDS_INFRA_TOML) |
 
 #### 1-2. `dependency_mode = "opt-out"` + `deny`
 
@@ -52,13 +52,13 @@
 |--------|----------|-------------|-----|------|
 | opt-out レイヤーが deny したレイヤーを参照 | `deny = ["<実際に参照しているレイヤー>"]` | 違反検出 | [ ] | [ ] |
 
-#### 1-3. `external_mode = "opt-in"` + `external_allow` ← **バグ対象**
+#### 1-3. `external_mode = "opt-in"` + `external_allow`
 
 | ケース | 壊す設定 | 期待する違反 | Go | Rust |
 |--------|----------|-------------|-----|------|
-| external_allow=[] なのに外部 pkg を使用 | `infrastructure.external_allow = []` | external 違反 | [ ] | [ ] |
-| external_allow=[] なのに外部 pkg を使用 | `cmd.external_allow = []` | external 違反 | [ ] | [ ] |
-| 許可リストにない外部 pkg を使用 | `cmd.external_allow = ["fmt"]` (os を除く) | os が external 違反 | [ ] | [ ] |
+| external_allow=[] なのに外部 pkg を使用 | `infrastructure.external_allow = []` | external 違反 | ✅ 追加済 | ✅ 追加済 |
+| external_allow=[] なのに外部 pkg を使用 | `cmd.external_allow = []` | external 違反 | ✅ 追加済 | [ ] |
+| 許可リストにない外部 pkg を使用 | `cmd.external_allow = ["fmt"]` (os を除く) | os が external 違反 | ✅ 追加済 | N/A |
 
 #### 1-4. `external_mode = "opt-out"` + `external_deny`
 
@@ -70,9 +70,9 @@
 
 ### 2. バグ修正: external_mode = opt-in が機能していない
 
-- [ ] 実装コード（`ViolationDetector` 等）で external チェックが実際に動いているか確認
-- [ ] `tests/fixtures/go_sample/mille.toml` を正しい設定に修正
-- [ ] `packages/go/mille.toml` の `external_allow` を適切に絞り込む
+- [x] 実装コード（`classify_go()`）で Go stdlib が `Stdlib` として扱われ external チェックをスキップしていることを確認
+- [x] `classify_go()` を修正: Go では全非内部 import を `External` として扱う
+- [x] `packages/go/mille.toml` の `paths` と `external_allow` を修正
 
 ---
 
@@ -83,3 +83,5 @@
 - `[ignore]` の paths / test_patterns テスト（未実装）
 - `[resolve.aliases]` テスト（未実装）
 - Python / TypeScript フィクスチャの E2E テスト網羅性（各言語サポート追加時に対応）
+- `dependency_mode = "opt-out"` + `deny` 違反テスト（Go・Rust ともに fixture がそのパターンに対応していない）
+- `external_mode = "opt-out"` + `external_deny` 違反テスト（fixture に外部 pkg の deny 設定例がない）
