@@ -74,6 +74,18 @@ mod tests {
         }
     }
 
+    fn external_violation(layer: &str, pkg: &str, file: &str, line: usize) -> Violation {
+        Violation {
+            file: file.to_string(),
+            line,
+            from_layer: layer.to_string(),
+            to_layer: pkg.to_string(),
+            import_path: pkg.to_string(),
+            kind: ViolationKind::ExternalViolation,
+            severity: Severity::Error,
+        }
+    }
+
     // ------------------------------------------------------------------
     // format_violation
     // ------------------------------------------------------------------
@@ -93,6 +105,20 @@ mod tests {
             out.contains('5'.to_string().as_str()),
             "should contain line number"
         );
+    }
+
+    #[test]
+    fn test_format_external_violation_is_english() {
+        let v = external_violation("main", "path/filepath", "main_test.go", 6);
+        let out = format_violation(&v);
+        assert!(out.contains("External violation"), "should contain kind");
+        assert!(
+            out.contains("is not allowed in"),
+            "message must be in English, not Japanese\nout: {}",
+            out
+        );
+        assert!(out.contains("path/filepath"), "should contain package name");
+        assert!(out.contains("main"), "should contain layer name");
     }
 
     #[test]
