@@ -6,14 +6,12 @@ languages = ["go"]
 [resolve.go]
 module_name = "github.com/makinzm/mille/packages/go"
 
-# NOTE: packages/go is a single-package CLI wrapper.
-# All imports (archive/tar, archive/zip, compress/gzip, net/http, etc.)
-# are Go stdlib — classified as Stdlib by GoResolver (no dot in first segment).
-# external_allow intentionally empty: no third-party dependencies allowed.
+# NOTE: packages/go embeds mille.wasm and runs it via wazero (WASI runtime).
+# wazero and its transitive dep golang.org/x/sys are the only external packages.
 [[layers]]
 name = "main"
 paths = ["."]
 dependency_mode = "opt-out"
 deny = []
 external_mode = "opt-in"
-external_allow = []
+external_allow = ["github.com/tetratelabs/wazero", "golang.org/x/sys"]
