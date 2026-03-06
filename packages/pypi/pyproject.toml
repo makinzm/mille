@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "mille"
 version = "0.1.0"
 description = "Architecture Checker — static analysis for layered architecture rules"
+readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "makinzm" }]
