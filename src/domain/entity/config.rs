@@ -39,6 +39,10 @@ pub struct GoResolveConfig {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct PythonResolveConfig {
     pub src_root: String,
+    /// Top-level package names that are part of this project.
+    /// Imports starting with any of these names are classified as Internal.
+    #[serde(default)]
+    pub package_names: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

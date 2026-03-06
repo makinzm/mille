@@ -1,7 +1,9 @@
 pub mod go;
+pub mod python;
 pub mod rust;
 
 use self::go::GoResolver;
+use self::python::PythonResolver;
 use self::rust::RustResolver;
 use crate::domain::entity::import::RawImport;
 use crate::domain::entity::resolved_import::ResolvedImport;
@@ -11,13 +13,15 @@ use crate::domain::repository::resolver::Resolver;
 pub struct DispatchingResolver {
     rust: RustResolver,
     go: GoResolver,
+    python: PythonResolver,
 }
 
 impl DispatchingResolver {
-    pub fn new(go: GoResolver) -> Self {
+    pub fn new(go: GoResolver, python: PythonResolver) -> Self {
         DispatchingResolver {
             rust: RustResolver,
             go,
+            python,
         }
     }
 }
@@ -26,6 +30,8 @@ impl Resolver for DispatchingResolver {
     fn resolve(&self, import: &RawImport) -> ResolvedImport {
         if import.file.ends_with(".go") {
             self.go.resolve(import)
+        } else if import.file.ends_with(".py") {
+            self.python.resolve(import)
         } else {
             self.rust.resolve(import)
         }
@@ -34,6 +40,8 @@ impl Resolver for DispatchingResolver {
     fn resolve_for_project(&self, import: &RawImport, own_crate: &str) -> ResolvedImport {
         if import.file.ends_with(".go") {
             self.go.resolve_for_project(import, own_crate)
+        } else if import.file.ends_with(".py") {
+            self.python.resolve_for_project(import, own_crate)
         } else {
             self.rust.resolve_for_project(import, own_crate)
         }

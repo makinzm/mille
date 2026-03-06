@@ -128,10 +128,7 @@ mod tests {
 
     #[test]
     fn test_external_import_is_external() {
-        assert_eq!(
-            classify_python("os", &packages()),
-            ImportCategory::External
-        );
+        assert_eq!(classify_python("os", &packages()), ImportCategory::External);
         assert_eq!(
             classify_python("sqlalchemy", &packages()),
             ImportCategory::External
@@ -145,7 +142,10 @@ mod tests {
     #[test]
     fn test_empty_package_names_only_relative_is_internal() {
         assert_eq!(classify_python(".", &[]), ImportCategory::Internal);
-        assert_eq!(classify_python("domain.entity", &[]), ImportCategory::External);
+        assert_eq!(
+            classify_python("domain.entity", &[]),
+            ImportCategory::External
+        );
     }
 
     #[test]
@@ -154,7 +154,10 @@ mod tests {
         let import = raw_py("domain.entity");
         let resolved = resolver.resolve(&import);
         assert_eq!(resolved.category, ImportCategory::Internal);
-        assert_eq!(resolved.resolved_path, Some("domain/entity/_.py".to_string()));
+        assert_eq!(
+            resolved.resolved_path,
+            Some("domain/entity/_.py".to_string())
+        );
     }
 
     #[test]

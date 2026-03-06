@@ -1,22 +1,31 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
 
 [project]
 name = "mille"
-version = "0.0.1"
-description = "Architecture Checker — Rust-based multi-language architecture linter"
-readme = "README.md"
-license = {text = "MIT"}
-authors = [{name = "makinzm"}]
+version = "0.1.0"
+description = "Architecture Checker — static analysis for layered architecture rules"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "makinzm" }]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
 ]
-requires-python = ">=3.8"
 
 [project.urls]
 Homepage = "https://github.com/makinzm/mille"
 
 [project.scripts]
-mille = "mille:main"
+mille = "mille:_main"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+
+[dependency-groups]
+dev = [
+    "maturin>=1.12.6",
+    "pytest>=8",
+]
