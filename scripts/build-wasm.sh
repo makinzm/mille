@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build mille for wasm32-wasip1 (WASI Preview 1) and distribute to packages/.
+# Build mille for wasm32-wasip1 (WASI Preview 1) and place in packages/go/.
 #
 # Usage:
 #   bash scripts/build-wasm.sh
@@ -58,14 +58,14 @@ rustup target add "${WASM_TARGET}" 2>/dev/null || true
 cargo build --target "${WASM_TARGET}" --release
 
 # ---------------------------------------------------------------------------
-# Distribute .wasm to packages/wasm (single canonical copy)
+# Place .wasm in packages/go (single canonical copy, embedded via //go:embed)
 # ---------------------------------------------------------------------------
-# NOTE: packages/wasm is a Go module that exports var Wasm []byte via
-#       //go:embed. Other language packages (packages/go etc.) import it as a
-#       Go module dependency — no additional copies are committed to git.
-#       See packages/wasm/wasm.go and go.work for the workspace setup.
-mkdir -p packages/wasm
+# NOTE: packages/go/mille.wasm is the single canonical .wasm binary.
+#       packages/go/main.go embeds it via //go:embed.
+#       npm publish copies it from here at release time.
+#       No additional copies are committed to git.
+mkdir -p packages/go
 
-cp "${RELEASE_WASM}" packages/wasm/mille.wasm
+cp "${RELEASE_WASM}" packages/go/mille.wasm
 
-echo "✓ packages/wasm/mille.wasm"
+echo "✓ packages/go/mille.wasm"

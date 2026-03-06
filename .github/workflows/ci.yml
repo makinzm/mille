@@ -83,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mille-wasm
-          path: packages/wasm/mille.wasm
+          path: packages/go/mille.wasm
           retention-days: 7
 
   # ------------------------------------------------------------------ #
@@ -182,14 +182,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # NOTE: CI でビルドした .wasm を使う。
-      #       コミット済みの .wasm はローカル環境依存であり、CI ビルドと異なる場合があるため、
-      #       artifact を上書きしてから go test / go build を実行する。
+      # NOTE: CI でビルドした .wasm を packages/go/ に配置する。
+      #       packages/go/mille.wasm が //go:embed のソースであり、唯一の canonical .wasm。
+      #       コミット済みの .wasm はローカル環境依存であり CI ビルドと異なる場合があるため上書きする。
       - name: Download wasm artifact
         uses: actions/download-artifact@v4
         with:
           name: mille-wasm
-          path: packages/wasm
+          path: packages/go
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -222,15 +222,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # NOTE: CI でビルドした .wasm を使う（dogfood-go と同じ理由）。
+      # NOTE: CI でビルドした .wasm を packages/go/ に配置してから npm 用にコピーする。
+      #       packages/go/mille.wasm が唯一の canonical .wasm（dogfood-go と同じ理由）。
       - name: Download wasm artifact
         uses: actions/download-artifact@v4
         with:
           name: mille-wasm
-          path: packages/wasm
+          path: packages/go
 
       - name: Copy mille.wasm to npm package
-        run: cp packages/wasm/mille.wasm packages/npm/mille.wasm
+        run: cp packages/go/mille.wasm packages/npm/mille.wasm
 
       - uses: actions/setup-node@v4
         with:
@@ -264,7 +265,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mille-wasm
-          path: packages/wasm
+          path: packages/go
 
       # NOTE: .wasm が変化した場合のみコミット。変化がなければスキップ。
       #       [skip ci] をコミットメッセージに含めることで再トリガーを防ぐ。
@@ -272,10 +273,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --exit-code packages/wasm/mille.wasm; then
+          if git diff --exit-code packages/go/mille.wasm; then
             echo "mille.wasm is already up to date. No commit needed."
           else
-            git add packages/wasm/mille.wasm
+            git add packages/go/mille.wasm
             git commit -m "[fix] mille.wasm を CI ビルドで更新 [skip ci]"
             git push
           fi
