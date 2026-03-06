@@ -15,8 +15,8 @@ It is implemented in Rust, supports multiple languages from a single TOML config
 | DI entrypoint method call check (`allow_call_patterns`) | ✅ |
 | Rust support | ✅ |
 | Go support | ✅ |
+| Python support | ✅ |
 | TypeScript / JavaScript support | planned |
-| Python support | planned |
 
 ## How to Install
 
@@ -25,6 +25,20 @@ It is implemented in Rust, supports multiple languages from a single TOML config
 ```sh
 cargo install mille
 ```
+
+### pip / uv (Python users)
+
+```sh
+# uv (recommended)
+uv add --dev mille
+uv run mille check
+
+# pip
+pip install mille
+mille check
+```
+
+The Python package is a native extension built with [maturin](https://github.com/PyO3/maturin) (PyO3). It provides both a CLI (`mille check`) and a Python API (`import mille; mille.check(...)`).
 
 ### go install
 
@@ -101,6 +115,43 @@ external_allow  = ["clap"]
   [[layers.allow_call_patterns]]
   callee_layer  = "infrastructure"
   allow_methods = ["new", "build", "create", "init", "setup"]
+```
+
+**Python project example:**
+
+```toml
+[project]
+name      = "my-python-app"
+root      = "."
+languages = ["python"]
+
+[resolve.python]
+src_root      = "."
+package_names = ["domain", "usecase", "infrastructure"]
+
+[[layers]]
+name            = "domain"
+paths           = ["domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+external_mode   = "opt-out"
+external_deny   = []
+
+[[layers]]
+name            = "usecase"
+paths           = ["usecase/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+external_mode   = "opt-out"
+external_deny   = []
+
+[[layers]]
+name            = "infrastructure"
+paths           = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny            = []
+external_mode   = "opt-out"
+external_deny   = []
 ```
 
 **Go project example:**
@@ -191,6 +242,47 @@ Restricts which methods may be called on a given layer's types. Only valid on th
 |---|---|
 | `module_name` | Go module name (matches the module path in `go.mod`) |
 
+### `[resolve.python]`
+
+| Key | Description |
+|---|---|
+| `src_root` | Root directory of the Python source tree (relative to `mille.toml`) |
+| `package_names` | List of your own package names (used to classify absolute imports as internal). e.g. `["domain", "usecase", "infrastructure"]` |
+
+**How Python imports are classified:**
+
+| Import | Classification |
+|---|---|
+| `from .sibling import X` (relative) | Internal |
+| `import domain.entity` (matches a `package_names` entry) | Internal |
+| `import os`, `import sqlalchemy` (others) | External |
+
+## Python API
+
+In addition to the CLI, the Python package exposes a programmatic API:
+
+```python
+import mille
+
+# Run architecture check and get a result object
+result = mille.check("path/to/mille.toml")  # defaults to "mille.toml"
+
+print(f"violations: {len(result.violations)}")
+for v in result.violations:
+    print(f"  {v.file}:{v.line}  {v.from_layer} -> {v.to_layer}  ({v.import_path})")
+
+for stat in result.layer_stats:
+    print(f"  {stat.name}: {stat.file_count} file(s), {stat.violation_count} violation(s)")
+```
+
+**Types exposed:**
+
+| Class | Attributes |
+|---|---|
+| `CheckResult` | `violations: list[Violation]`, `layer_stats: list[LayerStat]` |
+| `Violation` | `file`, `line`, `from_layer`, `to_layer`, `import_path`, `kind` |
+| `LayerStat` | `name`, `file_count`, `violation_count` |
+
 ## How it Works
 
 mille uses [tree-sitter](https://tree-sitter.github.io/) for AST-based import extraction — no regex heuristics. The core engine is language-agnostic; language-specific logic is isolated to the `parser` and `resolver` layers.
@@ -201,7 +293,7 @@ mille.toml
     ▼
 Layer definitions
     │
-Source files (*.rs, *.go, ...)
+Source files (*.rs, *.go, *.py, ...)
     │ tree-sitter parse
     ▼
 RawImport list
