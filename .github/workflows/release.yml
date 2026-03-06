@@ -236,6 +236,11 @@ jobs:
       - name: Copy README for npm description
         run: cp README.md packages/npm/README.md
 
+      # NOTE: packages/wasm/mille.wasm はリポジトリにコミット済み（CI の update-wasm ジョブが最新に保つ）。
+      #       npm publish 前にコピーすることで mille.wasm がパッケージに含まれるようにする。
+      - name: Copy mille.wasm for npm bundle
+        run: cp packages/wasm/mille.wasm packages/npm/mille.wasm
+
       - name: Publish
         run: |
           cd packages/npm
