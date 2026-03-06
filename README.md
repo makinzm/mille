@@ -40,6 +40,21 @@ mille check
 
 The Python package is a native extension built with [maturin](https://github.com/PyO3/maturin) (PyO3). It provides both a CLI (`mille check`) and a Python API (`import mille; mille.check(...)`).
 
+### npm (Node.js users)
+
+```sh
+npm install -g @makinzm/mille
+mille check
+```
+
+Or use it without installing globally:
+
+```sh
+npx @makinzm/mille check
+```
+
+Requires Node.js ≥ 18. The npm package bundles `mille.wasm` (the compiled Rust core) and runs it via Node.js's built-in `node:wasi` module — no native compilation or network access required at install time.
+
 ### go install
 
 ```sh
@@ -278,7 +293,7 @@ Restricts which methods may be called on a given layer's types. Only valid on th
 
 | Key | Description |
 |---|---|
-| `tsconfig` | Path to `tsconfig.json` (optional, currently informational) |
+| `tsconfig` | Path to `tsconfig.json`. When specified, mille reads `compilerOptions.paths` and resolves path aliases (e.g. `@/*`) as internal imports. |
 
 **How TypeScript / JavaScript imports are classified:**
 
@@ -286,10 +301,13 @@ Restricts which methods may be called on a given layer's types. Only valid on th
 |---|---|
 | `import X from "./module"` (starts with `./`) | Internal |
 | `import X from "../module"` (starts with `../`) | Internal |
+| `import X from "@/module"` (path alias in `tsconfig.json`) | Internal |
 | `import X from "react"` (npm package) | External |
 | `import fs from "node:fs"` (Node.js built-in) | External |
 
-For internal imports, mille resolves the relative path from the importing file and matches it against layer glob patterns. For example, `import { User } from "../domain/user"` in `usecase/user_usecase.ts` resolves to `domain/user`, matching the layer glob `domain/**`.
+For relative imports, mille resolves the path from the importing file and matches it against layer glob patterns. For example, `import { User } from "../domain/user"` in `usecase/user_usecase.ts` resolves to `domain/user`, matching the layer glob `domain/**`.
+
+For path aliases, mille expands the alias using `compilerOptions.paths` and treats the result as an internal import. For example, with `"@/*": ["./src/*"]`, `import { User } from "@/domain/user"` resolves to `src/domain/user`.
 
 ### `[resolve.go]`
 
