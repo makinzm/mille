@@ -79,6 +79,7 @@ mod tests {
             line: 1,
             file: "some/file.go".to_string(),
             kind: ImportKind::Import,
+            named_imports: vec![],
         }
     }
 

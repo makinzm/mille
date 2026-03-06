@@ -16,7 +16,7 @@ It is implemented in Rust, supports multiple languages from a single TOML config
 | Rust support | ✅ |
 | Go support | ✅ |
 | Python support | ✅ |
-| TypeScript / JavaScript support | planned |
+| TypeScript / JavaScript support | ✅ |
 
 ## How to Install
 
@@ -154,6 +154,44 @@ external_mode   = "opt-out"
 external_deny   = []
 ```
 
+**TypeScript / JavaScript project example:**
+
+```toml
+[project]
+name      = "my-ts-app"
+root      = "."
+languages = ["typescript"]
+
+[resolve.typescript]
+tsconfig = "./tsconfig.json"
+
+[[layers]]
+name            = "domain"
+paths           = ["domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+external_mode   = "opt-out"
+external_deny   = []
+
+[[layers]]
+name            = "usecase"
+paths           = ["usecase/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+external_mode   = "opt-in"
+external_allow  = ["zod"]
+
+[[layers]]
+name            = "infrastructure"
+paths           = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny            = []
+external_mode   = "opt-out"
+external_deny   = []
+```
+
+> Use `languages = ["javascript"]` for plain `.js` / `.jsx` projects (no `[resolve.typescript]` needed).
+
 **Go project example:**
 
 ```toml
@@ -235,6 +273,23 @@ Restricts which methods may be called on a given layer's types. Only valid on th
 |---|---|
 | `callee_layer` | The layer whose methods are being restricted |
 | `allow_methods` | List of method names that are permitted |
+
+### `[resolve.typescript]`
+
+| Key | Description |
+|---|---|
+| `tsconfig` | Path to `tsconfig.json` (optional, currently informational) |
+
+**How TypeScript / JavaScript imports are classified:**
+
+| Import | Classification |
+|---|---|
+| `import X from "./module"` (starts with `./`) | Internal |
+| `import X from "../module"` (starts with `../`) | Internal |
+| `import X from "react"` (npm package) | External |
+| `import fs from "node:fs"` (Node.js built-in) | External |
+
+For internal imports, mille resolves the relative path from the importing file and matches it against layer glob patterns. For example, `import { User } from "../domain/user"` in `usecase/user_usecase.ts` resolves to `domain/user`, matching the layer glob `domain/**`.
 
 ### `[resolve.go]`
 

@@ -88,6 +88,7 @@ mod tests {
             line: 1,
             file: "domain/entity.py".to_string(),
             kind: ImportKind::Import,
+            named_imports: vec![],
         }
     }
 

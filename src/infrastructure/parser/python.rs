@@ -12,9 +12,8 @@ impl Parser for PythonParser {
         parse_python_imports(source, file_path)
     }
 
-    fn parse_call_exprs(&self, _source: &str, _file_path: &str) -> Vec<RawCallExpr> {
-        // Python call-expression analysis is not yet implemented.
-        vec![]
+    fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
+        parse_python_call_exprs(source, file_path)
     }
 }
 
@@ -31,6 +30,69 @@ pub fn parse_python_imports(source: &str, file_path: &str) -> Vec<RawImport> {
     let mut imports = Vec::new();
     collect_python_imports(root, source.as_bytes(), file_path, &mut imports);
     imports
+}
+
+/// Parse Python source code and extract attribute-access call expressions.
+///
+/// Extracts calls of the form `Receiver.method(...)`:
+/// - `receiver_type = Some("Receiver")` (object/class name)
+/// - `method = "method"`
+///
+/// Only immediate attribute calls are captured: `User.create("John")` →
+/// receiver = "User", method = "create". Chained calls like `a.b.c()` are
+/// not captured because static type inference is not available.
+pub fn parse_python_call_exprs(source: &str, file_path: &str) -> Vec<RawCallExpr> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_python::language())
+        .expect("Failed to load Python grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut calls = Vec::new();
+    collect_python_call_exprs(root, source.as_bytes(), file_path, &mut calls);
+    calls
+}
+
+fn collect_python_call_exprs(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    out: &mut Vec<RawCallExpr>,
+) {
+    if node.kind() == "call" {
+        let line = node.start_position().row + 1;
+        if let Some(func) = node.child_by_field_name("function") {
+            if func.kind() == "attribute" {
+                // Receiver.method(...)
+                if let (Some(obj), Some(attr)) = (
+                    func.child_by_field_name("object"),
+                    func.child_by_field_name("attribute"),
+                ) {
+                    // Only handle simple identifier receivers (e.g. `User.create`)
+                    if obj.kind() == "identifier" {
+                        let receiver = obj.utf8_text(source).unwrap_or("").to_string();
+                        let method = attr.utf8_text(source).unwrap_or("").to_string();
+                        if !receiver.is_empty() && !method.is_empty() {
+                            out.push(RawCallExpr {
+                                file: file_path.to_string(),
+                                line,
+                                receiver_type: Some(receiver),
+                                method,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_python_call_exprs(child, source, file_path, out);
+        }
+    }
 }
 
 fn collect_python_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawImport>) {
@@ -57,6 +119,7 @@ fn collect_python_imports(node: Node, source: &[u8], file_path: &str, out: &mut 
                             line,
                             file: file_path.to_string(),
                             kind: ImportKind::Import,
+                            named_imports: vec![],
                         });
                     }
                 }
@@ -66,11 +129,13 @@ fn collect_python_imports(node: Node, source: &[u8], file_path: &str, out: &mut 
             // from X import Y   from . import Y   from .X import Y
             let line = node.start_position().row + 1;
             if let Some(path) = extract_from_module(&node, source) {
+                let named = extract_python_named_imports(&node, source);
                 out.push(RawImport {
                     path,
                     line,
                     file: file_path.to_string(),
                     kind: ImportKind::Import,
+                    named_imports: named,
                 });
             }
         }
@@ -102,6 +167,57 @@ fn extract_from_module(node: &Node, source: &[u8]) -> Option<String> {
         }
     }
     None
+}
+
+/// Extract the list of names imported by `from X import Y, Z`.
+///
+/// For `from domain.entity import User, Admin` → returns `["User", "Admin"]`.
+/// For `from . import entity` → returns `["entity"]`.
+/// For `from os import *` → returns `[]` (wildcard).
+fn extract_python_named_imports(node: &Node, source: &[u8]) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut after_import_kw = false;
+
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        if child.kind() == "import" {
+            after_import_kw = true;
+            continue;
+        }
+        if !after_import_kw {
+            continue;
+        }
+        match child.kind() {
+            "wildcard_import" => {
+                // from X import * — cannot enumerate names
+                return vec![];
+            }
+            "dotted_name" | "identifier" => {
+                if let Some(text) = extract_text(&child, source) {
+                    // Only take the last component for dotted names used as identifiers
+                    let name = text.split('.').last().unwrap_or(&text).to_string();
+                    names.push(name);
+                }
+            }
+            "aliased_import" => {
+                // from X import Y as Z — the bound name is Z
+                for j in 0..child.child_count() {
+                    let Some(inner) = child.child(j) else {
+                        continue;
+                    };
+                    if inner.kind() == "identifier" && j == 0 {
+                        // first identifier is the original name
+                        if let Some(text) = extract_text(&inner, source) {
+                            names.push(text);
+                        }
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    names
 }
 
 fn extract_text(node: &Node, source: &[u8]) -> Option<String> {

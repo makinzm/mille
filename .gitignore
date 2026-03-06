@@ -35,3 +35,9 @@ packages/pypi/tests/__pycache__/
 *.pyc
 *.pyo
 
+# Node.js / npm build artifacts
+node_modules/
+packages/npm/node_modules/
+dist/
+*.tsbuildinfo
+

@@ -139,9 +139,14 @@ impl<'a> ViolationDetector<'a> {
                             .and_then(|rp| self.find_layer_for_file(rp))
                             .map(|l| l.name == pattern.callee_layer)
                             .unwrap_or(false)
-                        && type_name_from_import(&imp.raw.path)
-                            .map(|n| n == receiver_type.as_str())
-                            .unwrap_or(false)
+                        && (
+                            // Rust / Go: type name embedded in import path
+                            type_name_from_import(&imp.raw.path)
+                                .map(|n| n == receiver_type.as_str())
+                                .unwrap_or(false)
+                            // Python / TypeScript: named imports tracked explicitly
+                            || imp.raw.named_imports.iter().any(|n| n == receiver_type.as_str())
+                        )
                 });
 
                 if !type_is_from_callee {
@@ -202,15 +207,34 @@ fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
     pattern == crate_name
 }
 
-/// Extract the type name brought into scope by an import path.
-/// `"crate::infrastructure::Repo"` → `Some("Repo")`
-/// Returns `None` for wildcards (`*`) and grouped imports (`{…}`).
+/// Extract the type/package name brought into scope by an import path.
+///
+/// - Rust:  `"crate::infrastructure::Repo"` → `Some("Repo")`  (split by `::`)
+/// - Go:    `"github.com/example/gosample/domain"` → `Some("domain")`  (split by `/`)
+/// - Returns `None` for wildcards (`*`) and grouped imports (`{…}`).
+///
+/// Python and TypeScript named imports are checked via `named_imports` field directly.
 fn type_name_from_import(path: &str) -> Option<&str> {
-    let last = path.split("::").last()?;
-    if last.starts_with('{') || last == "*" {
+    // Rust-style paths use "::" separator.
+    if path.contains("::") {
+        let last = path.split("::").last()?;
+        if last.starts_with('{') || last == "*" {
+            return None;
+        }
+        return Some(last);
+    }
+
+    // Go-style paths use "/" separator (e.g. "github.com/foo/bar/domain").
+    // The last segment is the package name used as the call receiver.
+    if path.contains('/') {
+        return path.split('/').last().filter(|s| !s.is_empty());
+    }
+
+    // Plain single-segment paths (e.g. "fmt", "os" in Go stdlib).
+    if path.starts_with('{') || path == "*" {
         return None;
     }
-    Some(last)
+    Some(path)
 }
 
 #[cfg(test)]
@@ -247,6 +271,7 @@ mod tests {
                 line,
                 file: file.to_string(),
                 kind: ImportKind::Use,
+                named_imports: vec![],
             },
             category: ImportCategory::Internal,
             resolved_path: Some(resolved.to_string()),
@@ -523,6 +548,7 @@ mod tests {
                     line: 1,
                     file: "src/domain/entity/foo.rs".to_string(),
                     kind: ImportKind::Use,
+                    named_imports: vec![],
                 },
                 category: ImportCategory::Stdlib,
                 resolved_path: None,
@@ -533,6 +559,7 @@ mod tests {
                     line: 2,
                     file: "src/domain/entity/foo.rs".to_string(),
                     kind: ImportKind::Use,
+                    named_imports: vec![],
                 },
                 category: ImportCategory::External,
                 resolved_path: None,
@@ -637,6 +664,7 @@ mod tests {
                 line,
                 file: file.to_string(),
                 kind: ImportKind::Use,
+                named_imports: vec![],
             },
             category: ImportCategory::External,
             resolved_path: None,
@@ -777,6 +805,7 @@ mod tests {
                 line: 1,
                 file: "src/domain/mod.rs".to_string(),
                 kind: ImportKind::Mod, // pub mod entity;
+                named_imports: vec![],
             },
             category: ImportCategory::External,
             resolved_path: None,
@@ -805,6 +834,7 @@ mod tests {
                     line: 1,
                     file: "src/domain/service/foo.rs".to_string(),
                     kind: ImportKind::Use,
+                    named_imports: vec![],
                 },
                 category: ImportCategory::Internal,
                 resolved_path: Some("src/domain/entity/config".to_string()),
@@ -815,6 +845,7 @@ mod tests {
                     line: 2,
                     file: "src/domain/service/foo.rs".to_string(),
                     kind: ImportKind::Use,
+                    named_imports: vec![],
                 },
                 category: ImportCategory::Stdlib,
                 resolved_path: None,
@@ -872,6 +903,7 @@ mod tests {
                 line: 1,
                 file: file.to_string(),
                 kind: ImportKind::Use,
+                named_imports: vec![],
             },
             category: ImportCategory::Internal,
             resolved_path: Some(resolved.to_string()),

@@ -37,3 +37,7 @@ dependency_mode = "opt-in"
 allow = ["domain", "usecase", "infrastructure"]
 external_mode = "opt-in"
 external_allow = ["fmt", "os"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "domain"
+  allow_methods = ["NewUser"]

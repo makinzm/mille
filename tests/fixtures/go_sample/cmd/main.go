@@ -11,8 +11,9 @@ import (
 func main() {
 	repo := &infrastructure.UserRepo{}
 	uc := &usecase.UserUsecase{}
-	user := uc.GetUser(1)
+	user := domain.NewUser("John")
 	_ = repo
-	_ = user
-	fmt.Fprintln(os.Stdout, "user:", domain.User{})
+	_ = uc
+	fmt.Fprintln(os.Stdout, "user:", user)
+	_ = os.Stdout
 }

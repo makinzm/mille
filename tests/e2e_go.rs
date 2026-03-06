@@ -495,3 +495,72 @@ fn test_go_cmd_missing_infra_allow_exits_one() {
         stdout(&out)
     );
 }
+
+// ---------------------------------------------------------------------------
+// allow_call_patterns: forbidden method call on domain package
+// ---------------------------------------------------------------------------
+
+/// cmd calls domain.NewUser() but allow_methods=[] → CallPatternViolation.
+const GO_BROKEN_CALL_PATTERN_TOML: &str = r#"
+[project]
+name = "gosample"
+root = "."
+languages = ["go"]
+
+[resolve.go]
+module_name = "github.com/example/gosample"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "cmd"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["database/sql"]
+
+[[layers]]
+name = "cmd"
+paths = ["cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = ["fmt", "os"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "domain"
+  allow_methods = []
+"#;
+
+#[test]
+fn test_go_broken_call_pattern_exits_one() {
+    use std::fs;
+
+    let config_path = go_fixture_dir().join("mille_e2e_go_call_pattern.toml");
+    fs::write(&config_path, GO_BROKEN_CALL_PATTERN_TOML).expect("failed to write config");
+
+    let out = mille_in_go_fixture(&["check", "--config", "mille_e2e_go_call_pattern.toml"]);
+    let _ = fs::remove_file(&config_path);
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "domain.NewUser() is forbidden (allow_methods=[]): must trigger CallPatternViolation\nstdout:\n{}",
+        stdout(&out)
+    );
+}
