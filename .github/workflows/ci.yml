@@ -129,11 +129,9 @@ jobs:
         working-directory: packages/pypi
         run: uv run pytest tests/ -v
 
-      # NOTE: mille.toml の glob パスはプロジェクトルートからの相対パスのため、
-      #       packages/pypi ではなくワークスペースルートから実行する。
-      #       uv run --project でパッケージの .venv を使いつつ CWD はルートに保つ。
-      - name: Self-check — Rust project via PyPI wrapper
-        run: uv run --project packages/pypi mille check
+      - name: Self-check — packages/pypi itself
+        working-directory: packages/pypi
+        run: uv run mille check
 
       - name: Self-check — Python fixture
         working-directory: tests/fixtures/python_sample
