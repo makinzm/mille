@@ -1,0 +1,12 @@
+[project]
+name = "mille-npm"
+root = "."
+languages = ["javascript"]
+
+[[layers]]
+name = "app"
+paths = ["index.js"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []

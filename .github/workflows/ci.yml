@@ -112,6 +112,18 @@ jobs:
         working-directory: packages/go
         run: ${{ github.workspace }}/target/release/mille check
 
+      - name: Self-check — TypeScript fixture (tests/fixtures/typescript_sample)
+        working-directory: tests/fixtures/typescript_sample
+        run: ${{ github.workspace }}/target/release/mille check
+
+      - name: Self-check — JavaScript fixture (tests/fixtures/javascript_sample)
+        working-directory: tests/fixtures/javascript_sample
+        run: ${{ github.workspace }}/target/release/mille check
+
+      - name: Self-check — npm package (packages/npm)
+        working-directory: packages/npm
+        run: ${{ github.workspace }}/target/release/mille check
+
   # ------------------------------------------------------------------ #
   # 3b. Dogfooding-python — maturin build → pytest + mille check     #
   # ------------------------------------------------------------------ #

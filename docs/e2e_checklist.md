@@ -64,31 +64,32 @@
 | `tests/fixtures/go_sample/` | `tests/e2e_go.rs` | Go |
 | mille 自身 (`src/`) | `tests/e2e_check.rs` | Rust |
 | `tests/fixtures/python_sample/` | `tests/e2e_python.rs` | Python |
+| `tests/fixtures/typescript_sample/` | `tests/e2e_typescript.rs` | TypeScript |
+| `tests/fixtures/javascript_sample/` | `tests/e2e_javascript.rs` | JavaScript |
 
 ---
 
 ## 実装状況
 
-| チェックポイント | Go | Rust | Python |
-|---|---|---|---|
-| 1. dep opt-in: usecase.allow=[] | ✅ | — (自己のアーキテクチャが正しいため違反なし) | ✅ `test_python_broken_usecase_exits_one` |
-| 1. dep opt-in: infrastructure.allow=[] | ✅ | ✅ `INFRA_BLOCKS_DOMAIN_TOML` | N/A (infrastructure は opt-out) |
-| 1. dep opt-in: cmd/main.allow から一部除く | ✅ | ✅ `MAIN_FORBIDS_INFRA_TOML` | N/A (fixture に main レイヤーなし) |
-| 2. dep opt-out: deny=["参照しているレイヤー"] | ☐ | ☐ | ✅ `test_python_broken_infra_deny_domain_exits_one` |
-| 3. external opt-in: infrastructure.external_allow=[] | ✅ | ✅ | N/A (fixture は opt-out) |
-| 3. external opt-in: cmd.external_allow=[] | ✅ | ☐ | N/A |
-| 3. external opt-in: 部分的な external_allow | ✅ | N/A | N/A |
-| 4. external opt-out: external_deny=["使用pkg"] | ☐ | ☐ | ✅ `test_python_broken_external_deny_os_exits_one` |
-| 5. allow_call_patterns: 禁止メソッドの呼び出し | N/A (未実装) | ✅ `CALL_PATTERN_VIOLATION_TOML` | N/A (Python は未実装) |
+| チェックポイント | Go | Rust | Python | TypeScript | JavaScript |
+|---|---|---|---|---|---|
+| 1. dep opt-in: usecase.allow=[] | ✅ | — (自己のアーキテクチャが正しいため違反なし) | ✅ `test_python_broken_usecase_exits_one` | ✅ `test_ts_broken_usecase_allow_exits_one` | ✅ `test_js_broken_usecase_allow_exits_one` |
+| 1. dep opt-in: infrastructure.allow=[] | ✅ | ✅ `INFRA_BLOCKS_DOMAIN_TOML` | N/A (infrastructure は opt-out) | N/A (infrastructure は opt-out) | N/A (infrastructure は opt-out) |
+| 1. dep opt-in: cmd/main.allow から一部除く | ✅ | ✅ `MAIN_FORBIDS_INFRA_TOML` | N/A (fixture に main レイヤーなし) | N/A | N/A |
+| 2. dep opt-out: deny=["参照しているレイヤー"] | ☐ | ☐ | ✅ `test_python_broken_infra_deny_domain_exits_one` | ✅ `test_ts_broken_infra_deny_exits_one` | ✅ `test_js_broken_infra_deny_exits_one` |
+| 3. external opt-in: external_allow=[] | ✅ | ✅ | N/A (fixture は opt-out) | ✅ `test_ts_broken_external_optin_exits_one` | ✅ `test_js_broken_external_optin_exits_one` |
+| 3. external opt-in: cmd.external_allow=[] | ✅ | ☐ | N/A | N/A | N/A |
+| 3. external opt-in: 部分的な external_allow | ✅ | N/A | N/A | N/A | N/A |
+| 4. external opt-out: external_deny=["使用pkg"] | ☐ | ☐ | ✅ `test_python_broken_external_deny_os_exits_one` | ✅ `test_ts_broken_external_optout_exits_one` | ✅ `test_js_broken_external_optout_exits_one` |
+| 5. allow_call_patterns: 禁止メソッドの呼び出し | N/A (未実装) | ✅ `CALL_PATTERN_VIOLATION_TOML` | N/A (Python は未実装) | N/A (未実装) | N/A (未実装) |
 
 ---
 
 ## 未実装項目（将来対応）
 
-- `allow_call_patterns` の Go / Python E2E テスト（パーサーでの呼び出しチェック未実装）
+- `allow_call_patterns` の Go / Python / TypeScript / JavaScript E2E テスト（パーサーでの呼び出しチェック未実装）
 - `[severity]` の設定項目テスト（未実装）
 - `[ignore]` の paths / test_patterns テスト（未実装）
 - `[resolve.aliases]` テスト（未実装）
-- TypeScript フィクスチャの E2E テスト（TypeScript サポート追加時に対応）
 - Go の `dependency_mode = "opt-out"` + `deny` 違反テスト（fixture にそのパターンがない）
 - Go / Rust の `external_mode = "opt-out"` + `external_deny` 違反テスト（fixture に該当する外部パッケージ使用例がない）
