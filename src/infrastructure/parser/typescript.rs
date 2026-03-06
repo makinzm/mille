@@ -13,9 +13,65 @@ impl Parser for TypeScriptParser {
         parse_ts_imports(source, file_path)
     }
 
-    fn parse_call_exprs(&self, _source: &str, _file_path: &str) -> Vec<RawCallExpr> {
-        // TypeScript/JavaScript call-expression analysis is not yet implemented.
-        vec![]
+    fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
+        parse_ts_call_exprs(source, file_path)
+    }
+}
+
+/// Parse TypeScript/JavaScript source code and extract member-expression call expressions.
+///
+/// Extracts calls of the form `Receiver.method(...)`:
+/// - `receiver_type = Some("Receiver")` (class/object identifier)
+/// - `method = "method"`
+///
+/// Only immediate member-expression calls with a simple identifier as the object are
+/// captured: `User.create("John")` → receiver = "User", method = "create".
+pub fn parse_ts_call_exprs(source: &str, file_path: &str) -> Vec<RawCallExpr> {
+    let mut parser = tree_sitter::Parser::new();
+    let language = select_language(file_path);
+    parser
+        .set_language(&language)
+        .expect("Failed to load TypeScript/JavaScript grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut calls = Vec::new();
+    collect_ts_call_exprs(root, source.as_bytes(), file_path, &mut calls);
+    calls
+}
+
+fn collect_ts_call_exprs(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawCallExpr>) {
+    if node.kind() == "call_expression" {
+        let line = node.start_position().row + 1;
+        if let Some(func) = node.child_by_field_name("function") {
+            if func.kind() == "member_expression" {
+                // Receiver.method(...)
+                if let (Some(obj), Some(prop)) = (
+                    func.child_by_field_name("object"),
+                    func.child_by_field_name("property"),
+                ) {
+                    if obj.kind() == "identifier" {
+                        let receiver = obj.utf8_text(source).unwrap_or("").to_string();
+                        let method = prop.utf8_text(source).unwrap_or("").to_string();
+                        if !receiver.is_empty() && !method.is_empty() {
+                            out.push(RawCallExpr {
+                                file: file_path.to_string(),
+                                line,
+                                receiver_type: Some(receiver),
+                                method,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_ts_call_exprs(child, source, file_path, out);
+        }
     }
 }
 
@@ -123,7 +179,9 @@ fn extract_ts_named_imports(node: &Node, source: &[u8]) -> Vec<String> {
 fn collect_import_clause_names(clause: &Node, source: &[u8]) -> Vec<String> {
     let mut names = Vec::new();
     for i in 0..clause.child_count() {
-        let Some(child) = clause.child(i) else { continue };
+        let Some(child) = clause.child(i) else {
+            continue;
+        };
         match child.kind() {
             // Default import: `import User from "..."`
             "identifier" => {

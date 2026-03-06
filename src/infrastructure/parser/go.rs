@@ -12,9 +12,8 @@ impl Parser for GoParser {
         parse_go_imports(source, file_path)
     }
 
-    fn parse_call_exprs(&self, _source: &str, _file_path: &str) -> Vec<RawCallExpr> {
-        // Go call-expression analysis is not yet implemented; return empty.
-        vec![]
+    fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
+        parse_go_call_exprs(source, file_path)
     }
 }
 
@@ -79,6 +78,62 @@ fn collect_go_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
     for i in 0..node.child_count() {
         if let Some(child) = node.child(i) {
             collect_go_imports(child, source, file_path, out);
+        }
+    }
+}
+
+/// Parse Go source code and extract package-level call expressions.
+///
+/// Extracts `selector_expression` calls of the form `pkg.Func(...)`:
+/// - `receiver_type = "pkg"` (the package identifier)
+/// - `method = "Func"` (the function/method name)
+///
+/// These are the only statically-typed calls Go supports at the package level.
+/// Instance method calls like `obj.Method()` where `obj` is a variable are also
+/// extracted but with `receiver_type = Some(obj_name)` — the ViolationDetector
+/// matches by import, so only package-level calls will trigger CallPatternViolation.
+pub fn parse_go_call_exprs(source: &str, file_path: &str) -> Vec<RawCallExpr> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_go::language())
+        .expect("Failed to load Go grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut calls = Vec::new();
+    collect_go_call_exprs(root, source.as_bytes(), file_path, &mut calls);
+    calls
+}
+
+fn collect_go_call_exprs(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawCallExpr>) {
+    if node.kind() == "call_expression" {
+        let line = node.start_position().row + 1;
+        if let Some(func) = node.child_by_field_name("function") {
+            if func.kind() == "selector_expression" {
+                // pkg.Func(...)
+                if let (Some(operand), Some(field)) = (
+                    func.child_by_field_name("operand"),
+                    func.child_by_field_name("field"),
+                ) {
+                    let receiver = operand.utf8_text(source).unwrap_or("").to_string();
+                    let method = field.utf8_text(source).unwrap_or("").to_string();
+                    if !receiver.is_empty() && !method.is_empty() {
+                        out.push(RawCallExpr {
+                            file: file_path.to_string(),
+                            line,
+                            receiver_type: Some(receiver),
+                            method,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_go_call_exprs(child, source, file_path, out);
         }
     }
 }
