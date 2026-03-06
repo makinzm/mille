@@ -1,22 +1,22 @@
-// Package main is the Go wrapper for mille, using the WASI binary embedded in
-// the millewasm module.
+// Package main is the Go wrapper for mille, embedding mille.wasm directly.
 //
 // Install:
 //
 //	go install github.com/makinzm/mille/packages/go@latest
 //
-// mille.wasm is managed in the github.com/makinzm/mille/packages/wasm module
-// and embedded there via //go:embed. No copies are committed here.
+// mille.wasm is embedded at build time via //go:embed.
 // No network access or external binary is needed at runtime.
 package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
-
-	millewasm "github.com/makinzm/mille/packages/wasm"
 )
+
+//go:embed mille.wasm
+var milleWasm []byte
 
 func main() {
 	ctx := context.Background()
@@ -29,6 +29,6 @@ func main() {
 
 	// NOTE: os.Args[0] is the Go binary name; runWasm prepends "mille" as the
 	// WASI argv[0], so we pass only the user-facing arguments (os.Args[1:]).
-	code := runWasm(ctx, millewasm.Wasm, cwd, os.Args[1:])
+	code := runWasm(ctx, milleWasm, cwd, os.Args[1:])
 	os.Exit(code)
 }

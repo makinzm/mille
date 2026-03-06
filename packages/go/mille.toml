@@ -16,12 +16,12 @@ deny = []
 external_mode = "opt-in"
 external_allow = [
   "context",
+  "embed",
   "fmt",
   "os",
   "path/filepath",
   "strings",
   "testing",
-  "github.com/makinzm/mille/packages/wasm",
   "github.com/tetratelabs/wazero",
   "github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1",
   "github.com/tetratelabs/wazero/sys",

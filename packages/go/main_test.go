@@ -5,16 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	millewasm "github.com/makinzm/mille/packages/wasm"
 )
 
-// TestRunWasm_WasmBytesEmbedded verifies the //go:embed in the millewasm
-// module worked and the .wasm file is non-empty.
+// TestRunWasm_WasmBytesEmbedded verifies the //go:embed in main.go
+// worked and the .wasm file is non-empty.
 func TestRunWasm_WasmBytesEmbedded(t *testing.T) {
 	// Minimal valid WebAssembly module is 8 bytes (magic + version).
-	if len(millewasm.Wasm) < 8 {
-		t.Fatalf("millewasm.Wasm too small (%d bytes) — run `bash scripts/build-wasm.sh` first", len(millewasm.Wasm))
+	if len(milleWasm) < 8 {
+		t.Fatalf("milleWasm too small (%d bytes) — run `bash scripts/build-wasm.sh` first", len(milleWasm))
 	}
 }
 
@@ -24,7 +22,7 @@ func TestRunWasm_MissingConfig(t *testing.T) {
 	dir := t.TempDir() // empty dir → no mille.toml
 	ctx := context.Background()
 
-	code := runWasm(ctx, millewasm.Wasm, dir, []string{"check", "--config", "nonexistent.toml"})
+	code := runWasm(ctx, milleWasm, dir, []string{"check", "--config", "nonexistent.toml"})
 	if code == 0 {
 		t.Errorf("expected non-zero exit code for missing config, got 0")
 	}
@@ -39,7 +37,7 @@ func TestRunWasm_SelfCheck(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	code := runWasm(ctx, millewasm.Wasm, dir, []string{"check"})
+	code := runWasm(ctx, milleWasm, dir, []string{"check"})
 	if code != 0 {
 		t.Errorf("expected exit code 0 (no violations), got %d", code)
 	}
