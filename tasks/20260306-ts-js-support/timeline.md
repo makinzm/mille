@@ -51,3 +51,29 @@
 - lefthook 全通過、210 テスト通過
 
 PR #31 タイトル・説明を更新
+
+## 2026-03-06 TypeScript @/ path alias 対応
+
+### RED
+- `tests/fixtures/typescript_atmark_example/` 作成
+  - `tsconfig.json`: `"@/*": ["./src/*"]` パス設定
+  - `src/domain/user.ts`, `src/usecase/user_usecase.ts` (`import { User } from "@/domain/user"`)
+  - `mille.toml`: `external_mode = "opt-in"`, `external_allow = []` で @/ が External のままだと ExternalViolation になる
+- `tests/e2e_typescript_atmark.rs` を追加（3 テスト、全 RED）
+  - `test_atmark_valid_exits_zero`: @/ → Internal なら 0 violations
+  - `test_atmark_valid_summary_shows_zero_errors`
+  - `test_atmark_broken_dep_exits_one`: @/ → Internal なら dep violation を正しく検出
+- `--no-verify` でコミット
+
+### GREEN
+- `Cargo.toml` に `serde_json = "1"` を追加
+- `TypeScriptResolver` に `aliases: HashMap<String, String>` フィールドを追加
+  - `TypeScriptResolver::with_aliases(aliases)` コンストラクタ追加
+  - `resolve_alias()`: `"@/*"` パターンを展開 (`@/domain/user` → `src/domain/user`)
+  - alias がマッチした場合 Internal + `resolved_path = "src/domain/user/_.ts"` を返す
+- `DispatchingResolver::new()` に `typescript: TypeScriptResolver` 引数を追加
+- `src/main.rs` に `load_ts_aliases()` 関数を追加
+  - `resolve.typescript.tsconfig` のパスを読み込み JSON 解析
+  - `strip_json_line_comments()` で tsconfig の `//` コメントを除去してから parse
+  - `compilerOptions.paths` を `HashMap<String, String>` に変換
+- 215 テスト全通過、lefthook 全通過
