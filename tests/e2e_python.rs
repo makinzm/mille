@@ -178,3 +178,215 @@ external_deny = []
         "violation output must mention 'usecase' layer\nstdout:\n{s}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Broken fixture: infrastructure denies domain (dependency_mode=opt-out)
+// ---------------------------------------------------------------------------
+
+/// infrastructure/db.py imports `from domain.entity import User`.
+/// Setting `deny = ["domain"]` must produce a violation.
+#[test]
+fn test_python_broken_infra_deny_domain_exits_one() {
+    let broken_config = python_fixture_dir().join("mille_broken_infra_deny.toml");
+    let config_content = r#"
+[project]
+name = "python-sample"
+root = "."
+languages = ["python"]
+
+[resolve.python]
+src_root = "."
+package_names = ["domain", "usecase", "infrastructure"]
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+"#;
+    std::fs::write(&broken_config, config_content).expect("failed to write broken config");
+
+    let out = mille_in_python_fixture(&["check", "--config", "mille_broken_infra_deny.toml"]);
+    std::fs::remove_file(&broken_config).ok();
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "infrastructure deny=domain must exit 1\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+}
+
+#[test]
+fn test_python_broken_infra_deny_domain_mentions_infrastructure() {
+    let broken_config = python_fixture_dir().join("mille_broken_infra_deny2.toml");
+    let config_content = r#"
+[project]
+name = "python-sample"
+root = "."
+languages = ["python"]
+
+[resolve.python]
+src_root = "."
+package_names = ["domain", "usecase", "infrastructure"]
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+"#;
+    std::fs::write(&broken_config, config_content).expect("failed to write broken config");
+
+    let out = mille_in_python_fixture(&["check", "--config", "mille_broken_infra_deny2.toml"]);
+    std::fs::remove_file(&broken_config).ok();
+
+    let s = stdout(&out);
+    assert!(
+        s.contains("infrastructure"),
+        "violation must mention 'infrastructure' layer\nstdout:\n{s}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Broken fixture: domain denies "os" (external_mode=opt-out + external_deny)
+// ---------------------------------------------------------------------------
+
+/// domain/entity.py has `import os`.
+/// Setting `external_deny = ["os"]` must produce an external violation.
+#[test]
+fn test_python_broken_external_deny_os_exits_one() {
+    let broken_config = python_fixture_dir().join("mille_broken_ext_deny.toml");
+    let config_content = r#"
+[project]
+name = "python-sample"
+root = "."
+languages = ["python"]
+
+[resolve.python]
+src_root = "."
+package_names = ["domain", "usecase", "infrastructure"]
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = ["os"]
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
+"#;
+    std::fs::write(&broken_config, config_content).expect("failed to write broken config");
+
+    let out = mille_in_python_fixture(&["check", "--config", "mille_broken_ext_deny.toml"]);
+    std::fs::remove_file(&broken_config).ok();
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "external_deny=[os] must exit 1\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+}
+
+#[test]
+fn test_python_broken_external_deny_os_mentions_domain() {
+    let broken_config = python_fixture_dir().join("mille_broken_ext_deny2.toml");
+    let config_content = r#"
+[project]
+name = "python-sample"
+root = "."
+languages = ["python"]
+
+[resolve.python]
+src_root = "."
+package_names = ["domain", "usecase", "infrastructure"]
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = ["os"]
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
+"#;
+    std::fs::write(&broken_config, config_content).expect("failed to write broken config");
+
+    let out = mille_in_python_fixture(&["check", "--config", "mille_broken_ext_deny2.toml"]);
+    std::fs::remove_file(&broken_config).ok();
+
+    let s = stdout(&out);
+    assert!(
+        s.contains("domain"),
+        "violation must mention 'domain' layer\nstdout:\n{s}"
+    );
+}
