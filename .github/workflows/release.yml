@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  # NOTE: GitHub UI からリリースを作成した場合は push イベントが発火しない。
+  #       release: published を追加することで UI 経由のリリースでも動作する。
+  release:
+    types: [published]
 
 permissions:
   contents: write
