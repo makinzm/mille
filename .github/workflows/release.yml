@@ -231,6 +231,11 @@ jobs:
           cd packages/npm
           npm version ${{ needs.release.outputs.version }} --no-git-tag-version
 
+      # NOTE: npm は package.json と同じディレクトリの README.md をパッケージ説明として使う。
+      #       packages/npm/ に README.md がないとnpmページが空になるため、ルートからコピーする。
+      - name: Copy README for npm description
+        run: cp README.md packages/npm/README.md
+
       - name: Publish
         run: |
           cd packages/npm
