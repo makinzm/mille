@@ -42,7 +42,7 @@ jobs:
       - name: Extract version from tag
         id: version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -71,7 +71,7 @@ jobs:
           mkdir dist
           cp target/${{ matrix.target }}/release/mille dist/
           tar -C dist -czf "${ARTIFACT}.tar.gz" mille
-          echo "ARTIFACT=${ARTIFACT}.tar.gz" >> $GITHUB_ENV
+          echo "ARTIFACT=${ARTIFACT}.tar.gz" >> "$GITHUB_ENV"
 
       - name: Package (zip)
         if: matrix.archive == 'zip'
@@ -111,7 +111,7 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -140,12 +140,13 @@ jobs:
           # NOTE: arm64 クロスコンパイル時、ホストの strip (x86_64) は arm64 ELF を認識できず
           #       cargo deb が失敗する。--no-strip でその処理をスキップする。
           #       参考: https://github.com/makinzm/mille/actions/runs/22662654715/job/65686494078
-          STRIP_FLAG=$([[ "${{ matrix.use_cross }}" == "true" ]] && echo "--no-strip" || echo "")
-          cargo deb --no-build ${STRIP_FLAG} --target ${{ matrix.target }}
+          STRIP_ARGS=()
+          [[ "${{ matrix.use_cross }}" == "true" ]] && STRIP_ARGS=("--no-strip")
+          cargo deb --no-build "${STRIP_ARGS[@]}" --target ${{ matrix.target }}
           DEB=$(ls target/${{ matrix.target }}/debian/*.deb)
           VERSIONED="mille_${VERSION}_${{ matrix.arch }}.deb"
           cp "$DEB" "$VERSIONED"
-          echo "DEB_FILE=$VERSIONED" >> $GITHUB_ENV
+          echo "DEB_FILE=$VERSIONED" >> "$GITHUB_ENV"
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
@@ -166,7 +167,7 @@ jobs:
     steps:
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -306,9 +307,11 @@ jobs:
           SHA_MAC_X86=$(sha256sum "artifacts/mille-${VERSION}-x86_64-apple-darwin.tar.gz" | awk '{print $1}')
           SHA_MAC_ARM=$(sha256sum "artifacts/mille-${VERSION}-aarch64-apple-darwin.tar.gz" | awk '{print $1}')
           SHA_LINUX=$(sha256sum "artifacts/mille-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" | awk '{print $1}')
-          echo "MAC_X86=${SHA_MAC_X86}" >> $GITHUB_OUTPUT
-          echo "MAC_ARM=${SHA_MAC_ARM}" >> $GITHUB_OUTPUT
-          echo "LINUX=${SHA_LINUX}" >> $GITHUB_OUTPUT
+          {
+            echo "MAC_X86=${SHA_MAC_X86}"
+            echo "MAC_ARM=${SHA_MAC_ARM}"
+            echo "LINUX=${SHA_LINUX}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v4

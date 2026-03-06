@@ -5,7 +5,8 @@
     "volta@latest",
     "rustup@latest",
     "go@latest",
-    "wget@latest"
+    "wget@latest",
+    "actionlint@latest"
   ],
   "shell": {
     "init_hook": [
