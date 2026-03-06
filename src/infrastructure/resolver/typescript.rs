@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::domain::entity::import::RawImport;
 use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
 use crate::domain::repository::resolver::Resolver;
@@ -5,6 +7,7 @@ use crate::domain::repository::resolver::Resolver;
 /// Concrete implementation of the `Resolver` port for TypeScript/JavaScript imports.
 ///
 /// Classification rules:
+/// - **Alias**: import path matches a tsconfig `paths` alias → resolved to Internal
 /// - **Internal**: relative imports starting with `./` or `../`
 /// - **External**: everything else (npm packages, Node.js built-ins like `node:fs`, etc.)
 ///
@@ -14,11 +17,23 @@ use crate::domain::repository::resolver::Resolver;
 /// Example:
 /// - file `usecase/user_usecase.ts`, import `../domain/user`
 ///   → resolved_path = `domain/user/_.ts`  (matches layer glob `domain/**`)
-pub struct TypeScriptResolver;
+/// - file `src/usecase/user_usecase.ts`, import `@/domain/user`, alias `@/*` → `./src/*`
+///   → resolved_path = `src/domain/user/_.ts`
+pub struct TypeScriptResolver {
+    /// Flattened tsconfig `compilerOptions.paths` mapping.
+    /// Key: alias pattern (e.g. `"@/*"`), Value: first target (e.g. `"./src/*"`).
+    aliases: HashMap<String, String>,
+}
 
 impl TypeScriptResolver {
     pub fn new() -> Self {
-        TypeScriptResolver
+        TypeScriptResolver {
+            aliases: HashMap::new(),
+        }
+    }
+
+    pub fn with_aliases(aliases: HashMap<String, String>) -> Self {
+        TypeScriptResolver { aliases }
     }
 }
 
@@ -30,15 +45,26 @@ impl Default for TypeScriptResolver {
 
 impl Resolver for TypeScriptResolver {
     fn resolve(&self, import: &RawImport) -> ResolvedImport {
-        resolve_ts_impl(import)
+        resolve_ts_impl(import, &self.aliases)
     }
 
     fn resolve_for_project(&self, import: &RawImport, _own_crate: &str) -> ResolvedImport {
-        resolve_ts_impl(import)
+        resolve_ts_impl(import, &self.aliases)
     }
 }
 
-fn resolve_ts_impl(import: &RawImport) -> ResolvedImport {
+fn resolve_ts_impl(import: &RawImport, aliases: &HashMap<String, String>) -> ResolvedImport {
+    // Try alias resolution first (e.g. `@/domain/user` → `src/domain/user`).
+    if let Some(expanded) = resolve_alias(&import.path, aliases) {
+        let normalized = normalize_path(&expanded);
+        let clean = normalized.trim_start_matches("./");
+        return ResolvedImport {
+            raw: import.clone(),
+            category: ImportCategory::Internal,
+            resolved_path: Some(format!("{}/_.ts", clean)),
+        };
+    }
+
     let category = classify_ts(&import.path);
     let resolved_path = if category == ImportCategory::Internal {
         compute_resolved_path(&import.file, &import.path)
@@ -50,6 +76,30 @@ fn resolve_ts_impl(import: &RawImport) -> ResolvedImport {
         category,
         resolved_path,
     }
+}
+
+/// Expand an import path using tsconfig-style alias patterns.
+///
+/// Supports wildcard patterns: `"@/*"` with target `"./src/*"` expands
+/// `"@/domain/user"` → `"./src/domain/user"`.
+///
+/// Returns `None` if no alias matches.
+fn resolve_alias(path: &str, aliases: &HashMap<String, String>) -> Option<String> {
+    for (pattern, target) in aliases {
+        if let Some(prefix) = pattern.strip_suffix("/*") {
+            // Wildcard alias: "@/*" matches "@/..." with prefix "@"
+            let expected_prefix = format!("{}/", prefix);
+            if path.starts_with(&expected_prefix) {
+                let rest = &path[expected_prefix.len()..];
+                let target_base = target.trim_end_matches("/*");
+                return Some(format!("{}/{}", target_base, rest));
+            }
+        } else if path == pattern {
+            // Exact alias
+            return Some(target.clone());
+        }
+    }
+    None
 }
 
 /// Classify a TypeScript/JavaScript import path.
@@ -113,6 +163,8 @@ fn normalize_path(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::domain::entity::import::{ImportKind, RawImport};
 
@@ -124,6 +176,30 @@ mod tests {
             kind: ImportKind::Import,
             named_imports: vec![],
         }
+    }
+
+    #[test]
+    fn test_alias_wildcard_resolves_to_internal() {
+        let mut aliases = HashMap::new();
+        aliases.insert("@/*".to_string(), "./src/*".to_string());
+        let resolver = TypeScriptResolver::with_aliases(aliases);
+        let import = raw_ts("@/domain/user", "src/usecase/user_usecase.ts");
+        let resolved = resolver.resolve(&import);
+        assert_eq!(resolved.category, ImportCategory::Internal);
+        assert_eq!(
+            resolved.resolved_path,
+            Some("src/domain/user/_.ts".to_string())
+        );
+    }
+
+    #[test]
+    fn test_alias_no_match_falls_through_to_external() {
+        let mut aliases = HashMap::new();
+        aliases.insert("@/*".to_string(), "./src/*".to_string());
+        let resolver = TypeScriptResolver::with_aliases(aliases);
+        let import = raw_ts("react", "src/usecase/user_usecase.ts");
+        let resolved = resolver.resolve(&import);
+        assert_eq!(resolved.category, ImportCategory::External);
     }
 
     #[test]

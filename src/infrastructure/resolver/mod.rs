@@ -20,12 +20,12 @@ pub struct DispatchingResolver {
 }
 
 impl DispatchingResolver {
-    pub fn new(go: GoResolver, python: PythonResolver) -> Self {
+    pub fn new(go: GoResolver, python: PythonResolver, typescript: TypeScriptResolver) -> Self {
         DispatchingResolver {
             rust: RustResolver,
             go,
             python,
-            typescript: TypeScriptResolver::new(),
+            typescript,
         }
     }
 }
