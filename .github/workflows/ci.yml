@@ -83,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mille-wasm
-          path: packages/go/mille.wasm
+          path: packages/go/mille/mille.wasm
           retention-days: 7
 
   # ------------------------------------------------------------------ #
@@ -108,8 +108,8 @@ jobs:
         working-directory: tests/fixtures/go_sample
         run: ${{ github.workspace }}/target/release/mille check
 
-      - name: Self-check — Go wrapper (packages/go)
-        working-directory: packages/go
+      - name: Self-check — Go wrapper (packages/go/mille)
+        working-directory: packages/go/mille
         run: ${{ github.workspace }}/target/release/mille check
 
       - name: Self-check — TypeScript fixture (tests/fixtures/typescript_sample)
@@ -182,35 +182,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # NOTE: CI でビルドした .wasm を packages/go/ に配置する。
-      #       packages/go/mille.wasm が //go:embed のソースであり、唯一の canonical .wasm。
+      # NOTE: CI でビルドした .wasm を packages/go/mille/ に配置する。
+      #       packages/go/mille/mille.wasm が //go:embed のソースであり、唯一の canonical .wasm。
       #       コミット済みの .wasm はローカル環境依存であり CI ビルドと異なる場合があるため上書きする。
       - name: Download wasm artifact
         uses: actions/download-artifact@v4
         with:
           name: mille-wasm
-          path: packages/go
+          path: packages/go/mille
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: packages/go/go.mod
+          go-version-file: packages/go/mille/go.mod
 
-      - name: go test — packages/go
-        working-directory: packages/go
+      - name: go test — packages/go/mille
+        working-directory: packages/go/mille
         run: go test -v -timeout 60s ./...
 
-      - name: go build — packages/go
-        working-directory: packages/go
-        run: go build -o mille_go .
+      - name: go build — packages/go/mille
+        working-directory: packages/go/mille
+        run: go build -o mille .
 
       - name: Self-check via wazero wrapper — Go fixture
         working-directory: tests/fixtures/go_sample
-        run: ${{ github.workspace }}/packages/go/mille_go check
+        run: ${{ github.workspace }}/packages/go/mille/mille check
 
-      - name: Self-check via wazero wrapper — packages/go itself
-        working-directory: packages/go
-        run: ./mille_go check
+      - name: Self-check via wazero wrapper — packages/go/mille itself
+        working-directory: packages/go/mille
+        run: ./mille check
 
   # ------------------------------------------------------------------ #
   # 3e. Dogfooding-npm — Node.js WASI wrapper + mille check          #
@@ -222,16 +222,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # NOTE: CI でビルドした .wasm を packages/go/ に配置してから npm 用にコピーする。
-      #       packages/go/mille.wasm が唯一の canonical .wasm（dogfood-go と同じ理由）。
+      # NOTE: CI でビルドした .wasm を packages/go/mille/ に配置してから npm 用にコピーする。
+      #       packages/go/mille/mille.wasm が唯一の canonical .wasm（dogfood-go と同じ理由）。
       - name: Download wasm artifact
         uses: actions/download-artifact@v4
         with:
           name: mille-wasm
-          path: packages/go
+          path: packages/go/mille
 
       - name: Copy mille.wasm to npm package
-        run: cp packages/go/mille.wasm packages/npm/mille.wasm
+        run: cp packages/go/mille/mille.wasm packages/npm/mille.wasm
 
       - uses: actions/setup-node@v4
         with:
@@ -265,7 +265,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mille-wasm
-          path: packages/go
+          path: packages/go/mille
 
       # NOTE: .wasm が変化した場合のみコミット。変化がなければスキップ。
       #       [skip ci] をコミットメッセージに含めることで再トリガーを防ぐ。
@@ -273,10 +273,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --exit-code packages/go/mille.wasm; then
+          if git diff --exit-code packages/go/mille/mille.wasm; then
             echo "mille.wasm is already up to date. No commit needed."
           else
-            git add packages/go/mille.wasm
+            git add packages/go/mille/mille.wasm
             git commit -m "[fix] mille.wasm を CI ビルドで更新 [skip ci]"
             git push
           fi

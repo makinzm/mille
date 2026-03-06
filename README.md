@@ -58,7 +58,7 @@ Requires Node.js ≥ 18. The npm package bundles `mille.wasm` (the compiled Rust
 ### go install
 
 ```sh
-go install github.com/makinzm/mille/packages/go@latest
+go install github.com/makinzm/mille/packages/go/mille@latest
 ```
 
 The Go wrapper embeds `mille.wasm` (the compiled Rust core) and runs it via [wazero](https://wazero.io/) — a zero-dependency WebAssembly runtime. No network access or caching required; the binary is fully self-contained.

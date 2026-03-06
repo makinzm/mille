@@ -1,4 +1,4 @@
-module github.com/makinzm/mille/packages/go
+module github.com/makinzm/mille/packages/go/mille
 
 go 1.24.0
 

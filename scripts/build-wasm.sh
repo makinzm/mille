@@ -58,14 +58,14 @@ rustup target add "${WASM_TARGET}" 2>/dev/null || true
 cargo build --target "${WASM_TARGET}" --release
 
 # ---------------------------------------------------------------------------
-# Place .wasm in packages/go (single canonical copy, embedded via //go:embed)
+# Place .wasm in packages/go/mille (single canonical copy, embedded via //go:embed)
 # ---------------------------------------------------------------------------
-# NOTE: packages/go/mille.wasm is the single canonical .wasm binary.
-#       packages/go/main.go embeds it via //go:embed.
+# NOTE: packages/go/mille/mille.wasm is the single canonical .wasm binary.
+#       packages/go/mille/main.go embeds it via //go:embed.
 #       npm publish copies it from here at release time.
 #       No additional copies are committed to git.
-mkdir -p packages/go
+mkdir -p packages/go/mille
 
-cp "${RELEASE_WASM}" packages/go/mille.wasm
+cp "${RELEASE_WASM}" packages/go/mille/mille.wasm
 
-echo "✓ packages/go/mille.wasm"
+echo "✓ packages/go/mille/mille.wasm"

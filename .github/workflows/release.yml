@@ -11,10 +11,24 @@ permissions:
 
 jobs:
   # ------------------------------------------------------------------ #
+  # 0. Guard — vX.Y.Z 形式のタグのみ通過させる                         #
+  # NOTE: release: published は packages/go/mille/vX.Y.Z タグによる          #
+  #       リリースでも発火する。スラッシュを含むタグをガードしないと    #
+  #       tag-go-module → 新リリース → tag-go-module の無限ループになる。#
+  # ------------------------------------------------------------------ #
+  guard:
+    name: Guard (vX.Y.Z only)
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/')
+    steps:
+      - run: echo "Tag ${{ github.event.release.tag_name }} matches vX.Y.Z — proceeding"
+
+  # ------------------------------------------------------------------ #
   # 1. Cross-compile binaries for all targets                           #
   # ------------------------------------------------------------------ #
   build:
     name: Build (${{ matrix.target }})
+    needs: guard
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -96,6 +110,7 @@ jobs:
   # ------------------------------------------------------------------ #
   build-deb:
     name: Build .deb (${{ matrix.arch }})
+    needs: guard
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -156,10 +171,12 @@ jobs:
           path: ${{ env.DEB_FILE }}
 
   # ------------------------------------------------------------------ #
-  # 3. Create GitHub Release and attach all artifacts                  #
+  # 3. Attach artifacts to existing GitHub Release                     #
+  # NOTE: リリースは手動で vX.Y.Z タグを作成・公開することで作成済み。  #
+  #       このジョブはビルド成果物を既存リリースに添付するだけでよい。  #
   # ------------------------------------------------------------------ #
   release:
-    name: Create GitHub Release
+    name: Attach artifacts to GitHub Release
     needs: [build, build-deb]
     runs-on: ubuntu-latest
     outputs:
@@ -176,11 +193,10 @@ jobs:
           path: artifacts/
           merge-multiple: true
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**
-          generate_release_notes: true
+      - name: Attach artifacts to existing release
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ------------------------------------------------------------------ #
   # 4a. Publish to crates.io                                           #
@@ -236,10 +252,10 @@ jobs:
       - name: Copy README for npm description
         run: cp README.md packages/npm/README.md
 
-      # NOTE: packages/go/mille.wasm はリポジトリにコミット済み（CI の update-wasm ジョブが最新に保つ）。
+      # NOTE: packages/go/mille/mille.wasm はリポジトリにコミット済み（CI の update-wasm ジョブが最新に保つ）。
       #       npm publish 前にコピーすることで mille.wasm がパッケージに含まれるようにする。
       - name: Copy mille.wasm for npm bundle
-        run: cp packages/go/mille.wasm packages/npm/mille.wasm
+        run: cp packages/go/mille/mille.wasm packages/npm/mille.wasm
 
       - name: Publish
         run: |
@@ -283,7 +299,29 @@ jobs:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
   # ------------------------------------------------------------------ #
-  # 4d. Update Homebrew tap formula                                    #
+  # 4d. Tag packages/go submodule (enables go install @vX.Y.Z)        #
+  # NOTE: Go モジュールプロキシは packages/go/mille/vX.Y.Z 形式のタグを     #
+  #       packages/go サブモジュールのバージョンとして認識する。       #
+  #       v* タグだけでは go install @vX.Y.Z が "module not found"    #
+  #       になるため、リリースごとにこのタグを自動で打つ。            #
+  # ------------------------------------------------------------------ #
+  tag-go-module:
+    name: Tag packages/go/mille/vX.Y.Z
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create and push packages/go/mille/vX.Y.Z tag
+        run: |
+          VERSION=${{ needs.release.outputs.version }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "packages/go/mille/v${VERSION}"
+          git push origin "packages/go/mille/v${VERSION}"
+
+  # ------------------------------------------------------------------ #
+  # 4e. Update Homebrew tap formula                                    #
   # ------------------------------------------------------------------ #
   update-homebrew:
     name: Update Homebrew tap
