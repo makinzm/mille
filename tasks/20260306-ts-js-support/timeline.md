@@ -30,3 +30,24 @@
 - `README.md` に TS/JS サポート, mille.toml 例, `[resolve.typescript]` リファレンスを追記
 - `ci.yml` に TS/JS fixture と npm package の dogfood ステップを追加
 - `docs/TODO.md` の PR 9 を完了マーク
+
+## 2026-03-06 allow_call_patterns 全言語対応
+
+### RED
+- `RawImport` に `named_imports: Vec<String>` フィールドを追加（Python/TS の named import 追跡用）
+- 全構築サイトに `named_imports: vec![]` を追加
+- Go/Python/TS/JS の fixture に main レイヤーと call_pattern テスト用ソースを追加
+- 各言語の E2E テスト (`allow_methods=[]` で CallPatternViolation を期待) を追加
+- `--no-verify` でコミット（パーサー未実装のため FAIL）
+
+### GREEN
+- **Go**: `parse_go_call_exprs` → `selector_expression` (pkg.Func()) を抽出
+- **Python**: `parse_python_call_exprs` → `attribute` call (Class.method()) を抽出
+  - `extract_python_named_imports` で `from X import Y` の named_imports を記録
+- **TypeScript/JS**: `parse_ts_call_exprs` → `member_expression` (Class.method()) を抽出
+  - `extract_ts_named_imports` で `import { Y } from X` の named_imports を記録
+- `type_name_from_import` を `/` セパレータに対応（Go package 名抽出）
+- `detect_call_patterns` が `named_imports` も参照するよう更新
+- lefthook 全通過、210 テスト通過
+
+PR #31 タイトル・説明を更新
