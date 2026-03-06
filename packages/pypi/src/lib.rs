@@ -11,7 +11,12 @@ use mille_core::{
             fs_source_file_repository::FsSourceFileRepository,
             toml_config_repository::TomlConfigRepository,
         },
-        resolver::{go::GoResolver, python::PythonResolver, DispatchingResolver},
+        resolver::{
+            go::GoResolver,
+            python::PythonResolver,
+            typescript::TypeScriptResolver,
+            DispatchingResolver,
+        },
     },
     presentation::formatter::terminal::{format_layer_stats, format_summary, format_violation},
     usecase::check_architecture,
@@ -84,6 +89,7 @@ fn wire_and_check(config_path: &str) -> Result<check_architecture::CheckResult, 
     let resolver = DispatchingResolver::new(
         GoResolver::new(go_module),
         PythonResolver::new(python_packages),
+        TypeScriptResolver::new(),
     );
 
     check_architecture::check(config_path, &config_repo, &FsSourceFileRepository, &parser, &resolver)
