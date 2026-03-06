@@ -1,11 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-  # NOTE: GitHub UI からリリースを作成した場合は push イベントが発火しない。
-  #       release: published を追加することで UI 経由のリリースでも動作する。
+  # NOTE: GitHub UI・gh release create どちらでも発火する。
+  #       push: tags: を併用すると二重起動するため release: published のみを使う。
   release:
     types: [published]
 
@@ -243,6 +240,9 @@ jobs:
 
   # ------------------------------------------------------------------ #
   # 4c. Publish to PyPI                                                #
+  # NOTE: python -m build は plain linux_x86_64 wheel を生成するため   #
+  #       PyPI に拒否される。maturin-action は manylinux Docker 内で   #
+  #       ビルドするため manylinux_* タグの wheel が生成される。        #
   # ------------------------------------------------------------------ #
   publish-pypi:
     name: Publish to PyPI
@@ -253,29 +253,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Sync version in pyproject.toml and Cargo.toml
+        run: |
+          VERSION="${{ needs.release.outputs.version }}"
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/Cargo.toml
+
+      - name: Publish to PyPI via maturin-action
+        uses: PyO3/maturin-action@v1
         with:
-          python-version: '3.10'
-
-      - name: Install build tools
-        run: pip install build twine
-
-      - name: Sync version in pyproject.toml
-        run: |
-          cd packages/pypi
-          sed -i "s/^version = \".*\"/version = \"${{ needs.release.outputs.version }}\"/" pyproject.toml
-
-      - name: Copy README for sdist
-        run: cp README.md packages/pypi/README.md
-
-      - name: Build and publish
-        run: |
-          cd packages/pypi
-          python -m build
-          twine upload dist/*
+          command: publish
+          args: --manifest-path packages/pypi/Cargo.toml --skip-existing
         env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
   # ------------------------------------------------------------------ #
   # 4d. Update Homebrew tap formula                                    #
