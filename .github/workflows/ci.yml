@@ -8,6 +8,21 @@ on:
 
 jobs:
   # ------------------------------------------------------------------ #
+  # 0. actionlint — validate GitHub Actions workflow files             #
+  # ------------------------------------------------------------------ #
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
+        with:
+          enable-cache: 'true'
+      - name: Run actionlint
+        run: devbox run -- actionlint
+
+  # ------------------------------------------------------------------ #
   # 1. Unit / integration tests (lefthook: fmt + clippy + cargo test)  #
   # ------------------------------------------------------------------ #
   test:

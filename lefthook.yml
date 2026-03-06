@@ -10,3 +10,6 @@ pre-commit:
     test:
       glob: "*.rs"
       run: cargo test
+    actionlint:
+      glob: ".github/workflows/*.yml"
+      run: devbox run -- actionlint {staged_files}
