@@ -9,6 +9,13 @@ pub struct RawImport {
     pub file: String,
     /// Whether this is a `use` or external `mod` declaration.
     pub kind: ImportKind,
+    /// Explicitly named symbols brought into scope by this import.
+    ///
+    /// - Python `from domain.entity import User, Admin` → `["User", "Admin"]`
+    /// - TypeScript `import { User, Admin } from "../domain/user"` → `["User", "Admin"]`
+    /// - TypeScript `import User from "../domain/user"` → `["User"]`  (default import)
+    /// - Go / Rust: empty (type name is inferred from the import path itself)
+    pub named_imports: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

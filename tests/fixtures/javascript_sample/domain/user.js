@@ -3,4 +3,8 @@ export class User {
         this.name = name;
         this.id = id;
     }
+
+    static create(name) {
+        return new User(name, 0);
+    }
 }

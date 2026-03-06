@@ -57,11 +57,13 @@ fn collect_ts_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
     if node.kind() == "import_statement" {
         let line = node.start_position().row + 1;
         if let Some(path) = extract_import_source(&node, source) {
+            let named = extract_ts_named_imports(&node, source);
             out.push(RawImport {
                 path,
                 line,
                 file: file_path.to_string(),
                 kind: ImportKind::Import,
+                named_imports: named,
             });
         }
         // Do not recurse into import_statement children to avoid double-counting.
@@ -99,6 +101,58 @@ fn extract_import_source(node: &Node, source: &[u8]) -> Option<String> {
         }
     }
     None
+}
+
+/// Extract the named symbols brought into scope by a TS/JS import statement.
+///
+/// - `import { User, Admin } from "..."` → `["User", "Admin"]`
+/// - `import User from "..."` → `["User"]`  (default import)
+/// - `import * as ns from "..."` → `[]`  (namespace import — no specific name)
+/// - `import "..."` → `[]`  (side-effect only)
+fn extract_ts_named_imports(node: &Node, source: &[u8]) -> Vec<String> {
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        if child.kind() != "import_clause" {
+            continue;
+        }
+        return collect_import_clause_names(&child, source);
+    }
+    vec![]
+}
+
+fn collect_import_clause_names(clause: &Node, source: &[u8]) -> Vec<String> {
+    let mut names = Vec::new();
+    for i in 0..clause.child_count() {
+        let Some(child) = clause.child(i) else { continue };
+        match child.kind() {
+            // Default import: `import User from "..."`
+            "identifier" => {
+                if let Ok(text) = child.utf8_text(source) {
+                    names.push(text.to_string());
+                }
+            }
+            // Named imports: `import { User, Admin } from "..."`
+            "named_imports" => {
+                for j in 0..child.child_count() {
+                    let Some(spec) = child.child(j) else { continue };
+                    if spec.kind() == "import_specifier" {
+                        // The "name" field is the local (imported) name.
+                        // For `import { Foo as Bar }`, tree-sitter uses "name" for Foo and "alias" for Bar.
+                        // We want the original name Foo for type matching.
+                        if let Some(name_node) = spec.child_by_field_name("name") {
+                            if let Ok(text) = name_node.utf8_text(source) {
+                                names.push(text.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            // Namespace import: `import * as ns from "..."` — no specific type name
+            "namespace_import" => {}
+            _ => {}
+        }
+    }
+    names
 }
 
 /// Extract the content of a string literal node, stripping surrounding quotes.

@@ -29,3 +29,15 @@ dependency_mode = "opt-out"
 deny = []
 external_mode = "opt-out"
 external_deny = []
+
+[[layers]]
+name = "main"
+paths = ["main/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-out"
+external_deny = []
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "domain"
+  allow_methods = ["create"]

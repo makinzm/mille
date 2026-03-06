@@ -47,6 +47,7 @@ fn collect_go_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
                                 line,
                                 file: file_path.to_string(),
                                 kind: ImportKind::Import,
+                                named_imports: vec![],
                             });
                         }
                     }
@@ -61,6 +62,7 @@ fn collect_go_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
                                             line: spec_line,
                                             file: file_path.to_string(),
                                             kind: ImportKind::Import,
+                                            named_imports: vec![],
                                         });
                                     }
                                 }

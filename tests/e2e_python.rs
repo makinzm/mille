@@ -390,3 +390,72 @@ external_deny = []
         "violation must mention 'domain' layer\nstdout:\n{s}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// allow_call_patterns: forbidden method call on domain entity
+// ---------------------------------------------------------------------------
+
+/// main/app.py calls User.create() but allow_methods=[] → CallPatternViolation.
+const PYTHON_BROKEN_CALL_PATTERN_TOML: &str = r#"
+[project]
+name = "python-sample"
+root = "."
+languages = ["python"]
+
+[resolve.python]
+src_root = "."
+package_names = ["domain", "usecase", "infrastructure", "main"]
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "main"
+paths = ["main/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-out"
+external_deny = []
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "domain"
+  allow_methods = []
+"#;
+
+#[test]
+fn test_python_broken_call_pattern_exits_one() {
+    let config = python_fixture_dir().join("mille_e2e_py_call_pattern.toml");
+    std::fs::write(&config, PYTHON_BROKEN_CALL_PATTERN_TOML).expect("failed to write config");
+
+    let out = mille_in_python_fixture(&["check", "--config", "mille_e2e_py_call_pattern.toml"]);
+    std::fs::remove_file(&config).ok();
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "User.create() is forbidden (allow_methods=[]): must trigger CallPatternViolation\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+}

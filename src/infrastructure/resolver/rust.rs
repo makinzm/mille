@@ -85,6 +85,7 @@ mod tests {
             line: 1,
             file: "src/any/file.rs".to_string(),
             kind: ImportKind::Use,
+            named_imports: vec![],
         }
     }
 

@@ -363,3 +363,70 @@ fn test_ts_broken_external_optout_mentions_infrastructure() {
         "output must mention 'infrastructure', got:\n{s}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// allow_call_patterns: forbidden static method call on domain class
+// ---------------------------------------------------------------------------
+
+/// main/app.ts calls User.create() but allow_methods=[] → CallPatternViolation.
+const TS_BROKEN_CALL_PATTERN_TOML: &str = r#"
+[project]
+name = "typescript-sample"
+root = "."
+languages = ["typescript"]
+
+[resolve.typescript]
+tsconfig = "./tsconfig.json"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["some-lib"]
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "main"
+paths = ["main/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-out"
+external_deny = []
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "domain"
+  allow_methods = []
+"#;
+
+#[test]
+fn test_ts_broken_call_pattern_exits_one() {
+    let config = fixture_dir().join("mille_e2e_ts_call_pattern.toml");
+    std::fs::write(&config, TS_BROKEN_CALL_PATTERN_TOML).expect("failed to write config");
+
+    let out = mille_in_fixture(&["check", "--config", "mille_e2e_ts_call_pattern.toml"]);
+    std::fs::remove_file(&config).ok();
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "User.create() is forbidden (allow_methods=[]): must trigger CallPatternViolation\nstdout:\n{}",
+        stdout(&out)
+    );
+}

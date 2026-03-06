@@ -42,6 +42,7 @@ fn collect_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Raw
                     line: node.start_position().row + 1,
                     file: file_path.to_string(),
                     kind: ImportKind::Use,
+                    named_imports: vec![],
                 });
             }
         }
@@ -58,6 +59,7 @@ fn collect_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Raw
                         line: node.start_position().row + 1,
                         file: file_path.to_string(),
                         kind: ImportKind::Mod,
+                        named_imports: vec![],
                     });
                 }
             }

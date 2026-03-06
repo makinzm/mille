@@ -122,6 +122,7 @@ mod tests {
             line: 1,
             file: file.to_string(),
             kind: ImportKind::Import,
+            named_imports: vec![],
         }
     }
 
