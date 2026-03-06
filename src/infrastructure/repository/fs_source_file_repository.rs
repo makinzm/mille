@@ -1,15 +1,24 @@
 use crate::domain::repository::source_file_repository::SourceFileRepository;
 
 /// Concrete implementation of the `SourceFileRepository` port.
-/// Expands glob patterns and returns `.rs`, `.go`, and `.py` file paths relative to the working directory.
+/// Expands glob patterns and returns source file paths relative to the working directory.
+/// Supported extensions: `.rs`, `.go`, `.py`, `.ts`, `.tsx`, `.js`, `.jsx`
 pub struct FsSourceFileRepository;
+
+const SOURCE_EXTENSIONS: &[&str] = &["rs", "go", "py", "ts", "tsx", "js", "jsx"];
+
+fn is_source_file(path: &str) -> bool {
+    SOURCE_EXTENSIONS
+        .iter()
+        .any(|ext| path.ends_with(&format!(".{}", ext)))
+}
 
 impl SourceFileRepository for FsSourceFileRepository {
     fn collect(&self, patterns: &[String]) -> Vec<String> {
         let mut files = Vec::new();
         for pattern in patterns {
-            // Direct .rs / .go / .py file path (no glob characters).
-            if (pattern.ends_with(".rs") || pattern.ends_with(".go") || pattern.ends_with(".py"))
+            // Direct source file path (no glob characters).
+            if is_source_file(pattern)
                 && !pattern.contains('*')
                 && !pattern.contains('?')
                 && !pattern.contains('[')
@@ -19,12 +28,11 @@ impl SourceFileRepository for FsSourceFileRepository {
                 }
                 continue;
             }
-            // Directory-based pattern that ends with /** or is a plain directory name.
-            // Strip trailing /** and expand to <dir>/**/*.ext and <dir>/*.ext.
-            // This handles the common case: "src/domain/**" → finds all .rs/.go/.py files.
+            // Directory-based pattern (no glob characters): expand to all source files.
+            // Handles "src/domain/**" → finds all source files under src/domain/.
             if !pattern.contains('*') && !pattern.contains('?') && !pattern.contains('[') {
                 let base = pattern.trim_end_matches('/');
-                for ext in ["rs", "go", "py"] {
+                for ext in SOURCE_EXTENSIONS {
                     for search in [
                         format!("{}/**/*.{}", base, ext),
                         format!("{}/*.{}", base, ext),
@@ -43,7 +51,7 @@ impl SourceFileRepository for FsSourceFileRepository {
             if pattern.ends_with("/**") {
                 // Strip /** and expand to <dir>/**/*.ext and <dir>/*.ext.
                 let base = pattern.trim_end_matches("/**");
-                for ext in ["rs", "go", "py"] {
+                for ext in SOURCE_EXTENSIONS {
                     for search in [
                         format!("{}/**/*.{}", base, ext),
                         format!("{}/*.{}", base, ext),
@@ -60,15 +68,12 @@ impl SourceFileRepository for FsSourceFileRepository {
                 continue;
             }
             // Other glob patterns (e.g. "*.go", "src/*.rs", "cmd/**/*.go"):
-            // Use glob::glob directly and filter to .rs / .go / .py files.
+            // Use glob::glob directly and filter to supported source files.
             if let Ok(entries) = glob::glob(pattern) {
                 files.extend(
                     entries
                         .filter_map(|e| e.ok())
-                        .filter(|p| {
-                            let s = p.to_string_lossy();
-                            s.ends_with(".rs") || s.ends_with(".go") || s.ends_with(".py")
-                        })
+                        .filter(|p| is_source_file(&p.to_string_lossy()))
                         .map(|p| p.to_string_lossy().to_string()),
                 );
             }

@@ -1,10 +1,12 @@
 pub mod go;
 pub mod python;
 pub mod rust;
+pub mod typescript;
 
 use self::go::GoParser;
 use self::python::PythonParser;
 use self::rust::RustParser;
+use self::typescript::TypeScriptParser;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::RawImport;
 use crate::domain::repository::parser::Parser;
@@ -14,6 +16,7 @@ pub struct DispatchingParser {
     rust: RustParser,
     go: GoParser,
     python: PythonParser,
+    typescript: TypeScriptParser,
 }
 
 impl DispatchingParser {
@@ -22,6 +25,7 @@ impl DispatchingParser {
             rust: RustParser,
             go: GoParser,
             python: PythonParser,
+            typescript: TypeScriptParser,
         }
     }
 }
@@ -32,12 +36,21 @@ impl Default for DispatchingParser {
     }
 }
 
+fn is_ts_js(file_path: &str) -> bool {
+    file_path.ends_with(".ts")
+        || file_path.ends_with(".tsx")
+        || file_path.ends_with(".js")
+        || file_path.ends_with(".jsx")
+}
+
 impl Parser for DispatchingParser {
     fn parse_imports(&self, source: &str, file_path: &str) -> Vec<RawImport> {
         if file_path.ends_with(".go") {
             self.go.parse_imports(source, file_path)
         } else if file_path.ends_with(".py") {
             self.python.parse_imports(source, file_path)
+        } else if is_ts_js(file_path) {
+            self.typescript.parse_imports(source, file_path)
         } else {
             self.rust.parse_imports(source, file_path)
         }
@@ -48,6 +61,8 @@ impl Parser for DispatchingParser {
             self.go.parse_call_exprs(source, file_path)
         } else if file_path.ends_with(".py") {
             self.python.parse_call_exprs(source, file_path)
+        } else if is_ts_js(file_path) {
+            self.typescript.parse_call_exprs(source, file_path)
         } else {
             self.rust.parse_call_exprs(source, file_path)
         }

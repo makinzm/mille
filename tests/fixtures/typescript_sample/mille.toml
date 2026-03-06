@@ -1,0 +1,31 @@
+[project]
+name = "typescript-sample"
+root = "."
+languages = ["typescript"]
+
+[resolve.typescript]
+tsconfig = "./tsconfig.json"
+
+[[layers]]
+name = "domain"
+paths = ["domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["some-lib"]
+
+[[layers]]
+name = "infrastructure"
+paths = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
