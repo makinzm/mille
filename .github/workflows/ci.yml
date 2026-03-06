@@ -142,6 +142,12 @@ jobs:
         with:
           enable-cache: true
 
+      # NOTE: pyproject.toml の readme = "README.md" は packages/pypi/ からの相対パス。
+      #       maturin は uv sync --dev 時のビルドでも README.md を読むため、
+      #       先にリポジトリルートの README.md をコピーしておく。
+      - name: Copy README for maturin build
+        run: cp README.md packages/pypi/README.md
+
       # NOTE: maturin は uv の dev dependency として pyproject.toml に記載済み。
       #       uv sync --dev で .venv にインストールされる。
       - name: Install Python dependencies (uv sync)
