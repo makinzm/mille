@@ -1,0 +1,13 @@
+[package]
+name = "mille-python"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "mille"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+# NOTE: renamed to avoid conflict with the lib name "mille"
+mille-core = { package = "mille", path = "../.." }

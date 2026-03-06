@@ -1,0 +1,14 @@
+[project]
+name      = "mille-python"
+root      = "."
+languages = ["rust"]
+
+# packages/pypi は PyO3 バインディングのみからなる単一レイヤー。
+# mille_core と pyo3 のみ外部依存として許可する。
+[[layers]]
+name            = "bindings"
+paths           = ["src/**"]
+dependency_mode = "opt-out"
+deny            = []
+external_mode   = "opt-in"
+external_allow  = ["pyo3", "mille_core"]

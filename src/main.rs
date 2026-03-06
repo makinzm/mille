@@ -5,6 +5,7 @@ use mille::infrastructure::parser::DispatchingParser;
 use mille::infrastructure::repository::fs_source_file_repository::FsSourceFileRepository;
 use mille::infrastructure::repository::toml_config_repository::TomlConfigRepository;
 use mille::infrastructure::resolver::go::GoResolver;
+use mille::infrastructure::resolver::python::PythonResolver;
 use mille::infrastructure::resolver::DispatchingResolver;
 use mille::presentation::cli::args::{Cli, Command};
 use mille::presentation::formatter::terminal::{
@@ -34,9 +35,18 @@ fn main() {
                 .and_then(|r| r.go.as_ref())
                 .map(|g| g.module_name.clone())
                 .unwrap_or_default();
+            let python_packages = app_config
+                .resolve
+                .as_ref()
+                .and_then(|r| r.python.as_ref())
+                .map(|p| p.package_names.clone())
+                .unwrap_or_default();
 
             let parser = DispatchingParser::new();
-            let resolver = DispatchingResolver::new(GoResolver::new(go_module));
+            let resolver = DispatchingResolver::new(
+                GoResolver::new(go_module),
+                PythonResolver::new(python_packages),
+            );
 
             match check_architecture::check(
                 &config,
