@@ -213,13 +213,45 @@ jobs:
         run: ./mille_go check
 
   # ------------------------------------------------------------------ #
+  # 3e. Dogfooding-npm — Node.js WASI wrapper + mille check          #
+  # ------------------------------------------------------------------ #
+  dogfood-npm:
+    name: Dogfooding-npm (Node.js WASI wrapper + mille check)
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # NOTE: CI でビルドした .wasm を使う（dogfood-go と同じ理由）。
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mille-wasm
+          path: packages/wasm
+
+      - name: Copy mille.wasm to npm package
+        run: cp packages/wasm/mille.wasm packages/npm/mille.wasm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Self-check via npm wrapper — Go fixture
+        working-directory: tests/fixtures/go_sample
+        run: node ${{ github.workspace }}/packages/npm/index.js check
+
+      - name: Self-check via npm wrapper — packages/npm itself
+        working-directory: packages/npm
+        run: node index.js check
+
+  # ------------------------------------------------------------------ #
   # 4. Update committed mille.wasm with CI build result (main only)   #
   #   main マージ後、CI ビルドの .wasm でコミット済みファイルを上書き。 #
   #   これにより「ローカル環境依存の .wasm」がリポジトリに残らない。   #
   # ------------------------------------------------------------------ #
   update-wasm:
     name: Update mille.wasm (main only)
-    needs: [build-wasm, dogfood-go, dogfood-rust, dogfood-python]
+    needs: [build-wasm, dogfood-go, dogfood-rust, dogfood-python, dogfood-npm]
     # NOTE: main への push のみ実行。PR では dogfood-go が検証を担当する。
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest

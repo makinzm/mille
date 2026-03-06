@@ -22,6 +22,52 @@ npm/pypi などの将来のパッケージは `packages/wasm/mille.wasm` を pub
 
 ---
 
+## ローカルでの npm ラッパー使用手順
+
+### 前提
+
+| ツール | 用途 |
+|--------|------|
+| Node.js ≥ 18 | `node:wasi` モジュール（WASI Preview 1 サポート） |
+| mille.wasm | `packages/wasm/mille.wasm`（リポジトリにコミット済み） |
+
+### Step 1: mille.wasm を npm パッケージにコピー
+
+```bash
+# リポジトリ root で実行
+cp packages/wasm/mille.wasm packages/npm/mille.wasm
+```
+
+> ⚠️ `packages/npm/mille.wasm` はリポジトリにコミットしない（publish 時に生成される）。
+> ローカル動作確認のためだけに手動でコピーする。
+
+### Step 2: 動作確認
+
+```bash
+# 確認したいプロジェクトのディレクトリで実行
+node /path/to/mille/packages/npm/index.js check
+
+# リポジトリ root 自体を確認する例
+node packages/npm/index.js check
+```
+
+> **注意**: `node` は devbox 経由（volta 管理）を使用すること。
+> バージョン要件: Node.js ≥ 18.0.0（`node:wasi` の WASI Preview 1 サポートが必要）。
+
+### 仕組み
+
+`packages/npm/index.js` は Node.js の `node:wasi` モジュールを使って
+`mille.wasm`（WASI Preview 1 コマンドモジュール）を実行します。
+
+| 要素 | Node.js WASI 側の担当 |
+|------|----------------------|
+| ファイルシステム | `preopens: { '/': process.cwd() }` で CWD を WASI root にマウント |
+| CLI 引数 | `args: ['mille', ...process.argv.slice(2)]` で伝達 |
+| 標準入出力 | Node.js の stdin/stdout/stderr が自動的に接続される |
+| 終了コード | `wasi.start()` が `proc_exit(n)` を受けて `process.exit(n)` を呼ぶ |
+
+---
+
 ## ローカルでの Go ラッパービルド手順
 
 ### 前提
@@ -115,15 +161,17 @@ Wasm バイナリに含まれません。
 `.github/workflows/ci.yml` のジョブ構成:
 
 ```
-test → build-wasm → dogfood-go ┐
-                               ├→ update-wasm (main push 時のみ)
-              dogfood-rust ────┘
+test → build-wasm → dogfood-go  ┐
+                 → dogfood-npm  ├→ update-wasm (main push 時のみ)
+              dogfood-rust ─────┘
+              dogfood-python ───┘
 ```
 
 | ジョブ | 役割 | 実行タイミング |
 |--------|------|--------------|
 | `build-wasm` | devbox 経由で wasm をビルドし artifact にアップロード | PR・main push |
 | `dogfood-go` | artifact の wasm を使って go test / self-check | PR・main push |
+| `dogfood-npm` | artifact の wasm を使って Node.js WASI self-check | PR・main push |
 | `update-wasm` | artifact の wasm でコミット済みファイルを上書きコミット | **main push のみ** |
 
 ### なぜバイナリ比較による stale 検知をしないか
