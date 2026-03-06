@@ -283,7 +283,29 @@ jobs:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
   # ------------------------------------------------------------------ #
-  # 4d. Update Homebrew tap formula                                    #
+  # 4d. Tag packages/go submodule (enables go install @vX.Y.Z)        #
+  # NOTE: Go モジュールプロキシは packages/go/vX.Y.Z 形式のタグを     #
+  #       packages/go サブモジュールのバージョンとして認識する。       #
+  #       v* タグだけでは go install @vX.Y.Z が "module not found"    #
+  #       になるため、リリースごとにこのタグを自動で打つ。            #
+  # ------------------------------------------------------------------ #
+  tag-go-module:
+    name: Tag packages/go/vX.Y.Z
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create and push packages/go/vX.Y.Z tag
+        run: |
+          VERSION=${{ needs.release.outputs.version }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "packages/go/v${VERSION}"
+          git push origin "packages/go/v${VERSION}"
+
+  # ------------------------------------------------------------------ #
+  # 4e. Update Homebrew tap formula                                    #
   # ------------------------------------------------------------------ #
   update-homebrew:
     name: Update Homebrew tap
