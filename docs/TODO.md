@@ -14,25 +14,26 @@
 - ✅ Rust / Go / TypeScript / JavaScript / Python サポート
 - ✅ `[resolve.typescript]` tsconfig.json paths エイリアス解決
 - ✅ cargo / npm(WASM) / go install / pip パッケージ配布
+- ✅ `--format terminal / json / github-actions` 出力フォーマット切り替え（PR 10）
+- ✅ `[ignore]` セクション — `paths` / `test_patterns` 適用（PR 12）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 - ❌ `[severity]` — パースされるが無視される（常に Error で出力）
-- ❌ `[ignore]` — パースされるが適用されない
-- ❌ `--format` オプション、`--fail-on` オプション
+- ❌ `--fail-on` オプション
 - ❌ `mille analyze` / `mille init` / `mille report external` コマンド
 
 ---
 
 ## フェーズ 3: 出力・CI連携（バズりやすい順）
 
-### PR 10: GitHub Actions アノテーション出力 (`--format github-actions`)
+### PR 10: GitHub Actions アノテーション出力 (`--format github-actions`) ✅ 完了
 
 **バズりポイント**: PRレビュー画面に `::error file=...` が差し込まれるため、mille を使っているリポジトリのPRを見た人が「これ何？」となりやすい。CI を通じたパッシブな口コミ効果が最大。
 
-- [ ] CLI に `--format` オプションを追加（`terminal` / `json` / `github-actions`）
-- [ ] GitHub Actions (`::error file=<path>,line=<n>::<msg>`) フォーマッターの実装
-- [ ] JSON フォーマッターの実装
-- [ ] CI ドキュメントに GitHub Actions 設定例を追記
+- [x] CLI に `--format` オプションを追加（`terminal` / `json` / `github-actions`）
+- [x] GitHub Actions (`::error file=<path>,line=<n>::<msg>`) フォーマッターの実装
+- [x] JSON フォーマッターの実装
+- [x] CI ドキュメントに GitHub Actions 設定例を追記（`docs/github-actions-usage.md`）
 
 ### PR 11: `mille init` コマンド（インタラクティブ設定生成）
 
@@ -43,13 +44,13 @@
 - [ ] 対話形式で `mille.toml` を生成する
 - [ ] 生成した設定で `mille check` をプレビュー実行する
 
-### PR 12: `[ignore]` セクションの実装
+### PR 12: `[ignore]` セクションの実装 ✅ 完了
 
 **バズりポイント**: テストファイルの除外は必須ユースケース。これがないと「mille 使えない」という評価につながる。採用の障壁を下げるために優先度高。
 
-- [ ] `FsSourceFileRepository` で `ignore.paths` のグロブパターンを除外
-- [ ] `check_architecture::check()` でテストファイルに対して依存ルールを緩める（`test_patterns`）
-- [ ] E2E テストの追加
+- [x] `check_architecture::check()` で `ignore.paths` のグロブパターンを除外
+- [x] `check_architecture::check()` でテストファイルに対して依存ルールを緩める（`test_patterns`）
+- [x] E2E テストの追加
 
 ### PR 13: `mille analyze` コマンド（依存グラフ可視化）
 
