@@ -38,6 +38,7 @@ pub enum Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::error::ErrorKind;
 
     #[test]
     fn test_parse_check_uses_default_config() {
@@ -82,5 +83,33 @@ mod tests {
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::Json),
         }
+    }
+
+    #[test]
+    fn test_parse_help_subcommand_displays_help() {
+        let err = Cli::try_parse_from(["mille", "help"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+
+        let msg = err.to_string();
+        assert!(msg.contains("Usage: mille <COMMAND>"));
+        assert!(msg.contains("Commands:"));
+        assert!(msg.contains("help"));
+    }
+
+    #[test]
+    fn test_parse_help_for_check_displays_subcommand_help() {
+        let err = Cli::try_parse_from(["mille", "help", "check"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+
+        let msg = err.to_string();
+        assert!(msg.contains("Usage: mille check"));
+        assert!(msg.contains("--config"));
+        assert!(msg.contains("--format"));
+    }
+
+    #[test]
+    fn test_parse_dashdash_help_displays_help() {
+        let err = Cli::try_parse_from(["mille", "--help"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::DisplayHelp);
     }
 }
