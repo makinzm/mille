@@ -33,6 +33,24 @@ use crate::usecase::init::{self, DirAnalysis};
 /// Exits the process with the appropriate code on error or violation.
 pub fn run_cli() {
     let cli = Cli::parse();
+    run_cli_inner(cli);
+}
+
+/// Parse `args` and run the matching subcommand.
+///
+/// Use this from non-native entry points (e.g. the Python wrapper) where
+/// `std::env::args()` contains extra interpreter-injected arguments that
+/// clap would otherwise misinterpret as subcommands.
+pub fn run_cli_from<I, T>(args: I)
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let cli = Cli::parse_from(args);
+    run_cli_inner(cli);
+}
+
+fn run_cli_inner(cli: Cli) {
     match cli.command {
         Command::Init {
             output,
