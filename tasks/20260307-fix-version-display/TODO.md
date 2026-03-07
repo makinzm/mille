@@ -26,8 +26,8 @@
 
 ## チェックリスト
 
-- [ ] Go ラッパーのテスト追加（RED）
-- [ ] Go ラッパーの実装（GREEN）
-- [ ] npm ラッパーの修正
-- [ ] `release.yml` の修正
-- [ ] timeline.md 更新
+- [x] Go ラッパーのテスト追加（RED）
+- [x] Go ラッパーの実装（GREEN）
+- [x] npm ラッパーの修正
+- [x] `release.yml` の修正
+- [x] timeline.md 更新
