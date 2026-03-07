@@ -49,12 +49,20 @@ fn make_file(base: &std::path::Path, rel: &str, content: &str) {
 #[test]
 fn test_init_creates_toml_from_layer_dirs() {
     let tmp = TempDir::new().unwrap();
-    make_dir(tmp.path(), "src/domain");
-    make_dir(tmp.path(), "src/usecase");
-    make_dir(tmp.path(), "src/infrastructure");
-    make_file(tmp.path(), "src/domain/mod.rs", "");
-    make_file(tmp.path(), "src/usecase/mod.rs", "");
-    make_file(tmp.path(), "src/infrastructure/mod.rs", "");
+    // domain has no internal imports
+    make_file(tmp.path(), "src/domain/entity.rs", "pub struct User;");
+    // usecase imports from domain
+    make_file(
+        tmp.path(),
+        "src/usecase/check.rs",
+        "use crate::domain::entity::User;",
+    );
+    // infrastructure also imports from domain
+    make_file(
+        tmp.path(),
+        "src/infrastructure/repo.rs",
+        "use crate::domain::entity::User;",
+    );
 
     let out = mille_init(tmp.path(), &[]);
     assert_eq!(
@@ -77,6 +85,13 @@ fn test_init_creates_toml_from_layer_dirs() {
     assert!(
         content.contains("[[layers]]"),
         "generated TOML must contain [[layers]]\n{}",
+        content
+    );
+    // domain should have no allow (no internal deps)
+    // usecase and infrastructure should reference domain in allow
+    assert!(
+        content.contains("\"domain\""),
+        "generated TOML must reference the domain layer\n{}",
         content
     );
 }

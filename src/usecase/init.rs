@@ -31,7 +31,59 @@ pub struct LayerSuggestion {
 ///
 /// Cycles are collected into a final tier so the function never panics.
 pub fn topological_sort(deps: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<String>> {
-    todo!("implement topological_sort")
+    if deps.is_empty() {
+        return vec![];
+    }
+
+    // in_degree[node] = number of node's known dependencies (what it imports from)
+    // Nodes with in_degree 0 are "leaves" (nothing they depend on is known) → tier 0
+    let mut in_degree: BTreeMap<&str, usize> = BTreeMap::new();
+    for (node, node_deps) in deps {
+        let known_count = node_deps
+            .iter()
+            .filter(|d| deps.contains_key(d.as_str()))
+            .count();
+        in_degree.insert(node.as_str(), known_count);
+    }
+
+    let mut remaining: BTreeSet<&str> = deps.keys().map(|k| k.as_str()).collect();
+    let mut tiers: Vec<Vec<String>> = vec![];
+
+    loop {
+        let mut tier: Vec<&str> = remaining
+            .iter()
+            .copied()
+            .filter(|n| in_degree[n] == 0)
+            .collect();
+        tier.sort();
+
+        if tier.is_empty() {
+            break;
+        }
+
+        for &node in &tier {
+            remaining.remove(node);
+            // Decrement in_degree for every node that imports from this node
+            for (candidate, candidate_deps) in deps {
+                if candidate_deps.contains(node) && remaining.contains(candidate.as_str()) {
+                    if let Some(deg) = in_degree.get_mut(candidate.as_str()) {
+                        *deg = deg.saturating_sub(1);
+                    }
+                }
+            }
+        }
+
+        tiers.push(tier.into_iter().map(|s| s.to_string()).collect());
+    }
+
+    // Remaining nodes are in cycles — collect into a final tier
+    if !remaining.is_empty() {
+        let mut cycle_tier: Vec<String> = remaining.iter().map(|s| s.to_string()).collect();
+        cycle_tier.sort();
+        tiers.push(cycle_tier);
+    }
+
+    tiers
 }
 
 /// Infer layer suggestions from per-directory import analysis.
@@ -42,7 +94,83 @@ pub fn topological_sort(deps: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<St
 /// 3. Group dirs in the same tier by base name (last path segment).
 /// 4. Each group → one LayerSuggestion with combined paths + allow + external_allow.
 pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerSuggestion> {
-    todo!("implement infer_layers")
+    if analyses.is_empty() {
+        return vec![];
+    }
+
+    // Build internal dep graph: dir_path → set of dir_paths it imports from (known dirs only)
+    let known_dirs: BTreeSet<&str> = analyses.keys().map(|k| k.as_str()).collect();
+    let dep_graph: BTreeMap<String, BTreeSet<String>> = analyses
+        .iter()
+        .map(|(dir, analysis)| {
+            let internal_only: BTreeSet<String> = analysis
+                .internal_deps
+                .iter()
+                .filter(|d| known_dirs.contains(d.as_str()))
+                .cloned()
+                .collect();
+            (dir.clone(), internal_only)
+        })
+        .collect();
+
+    let tiers = topological_sort(&dep_graph);
+
+    // Map each dir to its tier index for allow-list building
+    let mut dir_to_tier: BTreeMap<&str, usize> = BTreeMap::new();
+    for (tier_idx, tier) in tiers.iter().enumerate() {
+        for dir in tier {
+            dir_to_tier.insert(dir.as_str(), tier_idx);
+        }
+    }
+
+    // For each tier, group dirs by base name (last path segment)
+    let mut suggestions: Vec<LayerSuggestion> = vec![];
+
+    for tier in &tiers {
+        // Group by base name
+        let mut by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for dir in tier {
+            let base = dir
+                .split('/')
+                .next_back()
+                .unwrap_or(dir.as_str())
+                .to_string();
+            by_name.entry(base).or_default().push(dir.clone());
+        }
+
+        for (name, paths) in by_name {
+            // Collect allow: base names of dirs that any path in this group depends on
+            let mut allow_names: BTreeSet<String> = BTreeSet::new();
+            for path in &paths {
+                if let Some(analysis) = analyses.get(path) {
+                    for dep in &analysis.internal_deps {
+                        if known_dirs.contains(dep.as_str()) {
+                            let dep_base = dep.split('/').next_back().unwrap_or(dep.as_str());
+                            allow_names.insert(dep_base.to_string());
+                        }
+                    }
+                }
+            }
+
+            // Collect external_allow: all external packages used by any path in this group
+            let mut external_allow: BTreeSet<String> = BTreeSet::new();
+            for path in &paths {
+                if let Some(analysis) = analyses.get(path) {
+                    external_allow.extend(analysis.external_pkgs.iter().cloned());
+                }
+            }
+
+            suggestions.push(LayerSuggestion {
+                name,
+                paths,
+                dependency_mode: "opt-in",
+                allow: allow_names.into_iter().collect(),
+                external_allow: external_allow.into_iter().collect(),
+            });
+        }
+    }
+
+    suggestions
 }
 
 /// Return true if a directory name should be skipped during scanning.
@@ -116,7 +244,64 @@ pub fn generate_toml(
     languages: &[String],
     layers: &[LayerSuggestion],
 ) -> String {
-    todo!("implement generate_toml")
+    let mut out = String::new();
+
+    // [project] section
+    out.push_str("[project]\n");
+    out.push_str(&format!("name = \"{}\"\n", project_name));
+    out.push_str(&format!("root = \"{}\"\n", root));
+    let langs_str = languages
+        .iter()
+        .map(|l| format!("\"{}\"", l))
+        .collect::<Vec<_>>()
+        .join(", ");
+    out.push_str(&format!("languages = [{}]\n", langs_str));
+
+    // [[layers]] sections
+    for layer in layers {
+        out.push('\n');
+        out.push_str("[[layers]]\n");
+        out.push_str(&format!("name = \"{}\"\n", layer.name));
+
+        // paths: single-line if one path, array if multiple
+        if layer.paths.len() == 1 {
+            out.push_str(&format!("paths = [\"{}\"]", layer.paths[0]));
+        } else {
+            out.push_str("paths = [\n");
+            for path in &layer.paths {
+                out.push_str(&format!("  \"{}\",\n", path));
+            }
+            out.push(']');
+        }
+        out.push('\n');
+
+        out.push_str(&format!(
+            "dependency_mode = \"{}\"\n",
+            layer.dependency_mode
+        ));
+
+        if !layer.allow.is_empty() {
+            let allow_str = layer
+                .allow
+                .iter()
+                .map(|a| format!("\"{}\"", a))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("allow = [{}]\n", allow_str));
+        }
+
+        if !layer.external_allow.is_empty() {
+            let ext_str = layer
+                .external_allow
+                .iter()
+                .map(|e| format!("\"{}\"", e))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("external_allow = [{}]\n", ext_str));
+        }
+    }
+
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -167,12 +352,7 @@ mod tests {
     fn btree(pairs: &[(&str, &[&str])]) -> BTreeMap<String, BTreeSet<String>> {
         pairs
             .iter()
-            .map(|(k, vs)| {
-                (
-                    k.to_string(),
-                    vs.iter().map(|v| v.to_string()).collect(),
-                )
-            })
+            .map(|(k, vs)| (k.to_string(), vs.iter().map(|v| v.to_string()).collect()))
             .collect()
     }
 
@@ -336,7 +516,11 @@ mod tests {
             },
         );
         let layers = infer_layers(&analyses);
-        assert_eq!(layers.len(), 1, "two domain dirs should merge into one layer");
+        assert_eq!(
+            layers.len(),
+            1,
+            "two domain dirs should merge into one layer"
+        );
         assert_eq!(layers[0].name, "domain");
         assert_eq!(layers[0].paths.len(), 2);
     }
