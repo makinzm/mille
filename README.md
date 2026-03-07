@@ -87,11 +87,19 @@ Pre-built binaries are on [GitHub Releases](https://github.com/makinzm/mille/rel
 mille init
 ```
 
-`mille init` scans your project directory (up to 3 levels deep), detects layer directories and languages, and writes a `mille.toml` starter config:
+`mille init` analyzes actual import statements in your source files to infer layer structure and dependencies — no predetermined naming conventions needed. It prints the inferred dependency graph before writing the config:
 
 ```
 Detected languages: rust
-Detected layers: domain, usecase, infrastructure
+Scanning imports...
+
+Inferred layer structure:
+  domain               ← (no internal dependencies)
+  usecase              → domain
+    external: anyhow
+  infrastructure       → domain
+    external: serde, tokio
+
 Generated 'mille.toml'
 ```
 
@@ -100,16 +108,7 @@ Generated 'mille.toml'
 | `--output <path>` | `mille.toml` | Write config to a custom path |
 | `--force` | false | Overwrite an existing file without prompting |
 
-Detected layer directories and their default settings:
-
-| Directory name | Layer | `dependency_mode` | `allow` |
-|---|---|---|---|
-| `domain` / `model` / `entities` / `entity` | domain | opt-in | `[]` |
-| `usecase` / `application` / `use_case` / `usecases` | usecase | opt-in | `["domain"]` |
-| `infrastructure` / `infra` / `adapter` / `adapters` | infrastructure | opt-out | — |
-| `presentation` / `handler` / `handlers` / `controller` / `api` | presentation | opt-in | `["usecase", "domain"]` |
-
-After generating, review the config and run `mille check` to see results.
+The generated config includes `allow` (inferred internal dependencies) and `external_allow` (detected external packages) per layer. After generating, review the config and run `mille check` to see results.
 
 ### 2. (Or) Create `mille.toml` manually
 
