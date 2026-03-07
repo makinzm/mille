@@ -6,17 +6,17 @@
 
 ## タスク
 
-- [ ] `tasks/20260307-pr11-mille-init/TODO.md` 作成（このファイル）
-- [ ] `tasks/20260307-pr11-mille-init/timeline.md` 作成
-- [ ] `src/usecase/init.rs` — コアロジック（スキャン・生成）
-- [ ] `src/usecase/mod.rs` — `pub mod init;` 追加
-- [ ] `src/presentation/cli/args.rs` — `Command::Init { output, force }` 追加
-- [ ] `src/main.rs` — `Command::Init` ハンドラ追加
-- [ ] `tests/e2e_init.rs` — E2E テスト
-- [ ] RED コミット（`--no-verify`）
-- [ ] GREEN コミット（lefthook 通過）
-- [ ] `docs/TODO.md` 更新
-- [ ] `README.md` 更新
+- [x] `tasks/20260307-pr11-mille-init/TODO.md` 作成（このファイル）
+- [x] `tasks/20260307-pr11-mille-init/timeline.md` 作成
+- [x] `src/usecase/init.rs` — コアロジック（スキャン・生成）
+- [x] `src/usecase/mod.rs` — `pub mod init;` 追加
+- [x] `src/presentation/cli/args.rs` — `Command::Init { output, force }` 追加
+- [x] `src/main.rs` — `Command::Init` ハンドラ追加
+- [x] `tests/e2e_init.rs` — E2E テスト
+- [x] RED コミット（`--no-verify`）
+- [x] GREEN コミット（lefthook 通過）
+- [x] `docs/TODO.md` 更新
+- [x] `README.md` 更新
 - [ ] `gh pr create`
 
 ## コマンド仕様

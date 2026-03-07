@@ -16,11 +16,12 @@
 - ✅ cargo / npm(WASM) / go install / pip パッケージ配布
 - ✅ `--format terminal / json / github-actions` 出力フォーマット切り替え（PR 10）
 - ✅ `[ignore]` セクション — `paths` / `test_patterns` 適用（PR 12）
+- ✅ `mille init` コマンド — プロジェクトスキャンして `mille.toml` 自動生成（PR 11）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 - ❌ `[severity]` — パースされるが無視される（常に Error で出力）
 - ❌ `--fail-on` オプション
-- ❌ `mille analyze` / `mille init` / `mille report external` コマンド
+- ❌ `mille analyze` / `mille report external` コマンド
 
 ---
 
@@ -35,14 +36,14 @@
 - [x] JSON フォーマッターの実装
 - [x] CI ドキュメントに GitHub Actions 設定例を追記（`docs/github-actions-usage.md`）
 
-### PR 11: `mille init` コマンド（インタラクティブ設定生成）
+### PR 11: `mille init` コマンド（インタラクティブ設定生成）✅ 完了
 
 **バズりポイント**: 「`mille init` を叩くだけで始められる」というオンボーディング体験は口コミで広まりやすい。Time-to-first-value の短縮が採用数に直結する。
 
-- [ ] `mille init` サブコマンドの追加
-- [ ] プロジェクト構造を自動スキャンしてレイヤーを推論する
-- [ ] 対話形式で `mille.toml` を生成する
-- [ ] 生成した設定で `mille check` をプレビュー実行する
+- [x] `mille init` サブコマンドの追加
+- [x] プロジェクト構造を自動スキャンしてレイヤーを推論する（深さ3まで）
+- [x] `--output <path>` / `--force` フラグのサポート
+- [x] `mille.toml` 自動生成（副作用なし純粋関数 + E2E テスト）
 
 ### PR 12: `[ignore]` セクションの実装 ✅ 完了
 

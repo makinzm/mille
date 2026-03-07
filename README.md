@@ -81,7 +81,37 @@ Pre-built binaries are on [GitHub Releases](https://github.com/makinzm/mille/rel
 
 ## Quick Start
 
-### 1. Create `mille.toml`
+### 1. Generate `mille.toml` with `mille init`
+
+```sh
+mille init
+```
+
+`mille init` scans your project directory (up to 3 levels deep), detects layer directories and languages, and writes a `mille.toml` starter config:
+
+```
+Detected languages: rust
+Detected layers: domain, usecase, infrastructure
+Generated 'mille.toml'
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--output <path>` | `mille.toml` | Write config to a custom path |
+| `--force` | false | Overwrite an existing file without prompting |
+
+Detected layer directories and their default settings:
+
+| Directory name | Layer | `dependency_mode` | `allow` |
+|---|---|---|---|
+| `domain` / `model` / `entities` / `entity` | domain | opt-in | `[]` |
+| `usecase` / `application` / `use_case` / `usecases` | usecase | opt-in | `["domain"]` |
+| `infrastructure` / `infra` / `adapter` / `adapters` | infrastructure | opt-out | — |
+| `presentation` / `handler` / `handlers` / `controller` / `api` | presentation | opt-in | `["usecase", "domain"]` |
+
+After generating, review the config and run `mille check` to see results.
+
+### 2. (Or) Create `mille.toml` manually
 
 Place `mille.toml` in your project root:
 
