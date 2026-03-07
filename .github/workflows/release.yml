@@ -425,3 +425,46 @@ jobs:
           git commit -m "chore: update mille to v${{ needs.release.outputs.version }}"
           git push
 
+  # ------------------------------------------------------------------ #
+  # 5. Commit released version back to main                            #
+  # NOTE: CI ビルドは sed でバージョンをその場パッチするだけでコミット  #
+  #       しないため、ローカルビルドでは常に古いバージョン（0.0.1等）  #
+  #       が表示される。リリース完了後に main へ書き戻すことで          #
+  #       `mille --version` がリリースタグと一致するようにする。        #
+  #       [skip ci] でマージによる再トリガーを防ぐ。                    #
+  # ------------------------------------------------------------------ #
+  update-version:
+    name: Bump version in main
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Update versions in source files
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/Cargo.toml
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" packages/npm/package.json
+
+      - name: Commit and push version bump
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --exit-code; then
+            echo "Version already up to date. No commit needed."
+          else
+            git add Cargo.toml packages/pypi/pyproject.toml packages/pypi/Cargo.toml packages/npm/package.json
+            git commit -m "[fix] v${VERSION} リリース後のバージョン更新 [skip ci]"
+            git push origin main
+          fi
+
