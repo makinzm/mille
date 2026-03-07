@@ -14,6 +14,7 @@
 - ✅ Rust / Go / TypeScript / JavaScript / Python サポート
 - ✅ `[resolve.typescript]` tsconfig.json paths エイリアス解決
 - ✅ cargo / npm(WASM) / go install / pip パッケージ配布
+- ✅ リリース後のバージョン自動同期（`update-version` ジョブ）— `mille --version` がリリースタグと一致
 - ✅ `--format terminal / json / github-actions` 出力フォーマット切り替え（PR 10）
 - ✅ `[ignore]` セクション — `paths` / `test_patterns` 適用（PR 12）
 - ✅ `mille init` コマンド — プロジェクトスキャンして `mille.toml` 自動生成（PR 11）
