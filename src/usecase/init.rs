@@ -1,125 +1,70 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-/// A detected layer suggestion derived from directory scanning.
+/// Per-directory import analysis, built externally by the infrastructure layer.
+/// This is a plain data type — no I/O here.
+#[derive(Default)]
+pub struct DirAnalysis {
+    /// Relative dir paths (from project root) this dir directly imports from.
+    pub internal_deps: BTreeSet<String>,
+    /// External package/crate names imported by files in this dir.
+    pub external_pkgs: BTreeSet<String>,
+    /// Number of source files in this directory.
+    pub file_count: usize,
+}
+
+/// An inferred layer suggestion.
 pub struct LayerSuggestion {
     pub name: String,
     pub paths: Vec<String>,
     pub dependency_mode: &'static str,
     pub allow: Vec<String>,
+    pub external_allow: Vec<String>,
 }
 
-/// Known directory name → (layer name, dependency_mode, allow list) mapping.
-/// Order matters: entries checked in order; first match wins per directory.
-const KNOWN_LAYERS: &[(&str, &str, &str, &[&str])] = &[
-    ("domain", "domain", "opt-in", &[]),
-    ("model", "domain", "opt-in", &[]),
-    ("entities", "domain", "opt-in", &[]),
-    ("entity", "domain", "opt-in", &[]),
-    ("usecase", "usecase", "opt-in", &["domain"]),
-    ("application", "usecase", "opt-in", &["domain"]),
-    ("use_case", "usecase", "opt-in", &["domain"]),
-    ("usecases", "usecase", "opt-in", &["domain"]),
-    ("infrastructure", "infrastructure", "opt-out", &[]),
-    ("infra", "infrastructure", "opt-out", &[]),
-    ("adapter", "infrastructure", "opt-out", &[]),
-    ("adapters", "infrastructure", "opt-out", &[]),
-    (
-        "presentation",
-        "presentation",
-        "opt-in",
-        &["usecase", "domain"],
-    ),
-    ("handler", "presentation", "opt-in", &["usecase", "domain"]),
-    ("handlers", "presentation", "opt-in", &["usecase", "domain"]),
-    (
-        "controller",
-        "presentation",
-        "opt-in",
-        &["usecase", "domain"],
-    ),
-    ("api", "presentation", "opt-in", &["usecase", "domain"]),
-];
-
-/// Scan `root` recursively (up to depth 3) and return layer suggestions
-/// based on well-known directory name patterns.
-/// Each logical layer name appears at most once; the first path found wins.
-pub fn scan_layers(root: &str) -> Vec<LayerSuggestion> {
-    let root_path = Path::new(root);
-
-    // Collect all directory paths up to depth 3
-    let mut dirs: Vec<(String, String)> = Vec::new(); // (dir_name, relative_path)
-    collect_dirs(root_path, root_path, 0, 3, &mut dirs);
-
-    // Match dirs against known layer patterns; deduplicate by layer name
-    let mut seen_names: BTreeSet<String> = BTreeSet::new();
-    // We want a stable ordering: use insertion order via Vec
-    let mut suggestions: Vec<LayerSuggestion> = Vec::new();
-
-    for (dir_name, rel_path) in &dirs {
-        if let Some((_, layer_name, dep_mode, allow)) = KNOWN_LAYERS
-            .iter()
-            .find(|(pattern, _, _, _)| *pattern == dir_name.as_str())
-        {
-            if seen_names.insert(layer_name.to_string()) {
-                suggestions.push(LayerSuggestion {
-                    name: layer_name.to_string(),
-                    paths: vec![format!("{}/**", rel_path)],
-                    dependency_mode: dep_mode,
-                    allow: allow.iter().map(|s| s.to_string()).collect(),
-                });
-            }
-        }
-    }
-
-    // Sort suggestions in a stable architectural order
-    let order = ["domain", "usecase", "infrastructure", "presentation"];
-    suggestions.sort_by_key(|s| {
-        order
-            .iter()
-            .position(|n| *n == s.name.as_str())
-            .unwrap_or(usize::MAX)
-    });
-
-    suggestions
+/// Topological sort of directories based on their internal dependency edges.
+///
+/// Returns dirs grouped by tier:
+/// - tier[0] = "leaf" dirs — no internal deps (domain-like, imported by others)
+/// - tier[N] = dirs all of whose deps are resolved in lower tiers (presentation-like)
+///
+/// Cycles are collected into a final tier so the function never panics.
+pub fn topological_sort(deps: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<String>> {
+    todo!("implement topological_sort")
 }
 
-/// Recursively collect (dir_name, relative_path_from_root) pairs up to `max_depth`.
-fn collect_dirs(
-    root: &Path,
-    current: &Path,
-    depth: usize,
-    max_depth: usize,
-    out: &mut Vec<(String, String)>,
-) {
-    if depth >= max_depth {
-        return;
-    }
-    let Ok(entries) = fs::read_dir(current) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let dir_name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n.to_string(),
-            None => continue,
-        };
-        // Skip hidden dirs and common non-source dirs
-        if dir_name.starts_with('.') || dir_name == "target" || dir_name == "node_modules" {
-            continue;
-        }
-        let rel = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .to_string();
-        out.push((dir_name.clone(), rel));
-        collect_dirs(root, &path, depth + 1, max_depth, out);
-    }
+/// Infer layer suggestions from per-directory import analysis.
+///
+/// Algorithm:
+/// 1. Build internal dep graph (only known dirs).
+/// 2. Topological sort → tiers.
+/// 3. Group dirs in the same tier by base name (last path segment).
+/// 4. Each group → one LayerSuggestion with combined paths + allow + external_allow.
+pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerSuggestion> {
+    todo!("implement infer_layers")
+}
+
+/// Return true if a directory name should be skipped during scanning.
+pub fn is_excluded_dir(name: &str) -> bool {
+    matches!(
+        name,
+        "target"
+            | "node_modules"
+            | "dist"
+            | "build"
+            | "out"
+            | "__pycache__"
+            | ".venv"
+            | "venv"
+            | "vendor"
+            | "coverage"
+            | ".next"
+            | ".nuxt"
+            | "migration"
+            | "migrations"
+    ) || name.starts_with('.')
+        || name.starts_with("flycheck")
 }
 
 /// Detect project languages from file extensions under `root`.
@@ -140,7 +85,7 @@ fn collect_languages(dir: &Path, langs: &mut BTreeSet<String>) {
             Some(n) => n,
             None => continue,
         };
-        if name.starts_with('.') || name == "target" || name == "node_modules" {
+        if is_excluded_dir(name) {
             continue;
         }
         if path.is_dir() {
@@ -164,70 +109,37 @@ fn ext_to_language(ext: &str) -> Option<&'static str> {
     }
 }
 
-/// Generate a TOML config string (no side effects).
+/// Generate a mille.toml config string (pure function, no side effects).
 pub fn generate_toml(
     project_name: &str,
     root: &str,
     languages: &[String],
     layers: &[LayerSuggestion],
 ) -> String {
-    let langs_toml = languages
-        .iter()
-        .map(|l| format!("\"{}\"", l))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let mut out = format!(
-        "[project]\nname = \"{}\"\nroot = \"{}\"\nlanguages = [{}]\n",
-        project_name, root, langs_toml
-    );
-
-    for layer in layers {
-        let paths_toml = layer
-            .paths
-            .iter()
-            .map(|p| format!("\"{}\"", p))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        out.push('\n');
-        out.push_str("[[layers]]\n");
-        out.push_str(&format!("name = \"{}\"\n", layer.name));
-        out.push_str(&format!("paths = [{}]\n", paths_toml));
-        out.push_str(&format!(
-            "dependency_mode = \"{}\"\n",
-            layer.dependency_mode
-        ));
-
-        if layer.dependency_mode == "opt-in" {
-            let allow_toml = layer
-                .allow
-                .iter()
-                .map(|a| format!("\"{}\"", a))
-                .collect::<Vec<_>>()
-                .join(", ");
-            out.push_str(&format!("allow = [{}]\n", allow_toml));
-        }
-    }
-
-    out
+    todo!("implement generate_toml")
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::PathBuf;
 
-    /// Minimal RAII temp-dir using only stdlib (avoids tempfile dev-dependency
-    /// inside src/, which would be flagged as an ExternalViolation by mille).
+    // ------------------------------------------------------------------
+    // Stdlib-only RAII temp dir (avoids tempfile external dep in usecase)
+    // ------------------------------------------------------------------
+
     struct TempDir(PathBuf);
 
     impl TempDir {
         fn new(label: &str) -> Self {
-            // Use process id + label to avoid collisions between parallel tests.
             let dir = std::env::temp_dir().join(format!(
-                "mille_init_test_{}_{}",
+                "mille_init2_test_{}_{}",
                 std::process::id(),
                 label
             ));
@@ -246,51 +158,277 @@ mod tests {
         }
     }
 
-    fn make_dir(base: &std::path::Path, rel: &str) {
-        fs::create_dir_all(base.join(rel)).unwrap();
-    }
-
     fn make_file(base: &std::path::Path, rel: &str) {
         let path = base.join(rel);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, "").unwrap();
     }
 
+    fn btree(pairs: &[(&str, &[&str])]) -> BTreeMap<String, BTreeSet<String>> {
+        pairs
+            .iter()
+            .map(|(k, vs)| {
+                (
+                    k.to_string(),
+                    vs.iter().map(|v| v.to_string()).collect(),
+                )
+            })
+            .collect()
+    }
+
     // ------------------------------------------------------------------
-    // scan_layers
+    // topological_sort
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_scan_layers_empty_dir() {
-        let tmp = TempDir::new("scan_empty");
-        let result = scan_layers(tmp.path().to_str().unwrap());
-        assert!(result.is_empty(), "no known layer dirs → empty vec");
+    fn test_topological_sort_empty() {
+        let result = topological_sort(&BTreeMap::new());
+        assert!(result.is_empty());
     }
 
     #[test]
-    fn test_scan_layers_detects_domain() {
-        let tmp = TempDir::new("scan_domain");
-        make_dir(tmp.path(), "src/domain");
-        let result = scan_layers(tmp.path().to_str().unwrap());
-        assert!(
-            result.iter().any(|l| l.name == "domain"),
-            "src/domain should be detected as 'domain' layer"
+    fn test_topological_sort_single_dir_no_deps() {
+        let deps = btree(&[("domain", &[])]);
+        let tiers = topological_sort(&deps);
+        assert_eq!(tiers.len(), 1);
+        assert_eq!(tiers[0], vec!["domain"]);
+    }
+
+    #[test]
+    fn test_topological_sort_chain() {
+        // usecase → domain: domain first, usecase second
+        let deps = btree(&[("domain", &[]), ("usecase", &["domain"])]);
+        let tiers = topological_sort(&deps);
+        assert_eq!(tiers.len(), 2);
+        assert_eq!(tiers[0], vec!["domain"]);
+        assert_eq!(tiers[1], vec!["usecase"]);
+    }
+
+    #[test]
+    fn test_topological_sort_three_tier_chain() {
+        // presentation → usecase → domain
+        let deps = btree(&[
+            ("domain", &[]),
+            ("usecase", &["domain"]),
+            ("presentation", &["usecase"]),
+        ]);
+        let tiers = topological_sort(&deps);
+        assert_eq!(tiers.len(), 3);
+        assert_eq!(tiers[0], vec!["domain"]);
+        assert_eq!(tiers[1], vec!["usecase"]);
+        assert_eq!(tiers[2], vec!["presentation"]);
+    }
+
+    #[test]
+    fn test_topological_sort_diamond() {
+        // usecase → domain, infra → domain, presentation → usecase + infra
+        let deps = btree(&[
+            ("domain", &[]),
+            ("infra", &["domain"]),
+            ("usecase", &["domain"]),
+            ("presentation", &["usecase", "infra"]),
+        ]);
+        let tiers = topological_sort(&deps);
+        assert_eq!(tiers[0], vec!["domain"]);
+        // infra and usecase are both at tier 1
+        assert_eq!(tiers[1], vec!["infra", "usecase"]);
+        assert_eq!(tiers[2], vec!["presentation"]);
+    }
+
+    #[test]
+    fn test_topological_sort_cycle_does_not_panic() {
+        // a → b, b → a: cycle
+        let deps = btree(&[("a", &["b"]), ("b", &["a"])]);
+        let tiers = topological_sort(&deps);
+        // Must not panic; cycle members end up in some tier
+        assert!(!tiers.is_empty());
+        let all_dirs: Vec<String> = tiers.into_iter().flatten().collect();
+        assert!(all_dirs.contains(&"a".to_string()));
+        assert!(all_dirs.contains(&"b".to_string()));
+    }
+
+    #[test]
+    fn test_topological_sort_unknown_deps_ignored() {
+        // usecase depends on "ghost" which is not in the map
+        let deps = btree(&[("domain", &[]), ("usecase", &["domain", "ghost"])]);
+        let tiers = topological_sort(&deps);
+        // ghost is not a known dir, so usecase only waits on domain
+        assert_eq!(tiers[0], vec!["domain"]);
+        assert_eq!(tiers[1], vec!["usecase"]);
+    }
+
+    // ------------------------------------------------------------------
+    // infer_layers
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_infer_layers_empty() {
+        let result = infer_layers(&BTreeMap::new());
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_infer_layers_single_dir_no_deps() {
+        let mut analyses = BTreeMap::new();
+        analyses.insert(
+            "src/domain".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: BTreeSet::new(),
+                file_count: 1,
+            },
         );
+        let layers = infer_layers(&analyses);
+        assert_eq!(layers.len(), 1);
+        assert_eq!(layers[0].name, "domain");
+        assert!(layers[0].allow.is_empty());
+        assert!(layers[0].external_allow.is_empty());
     }
 
     #[test]
-    fn test_scan_layers_detects_multiple() {
-        let tmp = TempDir::new("scan_multiple");
-        make_dir(tmp.path(), "src/domain");
-        make_dir(tmp.path(), "src/usecase");
-        make_dir(tmp.path(), "src/infrastructure");
-        let result = scan_layers(tmp.path().to_str().unwrap());
-        let names: Vec<&str> = result.iter().map(|l| l.name.as_str()).collect();
-        assert!(names.contains(&"domain"), "domain should be detected");
-        assert!(names.contains(&"usecase"), "usecase should be detected");
+    fn test_infer_layers_chain_domain_usecase() {
+        let mut analyses = BTreeMap::new();
+        analyses.insert(
+            "src/domain".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: BTreeSet::new(),
+                file_count: 1,
+            },
+        );
+        let mut usecase_deps = BTreeSet::new();
+        usecase_deps.insert("src/domain".to_string());
+        analyses.insert(
+            "src/usecase".to_string(),
+            DirAnalysis {
+                internal_deps: usecase_deps,
+                external_pkgs: BTreeSet::new(),
+                file_count: 1,
+            },
+        );
+        let layers = infer_layers(&analyses);
+        assert_eq!(layers.len(), 2);
+        // domain comes first (tier 0)
+        assert_eq!(layers[0].name, "domain");
+        // usecase comes second (tier 1) and allows domain
+        assert_eq!(layers[1].name, "usecase");
+        assert!(layers[1].allow.contains(&"domain".to_string()));
+    }
+
+    #[test]
+    fn test_infer_layers_groups_dirs_by_base_name() {
+        // Two sub-projects both have a "domain" dir → one merged layer
+        let mut analyses = BTreeMap::new();
+        analyses.insert(
+            "apps/crawler/src/domain".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: BTreeSet::new(),
+                file_count: 2,
+            },
+        );
+        analyses.insert(
+            "apps/server/src/domain".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: BTreeSet::new(),
+                file_count: 3,
+            },
+        );
+        let layers = infer_layers(&analyses);
+        assert_eq!(layers.len(), 1, "two domain dirs should merge into one layer");
+        assert_eq!(layers[0].name, "domain");
+        assert_eq!(layers[0].paths.len(), 2);
+    }
+
+    #[test]
+    fn test_infer_layers_collects_external_deps() {
+        let mut analyses = BTreeMap::new();
+        let mut ext = BTreeSet::new();
+        ext.insert("serde".to_string());
+        ext.insert("tokio".to_string());
+        analyses.insert(
+            "src/infrastructure".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: ext,
+                file_count: 2,
+            },
+        );
+        let layers = infer_layers(&analyses);
+        assert!(layers[0].external_allow.contains(&"serde".to_string()));
+        assert!(layers[0].external_allow.contains(&"tokio".to_string()));
+    }
+
+    // ------------------------------------------------------------------
+    // generate_toml
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_generate_toml_contains_project_section() {
+        let layers = vec![LayerSuggestion {
+            name: "domain".to_string(),
+            paths: vec!["src/domain/**".to_string()],
+            dependency_mode: "opt-in",
+            allow: vec![],
+            external_allow: vec![],
+        }];
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        assert!(toml.contains("[project]"), "must contain [project]");
+    }
+
+    #[test]
+    fn test_generate_toml_contains_layer_sections() {
+        let layers = vec![LayerSuggestion {
+            name: "domain".to_string(),
+            paths: vec!["src/domain/**".to_string()],
+            dependency_mode: "opt-in",
+            allow: vec![],
+            external_allow: vec![],
+        }];
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        assert!(toml.contains("[[layers]]"), "must contain [[layers]]");
+    }
+
+    #[test]
+    fn test_generate_toml_with_external_allow() {
+        let layers = vec![LayerSuggestion {
+            name: "infrastructure".to_string(),
+            paths: vec!["src/infrastructure/**".to_string()],
+            dependency_mode: "opt-in",
+            allow: vec![],
+            external_allow: vec!["serde".to_string(), "tokio".to_string()],
+        }];
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
         assert!(
-            names.contains(&"infrastructure"),
-            "infrastructure should be detected"
+            toml.contains("external_allow"),
+            "must contain external_allow\n{}",
+            toml
+        );
+        assert!(toml.contains("serde"), "must include serde\n{}", toml);
+    }
+
+    #[test]
+    fn test_generate_toml_multi_path_format() {
+        let layers = vec![LayerSuggestion {
+            name: "domain".to_string(),
+            paths: vec![
+                "apps/crawler/src/domain/**".to_string(),
+                "apps/server/src/domain/**".to_string(),
+            ],
+            dependency_mode: "opt-in",
+            allow: vec![],
+            external_allow: vec![],
+        }];
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        // With multiple paths, each should appear on its own line
+        assert!(
+            toml.contains("apps/crawler/src/domain/**"),
+            "first path missing"
+        );
+        assert!(
+            toml.contains("apps/server/src/domain/**"),
+            "second path missing"
         );
     }
 
@@ -312,44 +450,19 @@ mod tests {
         make_file(tmp.path(), "src/main.rs");
         make_file(tmp.path(), "src/index.ts");
         let langs = detect_languages(tmp.path().to_str().unwrap());
-        assert!(langs.contains(&"rust".to_string()), "should detect rust");
-        assert!(
-            langs.contains(&"typescript".to_string()),
-            "should detect typescript"
-        );
-    }
-
-    // ------------------------------------------------------------------
-    // generate_toml
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn test_generate_toml_contains_project_section() {
-        let layers = vec![LayerSuggestion {
-            name: "domain".to_string(),
-            paths: vec!["src/domain/**".to_string()],
-            dependency_mode: "opt-in",
-            allow: vec![],
-        }];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
-        assert!(
-            toml.contains("[project]"),
-            "generated TOML must contain [project] section"
-        );
+        assert!(langs.contains(&"rust".to_string()));
+        assert!(langs.contains(&"typescript".to_string()));
     }
 
     #[test]
-    fn test_generate_toml_contains_layer_sections() {
-        let layers = vec![LayerSuggestion {
-            name: "domain".to_string(),
-            paths: vec!["src/domain/**".to_string()],
-            dependency_mode: "opt-in",
-            allow: vec![],
-        }];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
-        assert!(
-            toml.contains("[[layers]]"),
-            "generated TOML must contain [[layers]] section"
-        );
+    fn test_is_excluded_dir_skips_known() {
+        assert!(is_excluded_dir("target"));
+        assert!(is_excluded_dir("node_modules"));
+        assert!(is_excluded_dir("dist"));
+        assert!(is_excluded_dir(".git"));
+        assert!(is_excluded_dir("flycheck_some_file"));
+        assert!(!is_excluded_dir("domain"));
+        assert!(!is_excluded_dir("usecase"));
+        assert!(!is_excluded_dir("infrastructure"));
     }
 }
