@@ -230,13 +230,7 @@ fn test_ga_format_no_terminal_artifacts() {
 #[test]
 fn test_json_format_violation_is_valid_json_shape() {
     let cfg = TempConfig::new("mille_e2e_fmt_json_shape.toml", INFRA_BLOCKS_DOMAIN_TOML);
-    let out = mille(&[
-        "check",
-        "--config",
-        cfg.file_name(),
-        "--format",
-        "json",
-    ]);
+    let out = mille(&["check", "--config", cfg.file_name(), "--format", "json"]);
     let s = stdout(&out);
     assert!(
         s.trim().starts_with('{'),
@@ -259,13 +253,7 @@ fn test_json_format_violation_is_valid_json_shape() {
 #[test]
 fn test_json_format_violation_exits_one() {
     let cfg = TempConfig::new("mille_e2e_fmt_json_exit.toml", INFRA_BLOCKS_DOMAIN_TOML);
-    let out = mille(&[
-        "check",
-        "--config",
-        cfg.file_name(),
-        "--format",
-        "json",
-    ]);
+    let out = mille(&["check", "--config", cfg.file_name(), "--format", "json"]);
     assert_eq!(
         exit_code(&out),
         1,
@@ -302,13 +290,7 @@ fn test_json_format_no_violation_exits_zero() {
 #[test]
 fn test_json_format_violation_has_nonzero_errors() {
     let cfg = TempConfig::new("mille_e2e_fmt_json_errcnt.toml", INFRA_BLOCKS_DOMAIN_TOML);
-    let out = mille(&[
-        "check",
-        "--config",
-        cfg.file_name(),
-        "--format",
-        "json",
-    ]);
+    let out = mille(&["check", "--config", cfg.file_name(), "--format", "json"]);
     let s = stdout(&out);
     assert!(
         !s.contains("\"errors\":0"),
@@ -319,13 +301,7 @@ fn test_json_format_violation_has_nonzero_errors() {
 #[test]
 fn test_json_format_no_terminal_artifacts() {
     let cfg = TempConfig::new("mille_e2e_fmt_json_noterm.toml", INFRA_BLOCKS_DOMAIN_TOML);
-    let out = mille(&[
-        "check",
-        "--config",
-        cfg.file_name(),
-        "--format",
-        "json",
-    ]);
+    let out = mille(&["check", "--config", cfg.file_name(), "--format", "json"]);
     let s = stdout(&out);
     assert!(
         !s.contains("Summary:"),

@@ -23,10 +23,7 @@ pub fn format_violation_ga(v: &Violation) -> String {
             v.to_layer, v.import_path
         ),
     };
-    format!(
-        "::{} file={},line={}::{}\n",
-        level, v.file, v.line, message
-    )
+    format!("::{} file={},line={}::{}\n", level, v.file, v.line, message)
 }
 
 /// Format all violations as GitHub Actions annotations (no summary line).
@@ -103,13 +100,16 @@ mod tests {
     #[test]
     fn test_ga_external_violation_format() {
         let out = format_violation_ga(&ext_violation());
-        assert!(out.starts_with("::error "), "should start with ::error\nout: {out}");
         assert!(
-            out.contains("file=src/usecase/order.rs"),
-            "out: {out}"
+            out.starts_with("::error "),
+            "should start with ::error\nout: {out}"
         );
+        assert!(out.contains("file=src/usecase/order.rs"), "out: {out}");
         assert!(out.contains("line=3"), "out: {out}");
-        assert!(out.contains("sqlx"), "should contain package name\nout: {out}");
+        assert!(
+            out.contains("sqlx"),
+            "should contain package name\nout: {out}"
+        );
         assert!(out.contains("External violation"), "out: {out}");
     }
 

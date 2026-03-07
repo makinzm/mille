@@ -70,8 +70,7 @@ mod tests {
 
     #[test]
     fn test_parse_format_github_actions() {
-        let cli =
-            Cli::try_parse_from(["mille", "check", "--format", "github-actions"]).unwrap();
+        let cli = Cli::try_parse_from(["mille", "check", "--format", "github-actions"]).unwrap();
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::GithubActions),
         }
