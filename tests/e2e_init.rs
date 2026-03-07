@@ -142,6 +142,68 @@ fn test_init_existing_file_without_force_exits_error() {
 }
 
 #[test]
+fn test_init_with_depth_flag() {
+    let tmp = TempDir::new().unwrap();
+    // Nested project: src/domain/entity and src/domain/repository rolled up to src/domain
+    make_file(
+        tmp.path(),
+        "src/domain/entity/user.rs",
+        "pub struct User { pub id: u64 }",
+    );
+    make_file(
+        tmp.path(),
+        "src/domain/repository/repo.rs",
+        "pub trait UserRepo {}",
+    );
+    // usecase imports from domain
+    make_file(
+        tmp.path(),
+        "src/usecase/check.rs",
+        "use crate::domain::entity::User;",
+    );
+
+    let out = mille_init(tmp.path(), &["--depth", "2"]);
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "mille init --depth 2 should exit 0\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    let toml_path = tmp.path().join("mille.toml");
+    let content = fs::read_to_string(&toml_path).unwrap();
+
+    // Should have domain and usecase layers but NOT entity or repository
+    assert!(
+        content.contains("\"domain\""),
+        "should have domain layer\n{}",
+        content
+    );
+    assert!(
+        content.contains("\"usecase\""),
+        "should have usecase layer\n{}",
+        content
+    );
+    assert!(
+        !content.contains("\"entity\""),
+        "entity should be rolled up into domain, not a separate layer\n{}",
+        content
+    );
+    assert!(
+        !content.contains("\"repository\""),
+        "repository should be rolled up into domain, not a separate layer\n{}",
+        content
+    );
+    // usecase should depend on domain
+    assert!(
+        content.contains("allow = [\"domain\"]"),
+        "usecase should allow domain\n{}",
+        content
+    );
+}
+
+#[test]
 fn test_init_existing_file_with_force_overwrites() {
     let tmp = TempDir::new().unwrap();
     let existing = tmp.path().join("mille.toml");

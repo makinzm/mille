@@ -24,7 +24,7 @@ use mille::usecase::init::{self, DirAnalysis};
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Command::Init { output, force } => {
+        Command::Init { output, force, depth: _ } => {
             let cwd = std::env::current_dir()
                 .expect("cannot determine current directory")
                 .to_string_lossy()

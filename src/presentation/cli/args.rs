@@ -41,6 +41,10 @@ pub enum Command {
         /// Overwrite existing file without prompting
         #[arg(long, default_value_t = false)]
         force: bool,
+        /// Layer detection depth from project root (auto-detected if not set).
+        /// Example: --depth 2 for src/domain, src/usecase structure.
+        #[arg(long)]
+        depth: Option<usize>,
     },
 }
 
@@ -131,7 +135,7 @@ mod tests {
     fn test_parse_init_default_output() {
         let cli = Cli::try_parse_from(["mille", "init"]).unwrap();
         match cli.command {
-            Command::Init { output, force } => {
+            Command::Init { output, force, .. } => {
                 assert_eq!(output, "mille.toml");
                 assert!(!force);
             }
@@ -153,6 +157,24 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "init", "--force"]).unwrap();
         match cli.command {
             Command::Init { force, .. } => assert!(force),
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_depth_flag() {
+        let cli = Cli::try_parse_from(["mille", "init", "--depth", "2"]).unwrap();
+        match cli.command {
+            Command::Init { depth, .. } => assert_eq!(depth, Some(2)),
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_depth_defaults_to_none() {
+        let cli = Cli::try_parse_from(["mille", "init"]).unwrap();
+        match cli.command {
+            Command::Init { depth, .. } => assert_eq!(depth, None),
             _ => panic!("expected Init command"),
         }
     }
