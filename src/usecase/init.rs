@@ -91,8 +91,12 @@ pub fn topological_sort(deps: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<St
 /// Algorithm:
 /// 1. Build internal dep graph (only known dirs).
 /// 2. Topological sort → tiers.
-/// 3. Group dirs in the same tier by base name (last path segment).
-/// 4. Each group → one LayerSuggestion with combined paths + allow + external_allow.
+/// 3. Within each tier, group dirs by base name.
+/// 4. Within each base-name group, sub-group by immediate parent's base name.
+///    - All sub-groups share the same parent base → one layer named `{base}`.
+///    - Multiple different parent bases → one layer per sub-group named `{parent}_{base}`.
+///      (e.g. domain/entity + infrastructure/entity → domain_entity + infrastructure_entity)
+/// 5. Each resulting group → one LayerSuggestion; allow list uses qualified layer names.
 pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerSuggestion> {
     if analyses.is_empty() {
         return vec![];
@@ -115,38 +119,80 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerSugges
 
     let tiers = topological_sort(&dep_graph);
 
-    // Map each dir to its tier index for allow-list building
-    let mut dir_to_tier: BTreeMap<&str, usize> = BTreeMap::new();
-    for (tier_idx, tier) in tiers.iter().enumerate() {
-        for dir in tier {
-            dir_to_tier.insert(dir.as_str(), tier_idx);
+    // Pass 1: assign a layer name to every dir.
+    // Dirs with the same base name are merged only when their immediate parent
+    // also shares the same base name (e.g. monorepo siblings under the same "src" parent).
+    // Otherwise each gets a qualified name: "{parent_base}_{base}".
+    //
+    // NOTE: We group across ALL tiers so that dirs in different tiers but with the same
+    // base name are still compared (e.g. domain/entity in tier 0 vs infrastructure/entity
+    // in tier 1 are both named "entity" → qualified to "domain_entity" / "infrastructure_entity").
+    let mut dir_to_layer: BTreeMap<String, String> = BTreeMap::new();
+
+    // Collect all dirs across all tiers, group by base name
+    let mut by_base: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for dir in tiers.iter().flatten() {
+        let base = dir
+            .split('/')
+            .next_back()
+            .unwrap_or(dir.as_str())
+            .to_string();
+        by_base.entry(base).or_default().push(dir.clone());
+    }
+
+    for (base_name, dirs) in &by_base {
+        // Sub-group by immediate parent's base name
+        let mut by_parent: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for dir in dirs {
+            let parent_base = dir
+                .rsplit_once('/')
+                .map(|(parent, _)| parent.split('/').next_back().unwrap_or(""))
+                .unwrap_or("")
+                .to_string();
+            by_parent.entry(parent_base).or_default().push(dir.clone());
+        }
+
+        let needs_prefix = by_parent.len() > 1;
+        for (parent_base, group_dirs) in &by_parent {
+            let layer_name = if needs_prefix && !parent_base.is_empty() {
+                format!("{}_{}", parent_base, base_name)
+            } else {
+                base_name.clone()
+            };
+            for dir in group_dirs {
+                dir_to_layer.insert(dir.clone(), layer_name.clone());
+            }
         }
     }
 
-    // For each tier, group dirs by base name (last path segment)
+    // Pass 2: build LayerSuggestion for each (tier, layer_name) group.
     let mut suggestions: Vec<LayerSuggestion> = vec![];
 
     for tier in &tiers {
-        // Group by base name
-        let mut by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        // Group dirs by their assigned layer name within this tier
+        let mut by_layer: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for dir in tier {
-            let base = dir
-                .split('/')
-                .next_back()
-                .unwrap_or(dir.as_str())
-                .to_string();
-            by_name.entry(base).or_default().push(dir.clone());
+            let layer_name = dir_to_layer.get(dir).cloned().unwrap_or_else(|| {
+                dir.split('/')
+                    .next_back()
+                    .unwrap_or(dir.as_str())
+                    .to_string()
+            });
+            by_layer.entry(layer_name).or_default().push(dir.clone());
         }
 
-        for (name, paths) in by_name {
-            // Collect allow: base names of dirs that any path in this group depends on
+        for (name, paths) in by_layer {
+            // Collect allow: qualified layer names of dirs this group depends on
             let mut allow_names: BTreeSet<String> = BTreeSet::new();
             for path in &paths {
                 if let Some(analysis) = analyses.get(path) {
                     for dep in &analysis.internal_deps {
                         if known_dirs.contains(dep.as_str()) {
-                            let dep_base = dep.split('/').next_back().unwrap_or(dep.as_str());
-                            allow_names.insert(dep_base.to_string());
+                            if let Some(dep_layer) = dir_to_layer.get(dep) {
+                                if dep_layer != &name {
+                                    allow_names.insert(dep_layer.clone());
+                                }
+                            }
                         }
                     }
                 }
