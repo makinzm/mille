@@ -8,6 +8,16 @@ process.on('warning', (w) => {
   process.stderr.write(w.stack + '\n');
 });
 
+// NOTE: Intercept --version/-V before forwarding to WASM so that the npm
+// package version (updated by `npm version X.Y.Z` at release time) is shown,
+// rather than the version baked into mille.wasm at WASM-build time.
+const userArgs = process.argv.slice(2);
+if (userArgs.includes('--version') || userArgs.includes('-V')) {
+  const { version } = require('./package.json');
+  process.stdout.write(`mille ${version}\n`);
+  process.exit(0);
+}
+
 const { WASI } = require('node:wasi');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');

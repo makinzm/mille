@@ -15,11 +15,14 @@ dependency_mode = "opt-out"
 deny = []
 external_mode = "opt-in"
 external_allow = [
+  "bytes",
   "context",
   "embed",
   "fmt",
+  "io",
   "os",
   "path/filepath",
+  "runtime/debug",
   "strings",
   "testing",
   "github.com/tetratelabs/wazero",

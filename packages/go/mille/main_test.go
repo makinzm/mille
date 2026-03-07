@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -40,6 +42,41 @@ func TestRunWasm_SelfCheck(t *testing.T) {
 	code := runWasm(ctx, milleWasm, dir, []string{"check"})
 	if code != 0 {
 		t.Errorf("expected exit code 0 (no violations), got %d", code)
+	}
+}
+
+// TestHandleVersionFlag_Version checks that --version is intercepted and outputs
+// a non-empty "mille <version>" line without forwarding to WASM.
+func TestHandleVersionFlag_Version(t *testing.T) {
+	var buf bytes.Buffer
+	handled := handleVersionFlag([]string{"--version"}, &buf)
+	if !handled {
+		t.Fatal("expected handleVersionFlag to return true for --version")
+	}
+	out := buf.String()
+	if !strings.HasPrefix(out, "mille ") {
+		t.Errorf("expected output starting with 'mille ', got: %q", out)
+	}
+}
+
+// TestHandleVersionFlag_ShortV checks that -V is also intercepted.
+func TestHandleVersionFlag_ShortV(t *testing.T) {
+	var buf bytes.Buffer
+	handled := handleVersionFlag([]string{"-V"}, &buf)
+	if !handled {
+		t.Fatal("expected handleVersionFlag to return true for -V")
+	}
+}
+
+// TestHandleVersionFlag_NotVersion verifies non-version args are not intercepted.
+func TestHandleVersionFlag_NotVersion(t *testing.T) {
+	var buf bytes.Buffer
+	handled := handleVersionFlag([]string{"check"}, &buf)
+	if handled {
+		t.Error("expected handleVersionFlag to return false for 'check'")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for 'check', got: %q", buf.String())
 	}
 }
 
