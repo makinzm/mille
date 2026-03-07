@@ -26,9 +26,30 @@ pub fn format_violation_ga(v: &Violation) -> String {
     format!("::{} file={},line={}::{}\n", level, v.file, v.line, message)
 }
 
-/// Format all violations as GitHub Actions annotations (no summary line).
+/// Format all violations as GitHub Actions annotations.
+///
+/// Each violation becomes a `::error` or `::warning` annotation.
+/// A `::notice::` summary line is always appended so that users get
+/// confirmation even when there are no violations.
 pub fn format_all_ga(violations: &[Violation]) -> String {
-    violations.iter().map(format_violation_ga).collect()
+    let mut out: String = violations.iter().map(format_violation_ga).collect();
+    let errors = violations
+        .iter()
+        .filter(|v| v.severity == Severity::Error)
+        .count();
+    let warnings = violations
+        .iter()
+        .filter(|v| v.severity == Severity::Warning)
+        .count();
+    if errors == 0 && warnings == 0 {
+        out.push_str("::notice::Architecture check passed: 0 violations\n");
+    } else {
+        out.push_str(&format!(
+            "::notice::Architecture check: {} error(s), {} warning(s)\n",
+            errors, warnings
+        ));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -139,9 +160,16 @@ mod tests {
     }
 
     #[test]
-    fn test_format_all_ga_empty() {
+    fn test_format_all_ga_empty_shows_notice() {
         let out = format_all_ga(&[]);
-        assert!(out.is_empty(), "no violations → empty output\nout: {out}");
+        assert!(
+            out.contains("::notice::"),
+            "no violations → should show ::notice:: summary\nout: {out}"
+        );
+        assert!(
+            out.contains("passed"),
+            "should confirm check passed\nout: {out}"
+        );
     }
 
     #[test]
@@ -149,6 +177,21 @@ mod tests {
         let violations = vec![dep_violation(), ext_violation()];
         let out = format_all_ga(&violations);
         let lines: Vec<&str> = out.lines().collect();
-        assert_eq!(lines.len(), 2, "should have 2 annotation lines\nout: {out}");
+        // 2 violations + 1 summary notice
+        assert_eq!(
+            lines.len(),
+            3,
+            "should have 2 violation lines + 1 notice\nout: {out}"
+        );
+    }
+
+    #[test]
+    fn test_format_all_ga_summary_notice_shows_counts() {
+        let violations = vec![dep_violation(), ext_violation()];
+        let out = format_all_ga(&violations);
+        assert!(
+            out.contains("::notice::Architecture check:"),
+            "summary notice must show error/warning counts\nout: {out}"
+        );
     }
 }

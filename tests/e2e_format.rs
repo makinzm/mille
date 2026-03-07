@@ -169,7 +169,7 @@ fn test_ga_format_violation_exits_one() {
 }
 
 #[test]
-fn test_ga_format_no_violation_output_is_empty() {
+fn test_ga_format_no_violation_shows_notice() {
     let out = mille(&[
         "check",
         "--config",
@@ -179,8 +179,12 @@ fn test_ga_format_no_violation_output_is_empty() {
     ]);
     let s = stdout(&out);
     assert!(
-        s.is_empty(),
-        "github-actions format must produce empty output when there are no violations\nstdout:\n{s}"
+        s.contains("::notice::"),
+        "github-actions format must show ::notice:: when there are no violations\nstdout:\n{s}"
+    );
+    assert!(
+        s.contains("passed"),
+        "notice must confirm check passed\nstdout:\n{s}"
     );
 }
 
