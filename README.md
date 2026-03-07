@@ -92,6 +92,7 @@ mille init
 ```
 Detected languages: rust
 Scanning imports...
+Using layer depth: 2
 
 Inferred layer structure:
   domain               ← (no internal dependencies)
@@ -107,6 +108,9 @@ Generated 'mille.toml'
 |---|---|---|
 | `--output <path>` | `mille.toml` | Write config to a custom path |
 | `--force` | false | Overwrite an existing file without prompting |
+| `--depth <N>` | auto | Layer detection depth from project root |
+
+**`--depth` and auto-detection**: `mille init` automatically finds the right layer depth by trying depths 1–6, skipping common source-layout roots (`src`, `lib`, `app`, etc.), and selecting the first depth that yields 2–8 candidate layers. For a project with `src/domain/entity`, `src/domain/repository`, `src/usecase/` — depth 2 is chosen, rolling `entity` and `repository` up into `domain`. Use `--depth N` to override when auto-detection picks the wrong level.
 
 The generated config includes `allow` (inferred internal dependencies) and `external_allow` (detected external packages) per layer. After generating, review the config and run `mille check` to see results.
 
