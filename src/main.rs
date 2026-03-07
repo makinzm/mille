@@ -11,7 +11,10 @@ use mille::infrastructure::resolver::go::GoResolver;
 use mille::infrastructure::resolver::python::PythonResolver;
 use mille::infrastructure::resolver::typescript::TypeScriptResolver;
 use mille::infrastructure::resolver::DispatchingResolver;
+use mille::presentation::cli::args::Format;
 use mille::presentation::cli::args::{Cli, Command};
+use mille::presentation::formatter::github_actions::format_all_ga;
+use mille::presentation::formatter::json::format_json;
 use mille::presentation::formatter::terminal::{
     format_layer_stats, format_summary, format_violation,
 };
@@ -110,7 +113,7 @@ fn strip_json_line_comments(s: &str) -> String {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Command::Check { config } => {
+        Command::Check { config, format } => {
             // Pre-load config to extract the Go module name for GoResolver.
             // NOTE: Double-load is acceptable for a CLI tool — the first load
             // extracts the module_name to construct GoResolver, the second
@@ -152,11 +155,21 @@ fn main() {
                 &resolver,
             ) {
                 Ok(result) => {
-                    for v in &result.violations {
-                        print!("{}", format_violation(v));
+                    match format {
+                        Format::Terminal => {
+                            for v in &result.violations {
+                                print!("{}", format_violation(v));
+                            }
+                            print!("{}", format_layer_stats(&result.layer_stats));
+                            print!("{}", format_summary(&result.violations));
+                        }
+                        Format::GithubActions => {
+                            print!("{}", format_all_ga(&result.violations));
+                        }
+                        Format::Json => {
+                            print!("{}", format_json(&result.violations));
+                        }
                     }
-                    print!("{}", format_layer_stats(&result.layer_stats));
-                    print!("{}", format_summary(&result.violations));
 
                     let has_error = result
                         .violations

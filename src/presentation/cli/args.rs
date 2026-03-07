@@ -1,4 +1,15 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+/// Output format for `mille check`.
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
+pub enum Format {
+    /// Human-readable terminal output (default)
+    Terminal,
+    /// JSON output
+    Json,
+    /// GitHub Actions annotation format (`::error file=...,line=N::msg`)
+    GithubActions,
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -18,6 +29,9 @@ pub enum Command {
         /// Path to mille.toml (default: ./mille.toml)
         #[arg(long, default_value = "mille.toml")]
         config: String,
+        /// Output format: terminal (default), json, github-actions
+        #[arg(long, value_enum, default_value_t = Format::Terminal)]
+        format: Format,
     },
 }
 
@@ -29,7 +43,7 @@ mod tests {
     fn test_parse_check_uses_default_config() {
         let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
         match cli.command {
-            Command::Check { config } => assert_eq!(config, "mille.toml"),
+            Command::Check { config, .. } => assert_eq!(config, "mille.toml"),
         }
     }
 
@@ -37,12 +51,36 @@ mod tests {
     fn test_parse_check_with_custom_config() {
         let cli = Cli::try_parse_from(["mille", "check", "--config", "custom.toml"]).unwrap();
         match cli.command {
-            Command::Check { config } => assert_eq!(config, "custom.toml"),
+            Command::Check { config, .. } => assert_eq!(config, "custom.toml"),
         }
     }
 
     #[test]
     fn test_parse_unknown_subcommand_returns_error() {
         assert!(Cli::try_parse_from(["mille", "unknown"]).is_err());
+    }
+
+    #[test]
+    fn test_parse_format_defaults_to_terminal() {
+        let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
+        match cli.command {
+            Command::Check { format, .. } => assert_eq!(format, Format::Terminal),
+        }
+    }
+
+    #[test]
+    fn test_parse_format_github_actions() {
+        let cli = Cli::try_parse_from(["mille", "check", "--format", "github-actions"]).unwrap();
+        match cli.command {
+            Command::Check { format, .. } => assert_eq!(format, Format::GithubActions),
+        }
+    }
+
+    #[test]
+    fn test_parse_format_json() {
+        let cli = Cli::try_parse_from(["mille", "check", "--format", "json"]).unwrap();
+        match cli.command {
+            Command::Check { format, .. } => assert_eq!(format, Format::Json),
+        }
     }
 }
