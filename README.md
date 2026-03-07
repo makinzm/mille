@@ -1,32 +1,61 @@
 # mille
 
-> Architecture Checker — static analysis CLI for layered architecture rules
+> Like a mille crêpe — your architecture, one clean layer at a time.
 
-`mille` is a CLI tool that enforces **dependency rules for layered architectures** (Clean Architecture, Onion Architecture, Hexagonal Architecture, etc.).
+```
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  presentation
+  · · · · · · · · · · · · · · · · · ·  (deps only flow inward)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  infrastructure
+  · · · · · · · · · · · · · · · · · ·
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  usecase
+  · · · · · · · · · · · · · · · · · ·
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  domain
+```
 
-It is implemented in Rust, supports multiple languages from a single TOML config, and is designed to run in CI/CD pipelines.
+`mille` is a static analysis CLI that enforces **dependency rules for layered architectures** — Clean Architecture, Onion Architecture, Hexagonal Architecture, and more.
 
-## Features
+One TOML config. Rust-powered. CI-ready. Supports multiple languages from a single config file.
 
-| Feature | Status |
-|---|---|
-| Internal layer dependency check (`dependency_mode`) | ✅ |
-| External library dependency check (`external_mode`) | ✅ |
-| DI entrypoint method call check (`allow_call_patterns`) | ✅ |
-| Rust support | ✅ |
-| Go support | ✅ |
-| Python support | ✅ |
-| TypeScript / JavaScript support | ✅ |
+## What it checks
 
-## How to Install
+| Check | Rust | Go | TypeScript | JavaScript | Python |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### cargo (Rust users)
+## Install
+
+### cargo
 
 ```sh
 cargo install mille
 ```
 
-### pip / uv (Python users)
+### npm
+
+```sh
+npm install -g @makinzm/mille
+mille check
+```
+
+Or without installing globally:
+
+```sh
+npx @makinzm/mille check
+```
+
+Requires Node.js ≥ 18. Bundles `mille.wasm` — no native compilation needed.
+
+### go install
+
+```sh
+go install github.com/makinzm/mille/packages/go/mille@latest
+```
+
+Embeds `mille.wasm` via [wazero](https://wazero.io/) — fully self-contained binary.
+
+### pip / uv
 
 ```sh
 # uv (recommended)
@@ -38,34 +67,9 @@ pip install mille
 mille check
 ```
 
-The Python package is a native extension built with [maturin](https://github.com/PyO3/maturin) (PyO3). It provides both a CLI (`mille check`) and a Python API (`import mille; mille.check(...)`).
+### Binary download
 
-### npm (Node.js users)
-
-```sh
-npm install -g @makinzm/mille
-mille check
-```
-
-Or use it without installing globally:
-
-```sh
-npx @makinzm/mille check
-```
-
-Requires Node.js ≥ 18. The npm package bundles `mille.wasm` (the compiled Rust core) and runs it via Node.js's built-in `node:wasi` module — no native compilation or network access required at install time.
-
-### go install
-
-```sh
-go install github.com/makinzm/mille/packages/go/mille@latest
-```
-
-The Go wrapper embeds `mille.wasm` (the compiled Rust core) and runs it via [wazero](https://wazero.io/) — a zero-dependency WebAssembly runtime. No network access or caching required; the binary is fully self-contained.
-
-### Direct binary download
-
-Pre-built binaries for each platform are available on [GitHub Releases](https://github.com/makinzm/mille/releases):
+Pre-built binaries are on [GitHub Releases](https://github.com/makinzm/mille/releases):
 
 | Platform | Archive |
 |---|---|
@@ -75,19 +79,13 @@ Pre-built binaries for each platform are available on [GitHub Releases](https://
 | macOS arm64 | `mille-<version>-aarch64-apple-darwin.tar.gz` |
 | Windows x86_64 | `mille-<version>-x86_64-pc-windows-msvc.zip` |
 
-```sh
-# Example: Linux x86_64
-curl -L https://github.com/makinzm/mille/releases/latest/download/mille-<version>-x86_64-unknown-linux-gnu.tar.gz | tar xz
-./mille check
-```
-
 ## Quick Start
 
 ### 1. Create `mille.toml`
 
 Place `mille.toml` in your project root:
 
-**Rust project example:**
+**Rust:**
 
 ```toml
 [project]
@@ -132,44 +130,7 @@ external_allow  = ["clap"]
   allow_methods = ["new", "build", "create", "init", "setup"]
 ```
 
-**Python project example:**
-
-```toml
-[project]
-name      = "my-python-app"
-root      = "."
-languages = ["python"]
-
-[resolve.python]
-src_root      = "."
-package_names = ["domain", "usecase", "infrastructure"]
-
-[[layers]]
-name            = "domain"
-paths           = ["domain/**"]
-dependency_mode = "opt-in"
-allow           = []
-external_mode   = "opt-out"
-external_deny   = []
-
-[[layers]]
-name            = "usecase"
-paths           = ["usecase/**"]
-dependency_mode = "opt-in"
-allow           = ["domain"]
-external_mode   = "opt-out"
-external_deny   = []
-
-[[layers]]
-name            = "infrastructure"
-paths           = ["infrastructure/**"]
-dependency_mode = "opt-out"
-deny            = []
-external_mode   = "opt-out"
-external_deny   = []
-```
-
-**TypeScript / JavaScript project example:**
+**TypeScript / JavaScript:**
 
 ```toml
 [project]
@@ -207,7 +168,7 @@ external_deny   = []
 
 > Use `languages = ["javascript"]` for plain `.js` / `.jsx` projects (no `[resolve.typescript]` needed).
 
-**Go project example:**
+**Go:**
 
 ```toml
 [project]
@@ -243,6 +204,43 @@ dependency_mode = "opt-in"
 allow           = ["domain", "usecase", "infrastructure"]
 ```
 
+**Python:**
+
+```toml
+[project]
+name      = "my-python-app"
+root      = "."
+languages = ["python"]
+
+[resolve.python]
+src_root      = "."
+package_names = ["domain", "usecase", "infrastructure"]
+
+[[layers]]
+name            = "domain"
+paths           = ["domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+external_mode   = "opt-out"
+external_deny   = []
+
+[[layers]]
+name            = "usecase"
+paths           = ["usecase/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+external_mode   = "opt-out"
+external_deny   = []
+
+[[layers]]
+name            = "infrastructure"
+paths           = ["infrastructure/**"]
+dependency_mode = "opt-out"
+deny            = []
+external_mode   = "opt-out"
+external_deny   = []
+```
+
 ### 2. Run `mille check`
 
 ```sh
@@ -254,7 +252,7 @@ Exit codes:
 | Code | Meaning |
 |---|---|
 | `0` | No violations |
-| `1` | One or more errors detected |
+| `1` | One or more violations detected |
 | `3` | Configuration file error |
 
 ## Configuration Reference
@@ -265,24 +263,24 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | List of languages to check (e.g. `["rust", "go"]`) |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"` |
 
 ### `[[layers]]`
 
 | Key | Description |
 |---|---|
 | `name` | Layer name |
-| `paths` | Glob patterns for files belonging to this layer |
+| `paths` | Glob patterns for files in this layer |
 | `dependency_mode` | `"opt-in"` (deny all except `allow`) or `"opt-out"` (allow all except `deny`) |
-| `allow` | Layers allowed as dependencies (when `dependency_mode = "opt-in"`) |
-| `deny` | Layers forbidden as dependencies (when `dependency_mode = "opt-out"`) |
+| `allow` | Allowed layers (when `dependency_mode = "opt-in"`) |
+| `deny` | Forbidden layers (when `dependency_mode = "opt-out"`) |
 | `external_mode` | `"opt-in"` or `"opt-out"` for external library usage |
-| `external_allow` | Regex patterns of allowed external packages (when `external_mode = "opt-in"`) |
-| `external_deny` | Regex patterns of forbidden external packages (when `external_mode = "opt-out"`) |
+| `external_allow` | Allowed external packages (when `external_mode = "opt-in"`) |
+| `external_deny` | Forbidden external packages (when `external_mode = "opt-out"`) |
 
 ### `[[layers.allow_call_patterns]]`
 
-Restricts which methods may be called on a given layer's types. Only valid on the `main` layer.
+Restricts which methods may be called on a given layer's types. Only valid on the `main` layer (or equivalent DI entrypoint).
 
 | Key | Description |
 |---|---|
@@ -293,72 +291,42 @@ Restricts which methods may be called on a given layer's types. Only valid on th
 
 | Key | Description |
 |---|---|
-| `tsconfig` | Path to `tsconfig.json`. When specified, mille reads `compilerOptions.paths` and resolves path aliases (e.g. `@/*`) as internal imports. |
+| `tsconfig` | Path to `tsconfig.json`. mille reads `compilerOptions.paths` and resolves path aliases (e.g. `@/*`) as internal imports. |
 
 **How TypeScript / JavaScript imports are classified:**
 
 | Import | Classification |
 |---|---|
-| `import X from "./module"` (starts with `./`) | Internal |
-| `import X from "../module"` (starts with `../`) | Internal |
+| `import X from "./module"` | Internal |
+| `import X from "../module"` | Internal |
 | `import X from "@/module"` (path alias in `tsconfig.json`) | Internal |
-| `import X from "react"` (npm package) | External |
-| `import fs from "node:fs"` (Node.js built-in) | External |
-
-For relative imports, mille resolves the path from the importing file and matches it against layer glob patterns. For example, `import { User } from "../domain/user"` in `usecase/user_usecase.ts` resolves to `domain/user`, matching the layer glob `domain/**`.
-
-For path aliases, mille expands the alias using `compilerOptions.paths` and treats the result as an internal import. For example, with `"@/*": ["./src/*"]`, `import { User } from "@/domain/user"` resolves to `src/domain/user`.
+| `import X from "react"` | External |
+| `import fs from "node:fs"` | External |
 
 ### `[resolve.go]`
 
 | Key | Description |
 |---|---|
-| `module_name` | Go module name (matches the module path in `go.mod`) |
+| `module_name` | Go module name (matches `go.mod`) |
 
 ### `[resolve.python]`
 
 | Key | Description |
 |---|---|
 | `src_root` | Root directory of the Python source tree (relative to `mille.toml`) |
-| `package_names` | List of your own package names (used to classify absolute imports as internal). e.g. `["domain", "usecase", "infrastructure"]` |
+| `package_names` | Your package names — imports starting with these are classified as internal. e.g. `["domain", "usecase"]` |
 
 **How Python imports are classified:**
 
 | Import | Classification |
 |---|---|
 | `from .sibling import X` (relative) | Internal |
-| `import domain.entity` (matches a `package_names` entry) | Internal |
-| `import os`, `import sqlalchemy` (others) | External |
-
-## Python API
-
-In addition to the CLI, the Python package exposes a programmatic API:
-
-```python
-import mille
-
-# Run architecture check and get a result object
-result = mille.check("path/to/mille.toml")  # defaults to "mille.toml"
-
-print(f"violations: {len(result.violations)}")
-for v in result.violations:
-    print(f"  {v.file}:{v.line}  {v.from_layer} -> {v.to_layer}  ({v.import_path})")
-
-for stat in result.layer_stats:
-    print(f"  {stat.name}: {stat.file_count} file(s), {stat.violation_count} violation(s)")
-```
-
-**Types exposed:**
-
-| Class | Attributes |
-|---|---|
-| `CheckResult` | `violations: list[Violation]`, `layer_stats: list[LayerStat]` |
-| `Violation` | `file`, `line`, `from_layer`, `to_layer`, `import_path`, `kind` |
-| `LayerStat` | `name`, `file_count`, `violation_count` |
+| `import domain.entity` (matches `package_names`) | Internal |
+| `import os`, `import sqlalchemy` | External |
 
 ## How it Works
 
-mille uses [tree-sitter](https://tree-sitter.github.io/) for AST-based import extraction — no regex heuristics. The core engine is language-agnostic; language-specific logic is isolated to the `parser` and `resolver` layers.
+mille uses [tree-sitter](https://tree-sitter.github.io/) for AST-based import extraction — no regex heuristics.
 
 ```
 mille.toml
@@ -366,7 +334,7 @@ mille.toml
     ▼
 Layer definitions
     │
-Source files (*.rs, *.go, *.py, ...)
+Source files (*.rs, *.go, *.py, *.ts, *.js, ...)
     │ tree-sitter parse
     ▼
 RawImport list
