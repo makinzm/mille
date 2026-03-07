@@ -13,10 +13,57 @@ use mille::presentation::formatter::terminal::{
     format_layer_stats, format_summary, format_violation,
 };
 use mille::usecase::check_architecture;
+use mille::usecase::init;
 
 fn main() {
     let cli = Cli::parse();
     match cli.command {
+        Command::Init { output, force } => {
+            let cwd = std::env::current_dir()
+                .expect("cannot determine current directory")
+                .to_string_lossy()
+                .to_string();
+
+            let output_path = std::path::Path::new(&output);
+
+            // Guard: refuse to overwrite unless --force is set
+            if output_path.exists() && !force {
+                eprintln!(
+                    "Error: '{}' already exists. Use --force to overwrite.",
+                    output
+                );
+                std::process::exit(1);
+            }
+
+            let project_name = std::path::Path::new(&cwd)
+                .file_name()
+                .unwrap_or(std::ffi::OsStr::new("project"))
+                .to_string_lossy()
+                .to_string();
+
+            let languages = init::detect_languages(&cwd);
+            let layers = init::scan_layers(&cwd);
+
+            println!("Detected languages: {}", languages.join(", "));
+            println!(
+                "Detected layers: {}",
+                layers
+                    .iter()
+                    .map(|l| l.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+
+            let toml_content = init::generate_toml(&project_name, ".", &languages, &layers);
+
+            match std::fs::write(output_path, &toml_content) {
+                Ok(_) => println!("Generated '{}'", output),
+                Err(e) => {
+                    eprintln!("Error: failed to write '{}': {}", output, e);
+                    std::process::exit(1);
+                }
+            }
+        }
         Command::Check { config, format } => {
             // Pre-load config to build the resolver, then pass path to check().
             // NOTE: Double-load is acceptable for a CLI tool.

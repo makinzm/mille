@@ -33,6 +33,15 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = Format::Terminal)]
         format: Format,
     },
+    /// Scan the project and generate a mille.toml configuration file.
+    Init {
+        /// Output path for the generated config (default: mille.toml)
+        #[arg(long, default_value = "mille.toml")]
+        output: String,
+        /// Overwrite existing file without prompting
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
 }
 
 #[cfg(test)]
@@ -111,5 +120,35 @@ mod tests {
     fn test_parse_dashdash_help_displays_help() {
         let err = Cli::try_parse_from(["mille", "--help"]).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_parse_init_default_output() {
+        let cli = Cli::try_parse_from(["mille", "init"]).unwrap();
+        match cli.command {
+            Command::Init { output, force } => {
+                assert_eq!(output, "mille.toml");
+                assert!(!force);
+            }
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_custom_output() {
+        let cli = Cli::try_parse_from(["mille", "init", "--output", "custom.toml"]).unwrap();
+        match cli.command {
+            Command::Init { output, .. } => assert_eq!(output, "custom.toml"),
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_force_flag() {
+        let cli = Cli::try_parse_from(["mille", "init", "--force"]).unwrap();
+        match cli.command {
+            Command::Init { force, .. } => assert!(force),
+            _ => panic!("expected Init command"),
+        }
     }
 }
