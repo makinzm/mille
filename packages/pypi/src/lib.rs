@@ -1,10 +1,7 @@
 use pyo3::prelude::*;
 
 use mille_core::{
-    domain::{
-        entity::violation::Severity,
-        repository::config_repository::ConfigRepository,
-    },
+    domain::repository::config_repository::ConfigRepository,
     infrastructure::{
         parser::DispatchingParser,
         repository::{
@@ -13,7 +10,6 @@ use mille_core::{
         },
         resolver::DispatchingResolver,
     },
-    presentation::formatter::terminal::{format_layer_stats, format_summary, format_violation},
     usecase::check_architecture,
 };
 
@@ -113,41 +109,12 @@ fn check(config_path: &str) -> PyResult<CheckResult> {
 
 /// CLI entry point — called by the `mille` script installed by pip.
 ///
-/// Reads sys.argv, runs `mille check [--config <path>]`, prints results,
-/// and exits with the appropriate code (0 / 1 / 3).
+/// Delegates entirely to the shared [`mille_core::runner::run_cli`] so that
+/// any new subcommand (e.g. `mille init`) is automatically available without
+/// changes to this file.
 #[pyfunction]
 fn _main() {
-    let args: Vec<String> = std::env::args().collect();
-
-    // Find --config <path> anywhere in the args (after optional "check")
-    let config_path = args
-        .windows(2)
-        .find(|w| w[0] == "--config" || w[0] == "-c")
-        .map(|w| w[1].clone())
-        .unwrap_or_else(|| "mille.toml".to_string());
-
-    match wire_and_check(&config_path) {
-        Ok(result) => {
-            for v in &result.violations {
-                print!("{}", format_violation(v));
-            }
-            print!("{}", format_layer_stats(&result.layer_stats));
-            print!("{}", format_summary(&result.violations));
-
-            let has_error = result
-                .violations
-                .iter()
-                .any(|v| v.severity == Severity::Error);
-
-            if has_error {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            std::process::exit(3);
-        }
-    }
+    mille_core::runner::run_cli();
 }
 
 // ---------------------------------------------------------------------------

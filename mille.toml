@@ -46,7 +46,7 @@ external_allow = ["clap"]
 
   [[layers.allow_call_patterns]]
   callee_layer = "usecase"
-  allow_methods = ["check"]
+  allow_methods = ["check", "detect_languages", "infer_layers", "generate_toml", "is_excluded_dir"]
 
   [[layers.allow_call_patterns]]
   callee_layer = "presentation"

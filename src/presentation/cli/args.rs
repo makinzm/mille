@@ -33,6 +33,19 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = Format::Terminal)]
         format: Format,
     },
+    /// Scan the project and generate a mille.toml configuration file.
+    Init {
+        /// Output path for the generated config (default: mille.toml)
+        #[arg(long, default_value = "mille.toml")]
+        output: String,
+        /// Overwrite existing file without prompting
+        #[arg(long, default_value_t = false)]
+        force: bool,
+        /// Layer detection depth from project root (auto-detected if not set).
+        /// Example: --depth 2 for src/domain, src/usecase structure.
+        #[arg(long)]
+        depth: Option<usize>,
+    },
 }
 
 #[cfg(test)]
@@ -45,6 +58,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
         match cli.command {
             Command::Check { config, .. } => assert_eq!(config, "mille.toml"),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -53,6 +67,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check", "--config", "custom.toml"]).unwrap();
         match cli.command {
             Command::Check { config, .. } => assert_eq!(config, "custom.toml"),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -66,6 +81,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::Terminal),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -74,6 +90,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check", "--format", "github-actions"]).unwrap();
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::GithubActions),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -82,6 +99,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check", "--format", "json"]).unwrap();
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::Json),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -111,5 +129,53 @@ mod tests {
     fn test_parse_dashdash_help_displays_help() {
         let err = Cli::try_parse_from(["mille", "--help"]).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_parse_init_default_output() {
+        let cli = Cli::try_parse_from(["mille", "init"]).unwrap();
+        match cli.command {
+            Command::Init { output, force, .. } => {
+                assert_eq!(output, "mille.toml");
+                assert!(!force);
+            }
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_custom_output() {
+        let cli = Cli::try_parse_from(["mille", "init", "--output", "custom.toml"]).unwrap();
+        match cli.command {
+            Command::Init { output, .. } => assert_eq!(output, "custom.toml"),
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_force_flag() {
+        let cli = Cli::try_parse_from(["mille", "init", "--force"]).unwrap();
+        match cli.command {
+            Command::Init { force, .. } => assert!(force),
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_depth_flag() {
+        let cli = Cli::try_parse_from(["mille", "init", "--depth", "2"]).unwrap();
+        match cli.command {
+            Command::Init { depth, .. } => assert_eq!(depth, Some(2)),
+            _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_depth_defaults_to_none() {
+        let cli = Cli::try_parse_from(["mille", "init"]).unwrap();
+        match cli.command {
+            Command::Init { depth, .. } => assert_eq!(depth, None),
+            _ => panic!("expected Init command"),
+        }
     }
 }
