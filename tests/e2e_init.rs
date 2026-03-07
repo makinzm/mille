@@ -204,6 +204,50 @@ fn test_init_with_depth_flag() {
 }
 
 #[test]
+fn test_init_depth3_disambiguates_entity_layers() {
+    let tmp = TempDir::new().unwrap();
+    // Two "entity" dirs with different parents
+    make_file(
+        tmp.path(),
+        "src/domain/entity/user.rs",
+        "pub struct User { pub id: u64 }",
+    );
+    make_file(
+        tmp.path(),
+        "src/infrastructure/entity/model.rs",
+        "use crate::domain::entity::User;",
+    );
+
+    let out = mille_init(tmp.path(), &["--depth", "3"]);
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "mille init --depth 3 should exit 0\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    let toml_path = tmp.path().join("mille.toml");
+    let content = fs::read_to_string(&toml_path).unwrap();
+
+    assert!(
+        content.contains("\"domain_entity\""),
+        "should have domain_entity layer\n{}",
+        content
+    );
+    assert!(
+        content.contains("\"infrastructure_entity\""),
+        "should have infrastructure_entity layer\n{}",
+        content
+    );
+    assert!(
+        !content.contains("name = \"entity\""),
+        "plain 'entity' layer should not exist when parents differ\n{}",
+        content
+    );
+}
+
+#[test]
 fn test_init_existing_file_with_force_overwrites() {
     let tmp = TempDir::new().unwrap();
     let existing = tmp.path().join("mille.toml");

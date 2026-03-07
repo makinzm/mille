@@ -526,6 +526,76 @@ mod tests {
     }
 
     #[test]
+    fn test_infer_layers_disambiguates_same_name_different_parent() {
+        // domain/entity and infrastructure/entity → different parents → separate layers
+        let mut analyses = BTreeMap::new();
+        analyses.insert(
+            "src/domain/entity".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: BTreeSet::new(),
+                file_count: 2,
+            },
+        );
+        analyses.insert(
+            "src/infrastructure/entity".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: BTreeSet::new(),
+                file_count: 2,
+            },
+        );
+        let layers = infer_layers(&analyses);
+        assert_eq!(layers.len(), 2, "different parents → two separate layers");
+        let names: Vec<&str> = layers.iter().map(|l| l.name.as_str()).collect();
+        assert!(
+            names.contains(&"domain_entity"),
+            "expected domain_entity, got {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"infrastructure_entity"),
+            "expected infrastructure_entity, got {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_infer_layers_allow_uses_qualified_name() {
+        // infrastructure/entity depends on domain/entity
+        // → allow should reference "domain_entity", not just "entity"
+        let mut analyses = BTreeMap::new();
+        analyses.insert(
+            "src/domain/entity".to_string(),
+            DirAnalysis {
+                internal_deps: BTreeSet::new(),
+                external_pkgs: BTreeSet::new(),
+                file_count: 1,
+            },
+        );
+        let mut infra_deps = BTreeSet::new();
+        infra_deps.insert("src/domain/entity".to_string());
+        analyses.insert(
+            "src/infrastructure/entity".to_string(),
+            DirAnalysis {
+                internal_deps: infra_deps,
+                external_pkgs: BTreeSet::new(),
+                file_count: 1,
+            },
+        );
+        let layers = infer_layers(&analyses);
+        let infra = layers
+            .iter()
+            .find(|l| l.name == "infrastructure_entity")
+            .expect("infrastructure_entity layer should exist");
+        assert!(
+            infra.allow.contains(&"domain_entity".to_string()),
+            "allow should use qualified name 'domain_entity', got {:?}",
+            infra.allow
+        );
+    }
+
+    #[test]
     fn test_infer_layers_collects_external_deps() {
         let mut analyses = BTreeMap::new();
         let mut ext = BTreeSet::new();
