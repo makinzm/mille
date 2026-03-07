@@ -11,12 +11,7 @@ use mille_core::{
             fs_source_file_repository::FsSourceFileRepository,
             toml_config_repository::TomlConfigRepository,
         },
-        resolver::{
-            go::GoResolver,
-            python::PythonResolver,
-            typescript::TypeScriptResolver,
-            DispatchingResolver,
-        },
+        resolver::DispatchingResolver,
     },
     presentation::formatter::terminal::{format_layer_stats, format_summary, format_violation},
     usecase::check_architecture,
@@ -72,25 +67,8 @@ fn wire_and_check(config_path: &str) -> Result<check_architecture::CheckResult, 
         .load(config_path)
         .map_err(|e| e.to_string())?;
 
-    let go_module = app_config
-        .resolve
-        .as_ref()
-        .and_then(|r| r.go.as_ref())
-        .map(|g| g.module_name.clone())
-        .unwrap_or_default();
-    let python_packages = app_config
-        .resolve
-        .as_ref()
-        .and_then(|r| r.python.as_ref())
-        .map(|p| p.package_names.clone())
-        .unwrap_or_default();
-
     let parser = DispatchingParser::new();
-    let resolver = DispatchingResolver::new(
-        GoResolver::new(go_module),
-        PythonResolver::new(python_packages),
-        TypeScriptResolver::new(),
-    );
+    let resolver = DispatchingResolver::from_config(&app_config, config_path);
 
     check_architecture::check(config_path, &config_repo, &FsSourceFileRepository, &parser, &resolver)
 }
