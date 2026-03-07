@@ -5,6 +5,15 @@ use crate::domain::repository::resolver::Resolver;
 use crate::domain::repository::source_file_repository::SourceFileRepository;
 use crate::domain::service::violation_detector::ViolationDetector;
 
+/// Returns true if `path` matches any of the given glob patterns.
+fn matches_any_glob(path: &str, patterns: &[String]) -> bool {
+    patterns.iter().any(|pat| {
+        glob::Pattern::new(pat)
+            .map(|p| p.matches(path))
+            .unwrap_or(false)
+    })
+}
+
 pub struct CheckResult {
     pub violations: Vec<Violation>,
     pub layer_stats: Vec<LayerStat>,
@@ -39,18 +48,32 @@ pub fn check(
         })
         .collect();
 
+    let ignore_paths = config
+        .ignore
+        .as_ref()
+        .map(|i| i.paths.as_slice())
+        .unwrap_or(&[]);
+    let test_patterns = config
+        .ignore
+        .as_ref()
+        .map(|i| i.test_patterns.as_slice())
+        .unwrap_or(&[]);
+
     for (idx, layer) in config.layers.iter().enumerate() {
-        let files = file_repo.collect(&layer.paths);
+        let mut files = file_repo.collect(&layer.paths);
+        files.retain(|f| !matches_any_glob(f, ignore_paths));
         layer_stats[idx].file_count = files.len();
         for file_path in &files {
             let source = std::fs::read_to_string(file_path)
                 .map_err(|e| format!("failed to read {}: {}", file_path, e))?;
             let raw = parser.parse_imports(&source, file_path);
-            all_resolved.extend(
-                raw.iter()
-                    .map(|r| resolver.resolve_for_project(r, &config.project.name)),
-            );
-            all_call_exprs.extend(parser.parse_call_exprs(&source, file_path));
+            if !matches_any_glob(file_path, test_patterns) {
+                all_resolved.extend(
+                    raw.iter()
+                        .map(|r| resolver.resolve_for_project(r, &config.project.name)),
+                );
+                all_call_exprs.extend(parser.parse_call_exprs(&source, file_path));
+            }
         }
     }
 
@@ -279,6 +302,45 @@ mod tests {
 
         assert_eq!(result.violations.len(), 0);
         assert!(result.layer_stats.iter().all(|s| s.violation_count == 0));
+    }
+
+    // ------------------------------------------------------------------
+    // matches_any_glob — helper
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_matches_any_glob_simple_match() {
+        assert!(matches_any_glob(
+            "src/mock/foo.rs",
+            &["src/mock/**".to_string()]
+        ));
+    }
+
+    #[test]
+    fn test_matches_any_glob_no_match() {
+        assert!(!matches_any_glob(
+            "src/domain/foo.rs",
+            &["src/mock/**".to_string()]
+        ));
+    }
+
+    #[test]
+    fn test_matches_any_glob_empty_patterns() {
+        assert!(!matches_any_glob("src/any/file.rs", &[]));
+    }
+
+    #[test]
+    fn test_matches_any_glob_double_star() {
+        assert!(matches_any_glob(
+            "tests/fixtures/go_sample/domain/user.go",
+            &["tests/fixtures/**".to_string()]
+        ));
+    }
+
+    #[test]
+    fn test_matches_any_glob_invalid_pattern_does_not_panic() {
+        // Invalid glob pattern must not panic — treated as non-matching.
+        assert!(!matches_any_glob("src/foo.rs", &["[invalid".to_string()]));
     }
 
     // ------------------------------------------------------------------
