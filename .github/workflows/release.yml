@@ -69,6 +69,12 @@ jobs:
         if: matrix.use_cross == true
         run: cargo install cross --locked
 
+      - name: Sync version in Cargo.toml
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+
       - name: Build with cross
         if: matrix.use_cross == true
         run: cross build --release --target ${{ matrix.target }}
@@ -141,6 +147,11 @@ jobs:
 
       - name: Install cargo-deb
         run: cargo install cargo-deb --locked
+
+      - name: Sync version in Cargo.toml
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
 
       - name: Build with cross
         if: matrix.use_cross == true
