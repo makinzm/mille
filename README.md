@@ -247,6 +247,14 @@ external_deny   = []
 mille check
 ```
 
+Output formats:
+
+```sh
+mille check                          # human-readable terminal output (default)
+mille check --format github-actions  # GitHub Actions annotations (::error file=...)
+mille check --format json            # machine-readable JSON
+```
+
 Exit codes:
 
 | Code | Meaning |
@@ -286,6 +294,26 @@ Restricts which methods may be called on a given layer's types. Only valid on th
 |---|---|
 | `callee_layer` | The layer whose methods are being restricted |
 | `allow_methods` | List of method names that are permitted |
+
+### `[ignore]`
+
+Exclude files from the architecture check entirely, or suppress violations for test/mock files.
+
+| Key | Description |
+|---|---|
+| `paths` | Glob patterns — matching files are excluded from collection and not counted in layer stats |
+| `test_patterns` | Glob patterns — matching files are still counted in layer stats but their imports are not violation-checked |
+
+```toml
+[ignore]
+paths         = ["**/mock/**", "**/generated/**", "**/testdata/**"]
+test_patterns = ["**/*_test.go", "**/*.spec.ts", "**/*.test.ts"]
+```
+
+**When to use `paths` vs `test_patterns`:**
+
+- `paths`: Files that should not be analyzed at all (generated code, vendor directories, mocks)
+- `test_patterns`: Test files that intentionally import across layers (e.g., integration tests that import both domain and infrastructure)
 
 ### `[resolve.typescript]`
 
