@@ -24,7 +24,11 @@ use mille::usecase::init::{self, DirAnalysis};
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Command::Init { output, force, depth: _ } => {
+        Command::Init {
+            output,
+            force,
+            depth,
+        } => {
             let cwd = std::env::current_dir()
                 .expect("cannot determine current directory")
                 .to_string_lossy()
@@ -52,7 +56,7 @@ fn main() {
 
             println!("Scanning imports...");
             let parser = DispatchingParser::new();
-            let analyses = scan_project(Path::new(&cwd), &parser);
+            let analyses = scan_project(Path::new(&cwd), &parser, depth);
 
             let mut layers = init::infer_layers(&analyses);
 
@@ -148,17 +152,31 @@ fn main() {
 // Project scanning — builds DirAnalysis per source directory
 // ---------------------------------------------------------------------------
 
-fn scan_project(root: &Path, parser: &DispatchingParser) -> BTreeMap<String, DirAnalysis> {
+fn scan_project(
+    root: &Path,
+    parser: &DispatchingParser,
+    depth: Option<usize>,
+) -> BTreeMap<String, DirAnalysis> {
     // Pass 1: collect all directories that contain at least one source file
-    let mut known_dirs: BTreeSet<String> = BTreeSet::new();
-    collect_source_dirs(root, root, &mut known_dirs);
+    let mut all_source_dirs: BTreeSet<String> = BTreeSet::new();
+    collect_source_dirs(root, root, &mut all_source_dirs);
+
+    // Determine the target depth (explicit or auto-detected)
+    let target_depth = depth.unwrap_or_else(|| auto_detect_layer_depth(&all_source_dirs));
+    println!("Using layer depth: {}", target_depth);
+
+    // Compute layer dirs: roll up every source dir to the target depth
+    let layer_dirs: BTreeSet<String> = all_source_dirs
+        .iter()
+        .filter_map(|d| ancestor_at_depth(d, target_depth))
+        .collect();
 
     // Pass 2: for each source file, parse imports and build DirAnalysis
     let mut analyses: BTreeMap<String, DirAnalysis> = BTreeMap::new();
-    for dir in &known_dirs {
+    for dir in &layer_dirs {
         analyses.insert(dir.clone(), DirAnalysis::default());
     }
-    collect_dir_imports(root, root, parser, &known_dirs, &mut analyses);
+    collect_dir_imports(root, root, parser, &layer_dirs, target_depth, &mut analyses);
 
     analyses
 }
@@ -210,7 +228,8 @@ fn collect_dir_imports(
     root: &Path,
     dir: &Path,
     parser: &DispatchingParser,
-    known_dirs: &BTreeSet<String>,
+    layer_dirs: &BTreeSet<String>,
+    target_depth: usize,
     analyses: &mut BTreeMap<String, DirAnalysis>,
 ) {
     let Ok(entries) = fs::read_dir(dir) else {
@@ -226,9 +245,9 @@ fn collect_dir_imports(
             continue;
         }
         if path.is_dir() {
-            collect_dir_imports(root, &path, parser, known_dirs, analyses);
+            collect_dir_imports(root, &path, parser, layer_dirs, target_depth, analyses);
         } else if is_source_file(&name) {
-            process_source_file(root, &path, parser, known_dirs, analyses);
+            process_source_file(root, &path, parser, layer_dirs, target_depth, analyses);
         }
     }
 }
@@ -237,7 +256,8 @@ fn process_source_file(
     root: &Path,
     file: &Path,
     parser: &DispatchingParser,
-    known_dirs: &BTreeSet<String>,
+    layer_dirs: &BTreeSet<String>,
+    target_depth: usize,
     analyses: &mut BTreeMap<String, DirAnalysis>,
 ) {
     let Ok(source) = fs::read_to_string(file) else {
@@ -252,12 +272,18 @@ fn process_source_file(
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    if dir_rel.is_empty() || !known_dirs.contains(&dir_rel) {
+    if dir_rel.is_empty() {
         return;
     }
 
+    // Roll up the immediate dir to the target layer depth
+    let layer_dir = match ancestor_at_depth(&dir_rel, target_depth) {
+        Some(d) => d,
+        None => return, // shallower than target depth → skip
+    };
+
     let imports = SourceParser::parse_imports(parser, &source, &file_rel_str);
-    let analysis = analyses.entry(dir_rel.clone()).or_default();
+    let analysis = analyses.entry(layer_dir.clone()).or_default();
     analysis.file_count += 1;
 
     for imp in &imports {
@@ -268,8 +294,8 @@ fn process_source_file(
         match classify_import_for_init(&imp.path, &file_rel_str) {
             Some(InitImport::Internal(seg)) => {
                 // Definitely internal — only add as dep if dir found; never as external
-                if let Some(dep_dir) = resolve_to_known_dir(&seg, &dir_rel, known_dirs) {
-                    if dep_dir != dir_rel {
+                if let Some(dep_dir) = resolve_to_known_dir(&seg, &layer_dir, layer_dirs) {
+                    if dep_dir != layer_dir {
                         analysis.internal_deps.insert(dep_dir);
                     }
                 }
@@ -279,8 +305,8 @@ fn process_source_file(
             }
             Some(InitImport::TryInternal(seg)) => {
                 // Try internal first; if no known dir matches, record as external pkg
-                if let Some(dep_dir) = resolve_to_known_dir(&seg, &dir_rel, known_dirs) {
-                    if dep_dir != dir_rel {
+                if let Some(dep_dir) = resolve_to_known_dir(&seg, &layer_dir, layer_dirs) {
+                    if dep_dir != layer_dir {
                         analysis.internal_deps.insert(dep_dir);
                     }
                 } else {
@@ -410,6 +436,44 @@ fn classify_py_import(path: &str) -> Option<InitImport> {
     Some(InitImport::TryInternal(seg))
 }
 
+/// Return the ancestor of `dir` at `depth` path segments, or `None` if `dir` is shallower.
+///
+/// * `"src/domain/entity", 2` → `Some("src/domain")`
+/// * `"src/domain", 2`        → `Some("src/domain")`
+/// * `"src", 2`               → `None`
+fn ancestor_at_depth(dir: &str, depth: usize) -> Option<String> {
+    let segments: Vec<&str> = dir.split('/').collect();
+    if segments.len() < depth {
+        return None;
+    }
+    Some(segments[..depth].join("/"))
+}
+
+/// Known directory names that are source-layout roots, not layers themselves.
+const SOURCE_ROOTS: &[&str] = &["src", "lib", "app", "source", "pkg", "packages"];
+
+/// Auto-detect the layer depth from the set of all source directories.
+///
+/// Tries depths 1..=6. For each depth, computes candidate layer dirs and filters
+/// out those whose base name is a known source root (e.g. `src`, `lib`).
+/// Returns the first depth that yields 2–8 candidates. Defaults to 1.
+fn auto_detect_layer_depth(all_source_dirs: &BTreeSet<String>) -> usize {
+    for depth in 1..=6 {
+        let candidates: BTreeSet<String> = all_source_dirs
+            .iter()
+            .filter_map(|d| ancestor_at_depth(d, depth))
+            .filter(|d| {
+                let base = d.split('/').next_back().unwrap_or(d.as_str());
+                !SOURCE_ROOTS.contains(&base)
+            })
+            .collect();
+        if candidates.len() >= 2 && candidates.len() <= 8 {
+            return depth;
+        }
+    }
+    1
+}
+
 /// Find a known directory whose base name matches `module_seg`.
 /// Prefers directories that share the same parent as `current_dir`.
 fn resolve_to_known_dir(
@@ -439,4 +503,71 @@ fn resolve_to_known_dir(
     }
 
     None
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ancestor_at_depth_deep_dir() {
+        assert_eq!(
+            ancestor_at_depth("src/domain/entity", 2),
+            Some("src/domain".to_string())
+        );
+    }
+
+    #[test]
+    fn test_ancestor_at_depth_exact_depth() {
+        assert_eq!(
+            ancestor_at_depth("src/domain", 2),
+            Some("src/domain".to_string())
+        );
+    }
+
+    #[test]
+    fn test_ancestor_at_depth_too_shallow() {
+        assert_eq!(ancestor_at_depth("src", 2), None);
+    }
+
+    #[test]
+    fn test_ancestor_at_depth_depth_one() {
+        assert_eq!(ancestor_at_depth("domain", 1), Some("domain".to_string()));
+    }
+
+    #[test]
+    fn test_auto_detect_layer_depth_src_prefix() {
+        // src/domain, src/usecase, src/infrastructure → depth=2
+        let dirs: BTreeSet<String> = ["src/domain", "src/usecase", "src/infrastructure"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(auto_detect_layer_depth(&dirs), 2);
+    }
+
+    #[test]
+    fn test_auto_detect_layer_depth_flat_layout() {
+        // domain, usecase, infrastructure at depth=1 → depth=1
+        let dirs: BTreeSet<String> = ["domain", "usecase", "infrastructure"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(auto_detect_layer_depth(&dirs), 1);
+    }
+
+    #[test]
+    fn test_auto_detect_layer_depth_skips_source_roots() {
+        // Only "src" at depth=1 (filtered out) → continue to depth=2
+        let dirs: BTreeSet<String> = ["src/domain", "src/usecase", "src/infrastructure"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        // depth=1 yields {"src"} → filtered → 0 candidates → skip
+        // depth=2 yields {"src/domain", "src/usecase", "src/infrastructure"} → 3 → use
+        assert_eq!(auto_detect_layer_depth(&dirs), 2);
+    }
 }
