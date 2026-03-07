@@ -4,17 +4,12 @@
 //! invokes the compiled binary, and verifies exit code + file contents.
 
 use std::fs;
-use std::path::PathBuf;
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
 
 /// Run `mille init` (plus any extra args) with `current_dir` set to `dir`.
 fn mille_init(dir: &std::path::Path, extra_args: &[&str]) -> Output {

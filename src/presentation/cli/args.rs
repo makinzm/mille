@@ -54,6 +54,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
         match cli.command {
             Command::Check { config, .. } => assert_eq!(config, "mille.toml"),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -62,6 +63,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check", "--config", "custom.toml"]).unwrap();
         match cli.command {
             Command::Check { config, .. } => assert_eq!(config, "custom.toml"),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -75,6 +77,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::Terminal),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -83,6 +86,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check", "--format", "github-actions"]).unwrap();
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::GithubActions),
+            _ => panic!("expected Check command"),
         }
     }
 
@@ -91,6 +95,7 @@ mod tests {
         let cli = Cli::try_parse_from(["mille", "check", "--format", "json"]).unwrap();
         match cli.command {
             Command::Check { format, .. } => assert_eq!(format, Format::Json),
+            _ => panic!("expected Check command"),
         }
     }
 
