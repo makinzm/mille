@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
+use crate::domain::entity::layer::{DependencyMode, LayerConfig};
+
 /// Per-directory import analysis, built externally by the infrastructure layer.
 /// This is a plain data type — no I/O here.
 #[derive(Default)]
@@ -12,15 +14,6 @@ pub struct DirAnalysis {
     pub external_pkgs: BTreeSet<String>,
     /// Number of source files in this directory.
     pub file_count: usize,
-}
-
-/// An inferred layer suggestion.
-pub struct LayerSuggestion {
-    pub name: String,
-    pub paths: Vec<String>,
-    pub dependency_mode: &'static str,
-    pub allow: Vec<String>,
-    pub external_allow: Vec<String>,
 }
 
 /// Topological sort of directories based on their internal dependency edges.
@@ -96,8 +89,8 @@ pub fn topological_sort(deps: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<St
 ///    - All sub-groups share the same parent base → one layer named `{base}`.
 ///    - Multiple different parent bases → one layer per sub-group named `{parent}_{base}`.
 ///      (e.g. domain/entity + infrastructure/entity → domain_entity + infrastructure_entity)
-/// 5. Each resulting group → one LayerSuggestion; allow list uses qualified layer names.
-pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerSuggestion> {
+/// 5. Each resulting group → one LayerConfig; allow list uses qualified layer names.
+pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig> {
     if analyses.is_empty() {
         return vec![];
     }
@@ -165,8 +158,8 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerSugges
         }
     }
 
-    // Pass 2: build LayerSuggestion for each (tier, layer_name) group.
-    let mut suggestions: Vec<LayerSuggestion> = vec![];
+    // Pass 2: build LayerConfig for each (tier, layer_name) group.
+    let mut suggestions: Vec<LayerConfig> = vec![];
 
     for tier in &tiers {
         // Group dirs by their assigned layer name within this tier
@@ -206,12 +199,16 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerSugges
                 }
             }
 
-            suggestions.push(LayerSuggestion {
+            suggestions.push(LayerConfig {
                 name,
                 paths,
-                dependency_mode: "opt-in",
+                dependency_mode: DependencyMode::OptIn,
                 allow: allow_names.into_iter().collect(),
+                deny: vec![],
+                external_mode: DependencyMode::OptIn,
                 external_allow: external_allow.into_iter().collect(),
+                external_deny: vec![],
+                allow_call_patterns: vec![],
             });
         }
     }
@@ -283,12 +280,19 @@ fn ext_to_language(ext: &str) -> Option<&'static str> {
     }
 }
 
+fn mode_str(m: DependencyMode) -> &'static str {
+    match m {
+        DependencyMode::OptIn => "opt-in",
+        DependencyMode::OptOut => "opt-out",
+    }
+}
+
 /// Generate a mille.toml config string (pure function, no side effects).
 pub fn generate_toml(
     project_name: &str,
     root: &str,
     languages: &[String],
-    layers: &[LayerSuggestion],
+    layers: &[LayerConfig],
 ) -> String {
     let mut out = String::new();
 
@@ -323,7 +327,7 @@ pub fn generate_toml(
 
         out.push_str(&format!(
             "dependency_mode = \"{}\"\n",
-            layer.dependency_mode
+            mode_str(layer.dependency_mode)
         ));
 
         if !layer.allow.is_empty() {
@@ -335,6 +339,11 @@ pub fn generate_toml(
                 .join(", ");
             out.push_str(&format!("allow = [{}]\n", allow_str));
         }
+
+        out.push_str(&format!(
+            "external_mode = \"{}\"\n",
+            mode_str(layer.external_mode)
+        ));
 
         if !layer.external_allow.is_empty() {
             let ext_str = layer
@@ -357,6 +366,7 @@ pub fn generate_toml(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::entity::layer::{DependencyMode, LayerConfig};
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::PathBuf;
@@ -664,42 +674,50 @@ mod tests {
     // generate_toml
     // ------------------------------------------------------------------
 
+    fn make_layer(name: &str, paths: Vec<&str>) -> LayerConfig {
+        LayerConfig {
+            name: name.to_string(),
+            paths: paths.into_iter().map(|p| p.to_string()).collect(),
+            dependency_mode: DependencyMode::OptIn,
+            allow: vec![],
+            deny: vec![],
+            external_mode: DependencyMode::OptIn,
+            external_allow: vec![],
+            external_deny: vec![],
+            allow_call_patterns: vec![],
+        }
+    }
+
     #[test]
     fn test_generate_toml_contains_project_section() {
-        let layers = vec![LayerSuggestion {
-            name: "domain".to_string(),
-            paths: vec!["src/domain/**".to_string()],
-            dependency_mode: "opt-in",
-            allow: vec![],
-            external_allow: vec![],
-        }];
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
         let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
         assert!(toml.contains("[project]"), "must contain [project]");
     }
 
     #[test]
     fn test_generate_toml_contains_layer_sections() {
-        let layers = vec![LayerSuggestion {
-            name: "domain".to_string(),
-            paths: vec!["src/domain/**".to_string()],
-            dependency_mode: "opt-in",
-            allow: vec![],
-            external_allow: vec![],
-        }];
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
         let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
         assert!(toml.contains("[[layers]]"), "must contain [[layers]]");
     }
 
     #[test]
-    fn test_generate_toml_with_external_allow() {
-        let layers = vec![LayerSuggestion {
-            name: "infrastructure".to_string(),
-            paths: vec!["src/infrastructure/**".to_string()],
-            dependency_mode: "opt-in",
-            allow: vec![],
-            external_allow: vec!["serde".to_string(), "tokio".to_string()],
-        }];
+    fn test_generate_toml_includes_external_mode() {
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
         let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        assert!(
+            toml.contains("external_mode = \"opt-in\""),
+            "must contain external_mode\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_with_external_allow() {
+        let mut layer = make_layer("infrastructure", vec!["src/infrastructure/**"]);
+        layer.external_allow = vec!["serde".to_string(), "tokio".to_string()];
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &[layer]);
         assert!(
             toml.contains("external_allow"),
             "must contain external_allow\n{}",
@@ -710,18 +728,11 @@ mod tests {
 
     #[test]
     fn test_generate_toml_multi_path_format() {
-        let layers = vec![LayerSuggestion {
-            name: "domain".to_string(),
-            paths: vec![
-                "apps/crawler/src/domain/**".to_string(),
-                "apps/server/src/domain/**".to_string(),
-            ],
-            dependency_mode: "opt-in",
-            allow: vec![],
-            external_allow: vec![],
-        }];
+        let layers = vec![make_layer(
+            "domain",
+            vec!["apps/crawler/src/domain/**", "apps/server/src/domain/**"],
+        )];
         let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
-        // With multiple paths, each should appear on its own line
         assert!(
             toml.contains("apps/crawler/src/domain/**"),
             "first path missing"

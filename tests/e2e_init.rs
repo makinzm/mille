@@ -94,6 +94,12 @@ fn test_init_creates_toml_from_layer_dirs() {
         "generated TOML must reference the domain layer\n{}",
         content
     );
+    // external_mode is a required field — must always be present
+    assert!(
+        content.contains("external_mode"),
+        "generated TOML must contain external_mode for every layer\n{}",
+        content
+    );
 }
 
 #[test]
