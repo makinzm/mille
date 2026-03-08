@@ -162,6 +162,61 @@ mod tests {
     }
 
     #[test]
+    fn test_resolver_monorepo_absolute_import_uses_src_root() {
+        // crawler/src/infrastructure/ にあるファイルが domain.entity をインポート
+        // → resolved path は crawler/src/domain/entity/_.py (= crawler/src/domain/** にマッチ)
+        let resolver = PythonResolver::new(packages());
+        let import = RawImport {
+            path: "domain.entity".to_string(),
+            line: 1,
+            file: "crawler/src/infrastructure/file_storage.py".to_string(),
+            kind: ImportKind::Import,
+            named_imports: vec![],
+        };
+        let resolved = resolver.resolve(&import);
+        assert_eq!(resolved.category, ImportCategory::Internal);
+        assert_eq!(
+            resolved.resolved_path,
+            Some("crawler/src/domain/entity/_.py".to_string()),
+            "モノレポでは src_root を使った resolved path が必要"
+        );
+    }
+
+    #[test]
+    fn test_resolver_root_level_file_no_src_root_unchanged() {
+        // domain/ 直下のファイルはこれまで通り (regression)
+        let resolver = PythonResolver::new(packages());
+        let import = raw_py("domain.entity"); // file = "domain/entity.py"
+        let resolved = resolver.resolve(&import);
+        assert_eq!(resolved.category, ImportCategory::Internal);
+        assert_eq!(
+            resolved.resolved_path,
+            Some("domain/entity/_.py".to_string()),
+            "ルートレベルファイルは従来通りの resolved path"
+        );
+    }
+
+    #[test]
+    fn test_resolver_src_layout_absolute_import() {
+        // src/infrastructure/ にあるファイルが domain.usecase をインポート
+        // → resolved path は src/domain/usecase/_.py
+        let resolver = PythonResolver::new(packages());
+        let import = RawImport {
+            path: "domain.usecase".to_string(),
+            line: 1,
+            file: "src/infrastructure/db.py".to_string(),
+            kind: ImportKind::Import,
+            named_imports: vec![],
+        };
+        let resolved = resolver.resolve(&import);
+        assert_eq!(resolved.category, ImportCategory::Internal);
+        assert_eq!(
+            resolved.resolved_path,
+            Some("src/domain/usecase/_.py".to_string()),
+        );
+    }
+
+    #[test]
     fn test_resolver_external_has_no_resolved_path() {
         let resolver = PythonResolver::new(packages());
         let import = raw_py("sqlalchemy");

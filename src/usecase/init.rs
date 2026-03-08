@@ -838,6 +838,64 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
+    // generate_toml — resolve.python
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_generate_toml_python_adds_resolve_section() {
+        // Python プロジェクトでは [resolve.python] package_names が出力されるべき
+        let layers = vec![
+            make_layer("domain", vec!["src/domain/**"]),
+            make_layer("usecase", vec!["src/usecase/**"]),
+            make_layer("infrastructure", vec!["src/infrastructure/**"]),
+        ];
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        assert!(
+            toml.contains("[resolve.python]"),
+            "Python プロジェクトは [resolve.python] を含むべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("package_names"),
+            "package_names フィールドが必要\n{}",
+            toml
+        );
+        assert!(toml.contains("\"domain\""), "domain が含まれるべき\n{}", toml);
+        assert!(toml.contains("\"usecase\""), "usecase が含まれるべき\n{}", toml);
+        assert!(
+            toml.contains("\"infrastructure\""),
+            "infrastructure が含まれるべき\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_rust_no_resolve_section() {
+        // Rust プロジェクトでは [resolve.python] は出力されない
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        assert!(
+            !toml.contains("[resolve.python]"),
+            "Rust プロジェクトに [resolve.python] は不要\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_python_monorepo_package_names_deduplicated() {
+        // 複数サブプロジェクトで同じ base name が重複しても一度だけ出力
+        let layers = vec![
+            make_layer("crawler_domain", vec!["crawler/src/domain/**"]),
+            make_layer("server_domain", vec!["server/src/domain/**"]),
+            make_layer("crawler_usecase", vec!["crawler/src/usecase/**"]),
+        ];
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        // "domain" は1回だけ
+        let domain_count = toml.matches("\"domain\"").count();
+        assert_eq!(domain_count, 1, "domain は重複なし。toml:\n{}", toml);
+    }
+
+    // ------------------------------------------------------------------
     // detect_languages
     // ------------------------------------------------------------------
 
