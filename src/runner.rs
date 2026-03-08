@@ -18,6 +18,7 @@ use crate::infrastructure::parser::DispatchingParser;
 use crate::infrastructure::repository::fs_source_file_repository::FsSourceFileRepository;
 use crate::infrastructure::repository::toml_config_repository::TomlConfigRepository;
 use crate::infrastructure::resolver::DispatchingResolver;
+use crate::presentation::cli::args::AnalyzeFormat;
 use crate::presentation::cli::args::Format;
 use crate::presentation::cli::args::{Cli, Command};
 use crate::presentation::formatter::github_actions::format_all_ga;
@@ -25,6 +26,7 @@ use crate::presentation::formatter::json::format_json;
 use crate::presentation::formatter::terminal::{
     format_layer_stats, format_summary, format_violation,
 };
+use crate::usecase::analyze;
 use crate::usecase::check_architecture;
 use crate::usecase::init::{self, DirAnalysis};
 
@@ -52,6 +54,34 @@ where
 
 fn run_cli_inner(cli: Cli) {
     match cli.command {
+        Command::Analyze { config, format } => {
+            let config_repo = TomlConfigRepository;
+            let app_config = match config_repo.load(&config) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(3);
+                }
+            };
+
+            let parser = DispatchingParser::new();
+            let resolver = DispatchingResolver::from_config(&app_config, &config);
+
+            match analyze::analyze(&config, &config_repo, &FsSourceFileRepository, &parser, &resolver) {
+                Ok(result) => {
+                    match format {
+                        AnalyzeFormat::Terminal => todo!(),
+                        AnalyzeFormat::Json => todo!(),
+                        AnalyzeFormat::Dot => todo!(),
+                        AnalyzeFormat::Svg => todo!(),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(3);
+                }
+            }
+        }
         Command::Init {
             output,
             force,
