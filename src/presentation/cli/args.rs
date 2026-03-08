@@ -54,10 +54,10 @@ pub enum Command {
         /// Output format: terminal (default), json, github-actions
         #[arg(long, value_enum, default_value_t = Format::Terminal)]
         format: Format,
-        /// Exit with code 1 when violations at this severity or above are found.
-        /// Default: exit 1 only on errors. Use --fail-on warning to also fail on warnings.
-        #[arg(long, value_enum)]
-        fail_on: Option<FailOn>,
+        /// Minimum severity that causes exit code 1. Defaults to "error".
+        /// Use --fail-on warning to also fail on warnings.
+        #[arg(long, value_enum, default_value_t = FailOn::Error)]
+        fail_on: FailOn,
     },
     /// Visualize the dependency graph without applying rules.
     Analyze {
@@ -221,7 +221,7 @@ mod tests {
     fn test_parse_fail_on_warning() {
         let cli = Cli::try_parse_from(["mille", "check", "--fail-on", "warning"]).unwrap();
         match cli.command {
-            Command::Check { fail_on, .. } => assert_eq!(fail_on, Some(FailOn::Warning)),
+            Command::Check { fail_on, .. } => assert_eq!(fail_on, FailOn::Warning),
             _ => panic!("expected Check command"),
         }
     }
@@ -230,16 +230,16 @@ mod tests {
     fn test_parse_fail_on_error() {
         let cli = Cli::try_parse_from(["mille", "check", "--fail-on", "error"]).unwrap();
         match cli.command {
-            Command::Check { fail_on, .. } => assert_eq!(fail_on, Some(FailOn::Error)),
+            Command::Check { fail_on, .. } => assert_eq!(fail_on, FailOn::Error),
             _ => panic!("expected Check command"),
         }
     }
 
     #[test]
-    fn test_parse_fail_on_defaults_to_none() {
+    fn test_parse_fail_on_defaults_to_error() {
         let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
         match cli.command {
-            Command::Check { fail_on, .. } => assert_eq!(fail_on, None),
+            Command::Check { fail_on, .. } => assert_eq!(fail_on, FailOn::Error),
             _ => panic!("expected Check command"),
         }
     }

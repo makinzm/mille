@@ -228,11 +228,11 @@ fn run_cli_inner(cli: Cli) {
 
                     let should_fail = match fail_on {
                         // --fail-on warning: exit 1 for any violation (error or warning)
-                        Some(FailOn::Warning) => result.violations.iter().any(|v| {
+                        FailOn::Warning => result.violations.iter().any(|v| {
                             v.severity == Severity::Error || v.severity == Severity::Warning
                         }),
-                        // default / --fail-on error: exit 1 only for errors
-                        _ => result
+                        // --fail-on error (default): exit 1 only for errors
+                        FailOn::Error => result
                             .violations
                             .iter()
                             .any(|v| v.severity == Severity::Error),
