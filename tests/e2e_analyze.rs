@@ -328,10 +328,7 @@ fn test_analyze_output_svg_creates_file() {
     setup_fixture(&tmp);
 
     let out_path = tmp.path().join("graph.svg");
-    let out = mille_analyze(
-        tmp.path(),
-        &["--format", "svg", "--output", "graph.svg"],
-    );
+    let out = mille_analyze(tmp.path(), &["--format", "svg", "--output", "graph.svg"]);
     assert_eq!(
         exit_code(&out),
         0,
@@ -350,14 +347,14 @@ fn test_analyze_output_json_creates_file() {
     setup_fixture(&tmp);
 
     let out_path = tmp.path().join("graph.json");
-    let out = mille_analyze(
-        tmp.path(),
-        &["--format", "json", "--output", "graph.json"],
-    );
+    let out = mille_analyze(tmp.path(), &["--format", "json", "--output", "graph.json"]);
     assert_eq!(exit_code(&out), 0, "must exit 0\nstderr:\n{}", stderr(&out));
     assert!(out_path.exists(), "graph.json must be created");
     let content = fs::read_to_string(&out_path).unwrap();
-    assert!(content.contains("\"nodes\""), "file must contain JSON nodes key");
+    assert!(
+        content.contains("\"nodes\""),
+        "file must contain JSON nodes key"
+    );
 }
 
 #[test]
@@ -366,14 +363,14 @@ fn test_analyze_output_dot_creates_file() {
     setup_fixture(&tmp);
 
     let out_path = tmp.path().join("graph.dot");
-    let out = mille_analyze(
-        tmp.path(),
-        &["--format", "dot", "--output", "graph.dot"],
-    );
+    let out = mille_analyze(tmp.path(), &["--format", "dot", "--output", "graph.dot"]);
     assert_eq!(exit_code(&out), 0, "must exit 0\nstderr:\n{}", stderr(&out));
     assert!(out_path.exists(), "graph.dot must be created");
     let content = fs::read_to_string(&out_path).unwrap();
-    assert!(content.trim().starts_with("digraph"), "file must start with digraph");
+    assert!(
+        content.trim().starts_with("digraph"),
+        "file must start with digraph"
+    );
 }
 
 #[test]
@@ -384,15 +381,8 @@ fn test_analyze_output_existing_file_refused() {
     // Pre-create the output file
     fs::write(tmp.path().join("graph.svg"), "existing").unwrap();
 
-    let out = mille_analyze(
-        tmp.path(),
-        &["--format", "svg", "--output", "graph.svg"],
-    );
-    assert_ne!(
-        exit_code(&out),
-        0,
-        "must refuse to overwrite existing file"
-    );
+    let out = mille_analyze(tmp.path(), &["--format", "svg", "--output", "graph.svg"]);
+    assert_ne!(exit_code(&out), 0, "must refuse to overwrite existing file");
     // File must not be modified
     let content = fs::read_to_string(tmp.path().join("graph.svg")).unwrap();
     assert_eq!(content, "existing", "existing file must not be overwritten");
@@ -403,10 +393,7 @@ fn test_analyze_output_no_stdout_when_writing_file() {
     let tmp = TempDir::new().unwrap();
     setup_fixture(&tmp);
 
-    let out = mille_analyze(
-        tmp.path(),
-        &["--format", "svg", "--output", "graph.svg"],
-    );
+    let out = mille_analyze(tmp.path(), &["--format", "svg", "--output", "graph.svg"]);
     assert_eq!(exit_code(&out), 0, "must exit 0\nstderr:\n{}", stderr(&out));
     // stdout should be empty or only contain a success message (not the SVG content)
     let s = stdout(&out);
