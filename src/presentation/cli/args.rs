@@ -1,5 +1,14 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
+/// Threshold for exit code 1 in `mille check`.
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
+pub enum FailOn {
+    /// Exit 1 only when there are error-severity violations (default).
+    Error,
+    /// Exit 1 when there are any violations (error or warning).
+    Warning,
+}
+
 /// Output format for `mille check`.
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 pub enum Format {
@@ -45,6 +54,10 @@ pub enum Command {
         /// Output format: terminal (default), json, github-actions
         #[arg(long, value_enum, default_value_t = Format::Terminal)]
         format: Format,
+        /// Exit with code 1 when violations at this severity or above are found.
+        /// Default: exit 1 only on errors. Use --fail-on warning to also fail on warnings.
+        #[arg(long, value_enum)]
+        fail_on: Option<FailOn>,
     },
     /// Visualize the dependency graph without applying rules.
     Analyze {
@@ -201,6 +214,33 @@ mod tests {
         match cli.command {
             Command::Init { depth, .. } => assert_eq!(depth, None),
             _ => panic!("expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_fail_on_warning() {
+        let cli = Cli::try_parse_from(["mille", "check", "--fail-on", "warning"]).unwrap();
+        match cli.command {
+            Command::Check { fail_on, .. } => assert_eq!(fail_on, Some(FailOn::Warning)),
+            _ => panic!("expected Check command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_fail_on_error() {
+        let cli = Cli::try_parse_from(["mille", "check", "--fail-on", "error"]).unwrap();
+        match cli.command {
+            Command::Check { fail_on, .. } => assert_eq!(fail_on, Some(FailOn::Error)),
+            _ => panic!("expected Check command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_fail_on_defaults_to_none() {
+        let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
+        match cli.command {
+            Command::Check { fail_on, .. } => assert_eq!(fail_on, None),
+            _ => panic!("expected Check command"),
         }
     }
 }

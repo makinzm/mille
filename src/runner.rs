@@ -182,7 +182,7 @@ fn run_cli_inner(cli: Cli) {
                 }
             }
         }
-        Command::Check { config, format } => {
+        Command::Check { config, format, fail_on } => {
             // Pre-load config to build the resolver, then pass path to check().
             // NOTE: Double-load is acceptable for a CLI tool.
             let config_repo = TomlConfigRepository;

@@ -23,6 +23,7 @@ impl<'a> JsonViolation<'a> {
             ViolationKind::DependencyViolation => "dependency",
             ViolationKind::ExternalViolation => "external",
             ViolationKind::CallPatternViolation => "call_pattern",
+            ViolationKind::UnknownImport => "unknown_import",
         };
         Self {
             severity,
