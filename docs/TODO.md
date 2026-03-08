@@ -17,7 +17,7 @@
 - ✅ リリース後のバージョン自動同期（`update-version` ジョブ）— `mille --version` がリリースタグと一致
 - ✅ `--format terminal / json / github-actions` 出力フォーマット切り替え（PR 10）
 - ✅ `[ignore]` セクション — `paths` / `test_patterns` 適用（PR 12）
-- ✅ `mille init` コマンド — プロジェクトスキャンして `mille.toml` 自動生成（PR 11）
+- ✅ `mille init` コマンド — プロジェクトスキャンして `mille.toml` 自動生成（PR 11）、必須フィールド `external_mode` の生成漏れ修正済み
 - ✅ `mille analyze` — 依存グラフ可視化 `terminal / json / dot / svg`（PR 13）
 - ✅ `[severity]` — 違反種別ごとの重大度設定 + `--fail-on` オプション（PR 14）
 - ✅ `mille report external` — 外部ライブラリ依存をレイヤーごとにテーブル/JSON出力（PR 15）

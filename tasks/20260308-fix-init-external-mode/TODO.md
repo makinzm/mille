@@ -22,5 +22,5 @@
 - [ ] GREEN: `generate_toml` で `external_mode` を出力する実装
 - [ ] E2E テストに `external_mode` アサート追加
 - [ ] lefthook 通過確認
-- [ ] docs/TODO.md 更新
-- [ ] README.md 確認（変更なし）
+- [x] docs/TODO.md 更新
+- [x] README.md 確認（変更なし）
