@@ -354,6 +354,7 @@ pub fn generate_toml(
     root: &str,
     languages: &[String],
     layers: &[LayerConfig],
+    go_module_name: Option<&str>,
 ) -> String {
     let mut out = String::new();
 
@@ -367,6 +368,16 @@ pub fn generate_toml(
         .collect::<Vec<_>>()
         .join(", ");
     out.push_str(&format!("languages = [{}]\n", langs_str));
+
+    // [resolve.go] — Go プロジェクトかつ module_name が判明している場合のみ出力
+    let is_go = languages.iter().any(|l| l == "go");
+    if is_go {
+        if let Some(mn) = go_module_name.filter(|m| !m.is_empty()) {
+            out.push('\n');
+            out.push_str("[resolve.go]\n");
+            out.push_str(&format!("module_name = \"{}\"\n", mn));
+        }
+    }
 
     // Derive Python package names from layer path base directories.
     // Used for [resolve.python] and to filter internal names from external_allow.
@@ -831,21 +842,21 @@ mod tests {
     #[test]
     fn test_generate_toml_contains_project_section() {
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None);
         assert!(toml.contains("[project]"), "must contain [project]");
     }
 
     #[test]
     fn test_generate_toml_contains_layer_sections() {
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None);
         assert!(toml.contains("[[layers]]"), "must contain [[layers]]");
     }
 
     #[test]
     fn test_generate_toml_includes_external_mode() {
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None);
         assert!(
             toml.contains("external_mode = \"opt-in\""),
             "must contain external_mode\n{}",
@@ -857,7 +868,7 @@ mod tests {
     fn test_generate_toml_with_external_allow() {
         let mut layer = make_layer("infrastructure", vec!["src/infrastructure/**"]);
         layer.external_allow = vec!["serde".to_string(), "tokio".to_string()];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &[layer]);
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &[layer], None);
         assert!(
             toml.contains("external_allow"),
             "must contain external_allow\n{}",
@@ -872,7 +883,7 @@ mod tests {
             "domain",
             vec!["apps/crawler/src/domain/**", "apps/server/src/domain/**"],
         )];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None);
         assert!(
             toml.contains("apps/crawler/src/domain/**"),
             "first path missing"
@@ -895,7 +906,7 @@ mod tests {
             make_layer("usecase", vec!["src/usecase/**"]),
             make_layer("infrastructure", vec!["src/infrastructure/**"]),
         ];
-        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers, None);
         assert!(
             toml.contains("[resolve.python]"),
             "Python プロジェクトは [resolve.python] を含むべき\n{}",
@@ -927,7 +938,7 @@ mod tests {
     fn test_generate_toml_rust_no_resolve_section() {
         // Rust プロジェクトでは [resolve.python] は出力されない
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None);
         assert!(
             !toml.contains("[resolve.python]"),
             "Rust プロジェクトに [resolve.python] は不要\n{}",
@@ -943,7 +954,7 @@ mod tests {
             make_layer("server_domain", vec!["server/src/domain/**"]),
             make_layer("crawler_usecase", vec!["crawler/src/usecase/**"]),
         ];
-        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers, None);
         // "domain" は1回だけ
         let domain_count = toml.matches("\"domain\"").count();
         assert_eq!(domain_count, 1, "domain は重複なし。toml:\n{}", toml);
@@ -960,7 +971,7 @@ mod tests {
             "dataclasses".to_string(),
         ];
         let layers = vec![domain_layer];
-        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers, None);
         // "domain" は package_names に含まれるので external_allow から除外されるべき
         // abc, dataclasses は残るべき
         // external_allow の行に "domain" が含まれないことを確認
@@ -978,6 +989,63 @@ mod tests {
         assert!(
             has_abc_in_ext_allow,
             "abc は external_allow に残るべき\n{}",
+            toml
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // generate_toml — resolve.go
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_generate_toml_go_adds_resolve_section() {
+        // Go プロジェクトで module_name が渡された場合 [resolve.go] が出力される
+        let layers = vec![make_layer("domain", vec!["go/domain/**"])];
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["go".to_string()],
+            &layers,
+            Some("github.com/example/myproject"),
+        );
+        assert!(
+            toml.contains("[resolve.go]"),
+            "Go プロジェクトは [resolve.go] を含むべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("module_name = \"github.com/example/myproject\""),
+            "module_name が出力されるべき\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_go_no_resolve_without_module_name() {
+        // Go プロジェクトでも module_name が None なら [resolve.go] は出力しない
+        let layers = vec![make_layer("domain", vec!["go/domain/**"])];
+        let toml = generate_toml("myproject", ".", &["go".to_string()], &layers, None);
+        assert!(
+            !toml.contains("[resolve.go]"),
+            "module_name なしは [resolve.go] を出力しない\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_rust_no_resolve_go_section() {
+        // Rust プロジェクトでは go_module_name を渡しても [resolve.go] は出力しない
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["rust".to_string()],
+            &layers,
+            Some("github.com/example/ignored"),
+        );
+        assert!(
+            !toml.contains("[resolve.go]"),
+            "Rust プロジェクトに [resolve.go] は不要\n{}",
             toml
         );
     }

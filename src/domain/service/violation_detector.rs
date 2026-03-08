@@ -89,8 +89,16 @@ impl<'a> ViolationDetector<'a> {
                     .split('.')
                     .next()
                     .unwrap_or(&import.raw.path)
+            } else if import.raw.file.ends_with(".ts")
+                || import.raw.file.ends_with(".tsx")
+                || import.raw.file.ends_with(".js")
+                || import.raw.file.ends_with(".jsx")
+            {
+                // TypeScript/JS: "vitest/config" → "vitest", "@scope/pkg/sub" → "@scope/pkg"
+                extract_ts_package_name(&import.raw.path)
             } else {
-                // Rust/Go: "serde::Deserialize" → "serde"
+                // Rust: "serde::Deserialize" → "serde"
+                // Go: full path used as-is (no "::" separator)
                 import
                     .raw
                     .path
@@ -265,6 +273,27 @@ fn parse_severity(s: &str) -> Severity {
 /// Users write patterns as plain strings (e.g. `"github.com/foo/bar"`), no regex escaping needed.
 fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
     pattern == crate_name
+}
+
+/// Extract the npm package name from a TypeScript/JavaScript import path.
+///
+/// - Non-scoped: `"vitest/config"` → `"vitest"`, `"react"` → `"react"`
+/// - Scoped: `"@vueuse/core/utilities"` → `"@vueuse/core"`, `"@scope/pkg"` → `"@scope/pkg"`
+fn extract_ts_package_name(path: &str) -> &str {
+    if let Some(rest) = path.strip_prefix('@') {
+        // Scoped package: @scope/name[/subpath] → @scope/name
+        // Skip '@', find first slash (end of scope), then find next slash (end of name).
+        if let Some(first_slash) = rest.find('/') {
+            let after_scope = &rest[first_slash + 1..];
+            let name_end = after_scope.find('/').unwrap_or(after_scope.len());
+            &path[..1 + first_slash + 1 + name_end]
+        } else {
+            path
+        }
+    } else {
+        // Non-scoped: first segment before '/'
+        path.split('/').next().unwrap_or(path)
+    }
 }
 
 /// Extract the type/package name brought into scope by an import path.
@@ -984,6 +1013,132 @@ mod tests {
         assert_eq!(
             violations[0].to_layer, "unknown",
             "crate_name should be 'unknown'"
+        );
+    }
+
+    #[test]
+    fn test_detect_external_ts_subpath_allowed_by_package_name() {
+        // TypeScript: "vitest/config" should match external_allow = ["vitest"]
+        // crate_name extraction uses first npm segment for TS files
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &["vitest"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "vitest/config".to_string(),
+                line: 1,
+                file: "src/domain/test.ts".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+        }];
+        assert!(
+            detector.detect_external(&imports).is_empty(),
+            "vitest/config should be allowed when external_allow=[\"vitest\"]"
+        );
+    }
+
+    #[test]
+    fn test_detect_external_ts_scoped_package_allowed() {
+        // TypeScript: "@vueuse/core/utilities" should match external_allow = ["@vueuse/core"]
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &["@vueuse/core"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "@vueuse/core/utilities".to_string(),
+                line: 1,
+                file: "src/domain/component.ts".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+        }];
+        assert!(
+            detector.detect_external(&imports).is_empty(),
+            "@vueuse/core/utilities should be allowed when external_allow=[\"@vueuse/core\"]"
+        );
+    }
+
+    #[test]
+    fn test_detect_external_go_full_path_allowed() {
+        // Go: full module path used as crate_name — exact match required
+        let layers = vec![make_layer_with_external(
+            "infra",
+            &["go/infra/**"],
+            DependencyMode::OptIn,
+            &["github.com/cilium/ebpf"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "github.com/cilium/ebpf".to_string(),
+                line: 1,
+                file: "go/infra/ebpf.go".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+        }];
+        assert!(
+            detector.detect_external(&imports).is_empty(),
+            "github.com/cilium/ebpf should be allowed when exact path is in external_allow"
+        );
+    }
+
+    #[test]
+    fn test_detect_external_go_stdlib_allowed() {
+        // Go: stdlib packages ("fmt", "net/http") appear in external_allow with full path
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["go/domain/**"],
+            DependencyMode::OptIn,
+            &["fmt", "net/http"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![
+            ResolvedImport {
+                raw: RawImport {
+                    path: "fmt".to_string(),
+                    line: 1,
+                    file: "go/domain/user.go".to_string(),
+                    kind: ImportKind::Use,
+                    named_imports: vec![],
+                },
+                category: ImportCategory::External,
+                resolved_path: None,
+            },
+            ResolvedImport {
+                raw: RawImport {
+                    path: "net/http".to_string(),
+                    line: 2,
+                    file: "go/domain/user.go".to_string(),
+                    kind: ImportKind::Use,
+                    named_imports: vec![],
+                },
+                category: ImportCategory::External,
+                resolved_path: None,
+            },
+        ];
+        assert!(
+            detector.detect_external(&imports).is_empty(),
+            "fmt and net/http should be allowed when in external_allow"
         );
     }
 

@@ -207,9 +207,16 @@ fn run_cli_inner(cli: Cli) {
             let languages = init::detect_languages(&cwd);
             println!("Detected languages: {}", languages.join(", "));
 
+            // Detect Go module name from go.mod (if present)
+            let go_module_name = if languages.iter().any(|l| l == "go") {
+                detect_go_module_name(Path::new(&cwd))
+            } else {
+                None
+            };
+
             println!("Scanning imports...");
             let parser = DispatchingParser::new();
-            let analyses = scan_project(Path::new(&cwd), &parser, depth);
+            let analyses = scan_project(Path::new(&cwd), &parser, depth, go_module_name.as_deref());
 
             let mut layers = init::infer_layers(&analyses);
 
@@ -235,7 +242,13 @@ fn run_cli_inner(cli: Cli) {
                 layer.paths = layer.paths.iter().map(|p| format!("{}/**", p)).collect();
             }
 
-            let toml_content = init::generate_toml(&project_name, ".", &languages, &layers);
+            let toml_content = init::generate_toml(
+                &project_name,
+                ".",
+                &languages,
+                &layers,
+                go_module_name.as_deref(),
+            );
 
             match std::fs::write(output_path, &toml_content) {
                 Ok(_) => println!("\nGenerated '{}'", output),
@@ -313,6 +326,25 @@ fn run_cli_inner(cli: Cli) {
 }
 
 // ---------------------------------------------------------------------------
+// Go module detection
+// ---------------------------------------------------------------------------
+
+/// Read `go.mod` in `root` and return the module path declared on the `module` line.
+/// Returns `None` if `go.mod` is missing or no `module` line is found.
+fn detect_go_module_name(root: &Path) -> Option<String> {
+    let content = fs::read_to_string(root.join("go.mod")).ok()?;
+    for line in content.lines() {
+        if let Some(rest) = line.trim().strip_prefix("module ") {
+            let mn = rest.trim().to_string();
+            if !mn.is_empty() {
+                return Some(mn);
+            }
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
 // Project scanning — builds DirAnalysis per source directory
 // ---------------------------------------------------------------------------
 
@@ -320,6 +352,7 @@ fn scan_project(
     root: &Path,
     parser: &DispatchingParser,
     depth: Option<usize>,
+    go_module_name: Option<&str>,
 ) -> BTreeMap<String, DirAnalysis> {
     // Pass 1: collect all directories that contain at least one source file
     let mut all_source_dirs: BTreeSet<String> = BTreeSet::new();
@@ -340,7 +373,15 @@ fn scan_project(
     for dir in &layer_dirs {
         analyses.insert(dir.clone(), DirAnalysis::default());
     }
-    collect_dir_imports(root, root, parser, &layer_dirs, target_depth, &mut analyses);
+    collect_dir_imports(
+        root,
+        root,
+        parser,
+        &layer_dirs,
+        target_depth,
+        &mut analyses,
+        go_module_name,
+    );
 
     analyses
 }
@@ -395,6 +436,7 @@ fn collect_dir_imports(
     layer_dirs: &BTreeSet<String>,
     target_depth: usize,
     analyses: &mut BTreeMap<String, DirAnalysis>,
+    go_module_name: Option<&str>,
 ) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -409,9 +451,25 @@ fn collect_dir_imports(
             continue;
         }
         if path.is_dir() {
-            collect_dir_imports(root, &path, parser, layer_dirs, target_depth, analyses);
+            collect_dir_imports(
+                root,
+                &path,
+                parser,
+                layer_dirs,
+                target_depth,
+                analyses,
+                go_module_name,
+            );
         } else if is_source_file(&name) {
-            process_source_file(root, &path, parser, layer_dirs, target_depth, analyses);
+            process_source_file(
+                root,
+                &path,
+                parser,
+                layer_dirs,
+                target_depth,
+                analyses,
+                go_module_name,
+            );
         }
     }
 }
@@ -423,6 +481,7 @@ fn process_source_file(
     layer_dirs: &BTreeSet<String>,
     target_depth: usize,
     analyses: &mut BTreeMap<String, DirAnalysis>,
+    go_module_name: Option<&str>,
 ) {
     let Ok(source) = fs::read_to_string(file) else {
         return;
@@ -455,7 +514,7 @@ fn process_source_file(
         if imp.kind == ImportKind::Mod {
             continue;
         }
-        match classify_import_for_init(&imp.path, &file_rel_str) {
+        match classify_import_for_init(&imp.path, &file_rel_str, go_module_name) {
             Some(InitImport::Internal(seg)) => {
                 // Definitely internal — only add as dep if dir found; never as external
                 if let Some(dep_dir) = resolve_to_known_dir(&seg, &layer_dir, layer_dirs) {
@@ -482,6 +541,7 @@ fn process_source_file(
     }
 }
 
+#[derive(Debug)]
 enum InitImport {
     /// Definitely internal (e.g. Rust `crate::X`): don't add as external if dir not found.
     Internal(String),
@@ -491,7 +551,11 @@ enum InitImport {
     TryInternal(String),
 }
 
-fn classify_import_for_init(path: &str, file_path: &str) -> Option<InitImport> {
+fn classify_import_for_init(
+    path: &str,
+    file_path: &str,
+    go_module_name: Option<&str>,
+) -> Option<InitImport> {
     if file_path.ends_with(".rs") {
         classify_rust_import(path)
     } else if file_path.ends_with(".ts")
@@ -501,7 +565,7 @@ fn classify_import_for_init(path: &str, file_path: &str) -> Option<InitImport> {
     {
         classify_ts_import(path, file_path)
     } else if file_path.ends_with(".go") {
-        classify_go_import(path)
+        classify_go_import(path, go_module_name)
     } else if file_path.ends_with(".py") {
         classify_py_import(path)
     } else {
@@ -569,17 +633,30 @@ fn classify_ts_import(path: &str, _file_path: &str) -> Option<InitImport> {
     Some(InitImport::External(pkg))
 }
 
-fn classify_go_import(path: &str) -> Option<InitImport> {
-    // Go imports look like "github.com/org/repo/pkg" or "fmt", "os", etc.
-    // stdlib: no dots in the first segment
+fn classify_go_import(path: &str, module_name: Option<&str>) -> Option<InitImport> {
     let first = path.split('/').next()?;
-    if !first.contains('.') {
-        return None; // stdlib
+
+    // Internal: path starts with the project's module name (from go.mod)
+    if let Some(mn) = module_name.filter(|m| !m.is_empty()) {
+        if path == mn || path.starts_with(&format!("{}/", mn)) {
+            // Strip module prefix and take the first remaining segment as the layer dir
+            let rel = path.strip_prefix(&format!("{}/", mn)).unwrap_or(path);
+            let seg = rel.split('/').next()?.to_string();
+            return Some(InitImport::TryInternal(seg));
+        }
+        // We know the module name — anything else (including stdlib) is external.
+        // Record with the full import path so external_allow can match exactly.
+        let _ = first; // suppress unused-variable warning
+        return Some(InitImport::External(path.to_string()));
     }
-    // The last segment is the package name
-    // Try to match as internal first; if not found, record as external
-    let seg = path.split('/').last()?.to_string();
-    Some(InitImport::TryInternal(seg))
+
+    // module_name not known: use heuristic.
+    // No dot in first segment → likely stdlib; use full path so it appears in external_allow.
+    if !first.contains('.') {
+        return Some(InitImport::External(path.to_string()));
+    }
+    // External with dot in first segment: use full path for accurate matching.
+    Some(InitImport::External(path.to_string()))
 }
 
 fn classify_py_import(path: &str) -> Option<InitImport> {
@@ -866,5 +943,117 @@ mod tests {
         // depth=1 yields {"src"} → filtered → 0 candidates → skip
         // depth=2 yields {"src/domain", "src/usecase", "src/infrastructure"} → 3 → use
         assert_eq!(auto_detect_layer_depth(&dirs), 2);
+    }
+
+    // ------------------------------------------------------------------
+    // classify_go_import
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_classify_go_import_internal_with_module_name() {
+        // When module_name is known, matching imports → TryInternal with first sub-segment
+        let result = classify_go_import(
+            "github.com/example/myapp/domain",
+            Some("github.com/example/myapp"),
+        );
+        match result {
+            Some(InitImport::TryInternal(seg)) => {
+                assert_eq!(seg, "domain", "first sub-segment after module prefix");
+            }
+            other => panic!("expected TryInternal(\"domain\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_classify_go_import_stdlib_with_module_name_is_external() {
+        // When module_name is known, stdlib (no dot, no module match) → External with full path
+        let result = classify_go_import("fmt", Some("github.com/example/myapp"));
+        match result {
+            Some(InitImport::External(pkg)) => {
+                assert_eq!(pkg, "fmt");
+            }
+            other => panic!("expected External(\"fmt\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_classify_go_import_external_full_path_with_module_name() {
+        // External package → full path stored (not last segment)
+        let result = classify_go_import("github.com/cilium/ebpf", Some("github.com/example/myapp"));
+        match result {
+            Some(InitImport::External(pkg)) => {
+                assert_eq!(
+                    pkg, "github.com/cilium/ebpf",
+                    "full path must be stored for accurate matching"
+                );
+            }
+            other => panic!(
+                "expected External(\"github.com/cilium/ebpf\"), got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn test_classify_go_import_no_module_name_stdlib_is_external() {
+        // Without module_name, stdlib-like packages (no dot) → External with full path
+        let result = classify_go_import("fmt", None);
+        match result {
+            Some(InitImport::External(pkg)) => {
+                assert_eq!(pkg, "fmt");
+            }
+            other => panic!("expected External(\"fmt\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_classify_go_import_no_module_name_external_full_path() {
+        // Without module_name, external packages → External with full path
+        let result = classify_go_import("github.com/cilium/ebpf", None);
+        match result {
+            Some(InitImport::External(pkg)) => {
+                assert_eq!(pkg, "github.com/cilium/ebpf");
+            }
+            other => panic!(
+                "expected External(\"github.com/cilium/ebpf\"), got {:?}",
+                other
+            ),
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // detect_go_module_name
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_detect_go_module_name_from_go_mod() {
+        let tmp = std::env::temp_dir().join(format!("mille_go_mod_test_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(
+            tmp.join("go.mod"),
+            "module github.com/example/myapp\n\ngo 1.21\n",
+        )
+        .unwrap();
+
+        let result = detect_go_module_name(&tmp);
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert_eq!(
+            result,
+            Some("github.com/example/myapp".to_string()),
+            "module name should be extracted from go.mod"
+        );
+    }
+
+    #[test]
+    fn test_detect_go_module_name_missing_file_returns_none() {
+        let tmp = std::env::temp_dir().join(format!("mille_go_mod_missing_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        // No go.mod created
+
+        let result = detect_go_module_name(&tmp);
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert!(result.is_none(), "missing go.mod should return None");
     }
 }
