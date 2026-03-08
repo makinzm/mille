@@ -142,6 +142,36 @@ mod tests {
     }
 
     #[test]
+    fn test_collect_skips_venv_paths() {
+        // Create a temp dir with .venv/lib/fake.py — it must be excluded.
+        let tmp = std::env::temp_dir().join(format!(
+            "mille_venv_test_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(tmp.join(".venv/lib")).unwrap();
+        std::fs::write(tmp.join(".venv/lib/fake.py"), "# fake").unwrap();
+        std::fs::create_dir_all(tmp.join("src")).unwrap();
+        std::fs::write(tmp.join("src/app.py"), "# real").unwrap();
+
+        let repo = FsSourceFileRepository;
+        let pattern = format!("{}/**", tmp.to_string_lossy());
+        let files = repo.collect(&[pattern]);
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert!(
+            files.iter().all(|f| !f.contains("/.venv/")),
+            ".venv paths must be excluded, got: {:?}",
+            files
+        );
+        assert!(
+            files.iter().any(|f| f.ends_with("src/app.py")),
+            "real source file must still be collected"
+        );
+    }
+
+    #[test]
     fn test_collects_files_with_bare_glob_pattern() {
         // "*.go" should match all .go files in the current directory.
         // This is important for single-layer projects where all source files

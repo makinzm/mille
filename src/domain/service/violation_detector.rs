@@ -918,6 +918,79 @@ mod tests {
         assert!(detector.detect_external(&imports).is_empty());
     }
 
+    #[test]
+    fn test_detect_external_python_submodule_allowed() {
+        // "matplotlib.pyplot" import with external_allow=["matplotlib"] → no violation
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &["matplotlib"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "matplotlib.pyplot".to_string(),
+                line: 1,
+                file: "src/domain/chart.py".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+        }];
+        assert!(
+            detector.detect_external(&imports).is_empty(),
+            "matplotlib.pyplot should be allowed when external_allow=[\"matplotlib\"]"
+        );
+    }
+
+    #[test]
+    fn test_detect_external_python_submodule_violation() {
+        // "unknown.submodule" not in external_allow → violation
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &["matplotlib"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "unknown.submodule".to_string(),
+                line: 2,
+                file: "src/domain/chart.py".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+        }];
+        let violations = detector.detect_external(&imports);
+        assert_eq!(violations.len(), 1, "unknown.submodule must be a violation");
+        assert_eq!(violations[0].to_layer, "unknown", "crate_name should be 'unknown'");
+    }
+
+    #[test]
+    fn test_detect_external_rust_colon_still_works() {
+        // Regression: Rust "::" splitting still works after Python fix
+        let layers = vec![make_layer_with_external(
+            "infra",
+            &["src/infra/**"],
+            DependencyMode::OptIn,
+            &["serde"],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![make_external("src/infra/repo.rs", 1, "serde::Deserialize")];
+        assert!(
+            detector.detect_external(&imports).is_empty(),
+            "serde::Deserialize should be allowed for Rust files"
+        );
+    }
+
     // ------------------------------------------------------------------
     // detect_call_patterns
     // ------------------------------------------------------------------

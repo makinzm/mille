@@ -553,7 +553,8 @@ mod tests {
 
     #[test]
     fn test_infer_layers_groups_dirs_by_base_name() {
-        // Two sub-projects both have a "domain" dir → one merged layer
+        // Two sub-projects both have a "domain" dir with different parents →
+        // they must NOT be merged; each gets a distinguishing prefix.
         let mut analyses = BTreeMap::new();
         analyses.insert(
             "apps/crawler/src/domain".to_string(),
@@ -574,11 +575,55 @@ mod tests {
         let layers = infer_layers(&analyses);
         assert_eq!(
             layers.len(),
-            1,
-            "two domain dirs should merge into one layer"
+            2,
+            "two domain dirs from different sub-projects must be separate layers, got {:?}",
+            layers.iter().map(|l| &l.name).collect::<Vec<_>>()
         );
-        assert_eq!(layers[0].name, "domain");
-        assert_eq!(layers[0].paths.len(), 2);
+        let names: Vec<&str> = layers.iter().map(|l| l.name.as_str()).collect();
+        assert!(
+            names.contains(&"crawler_domain") || names.contains(&"server_domain"),
+            "layers should have distinguishing prefixes, got {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_infer_layers_separate_same_name_dirs_different_subproject() {
+        // crawler/src/domain + ingest/src/domain + server/src/domain → 3 separate layers
+        let mut analyses = BTreeMap::new();
+        for sub in &["crawler", "ingest", "server"] {
+            analyses.insert(
+                format!("apps/{}/src/domain", sub),
+                DirAnalysis {
+                    internal_deps: BTreeSet::new(),
+                    external_pkgs: BTreeSet::new(),
+                    file_count: 1,
+                },
+            );
+        }
+        let layers = infer_layers(&analyses);
+        assert_eq!(
+            layers.len(),
+            3,
+            "each sub-project domain must be a separate layer, got {:?}",
+            layers.iter().map(|l| &l.name).collect::<Vec<_>>()
+        );
+        let names: Vec<String> = layers.iter().map(|l| l.name.clone()).collect();
+        assert!(
+            names.contains(&"crawler_domain".to_string()),
+            "expected crawler_domain, got {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"ingest_domain".to_string()),
+            "expected ingest_domain, got {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"server_domain".to_string()),
+            "expected server_domain, got {:?}",
+            names
+        );
     }
 
     #[test]
