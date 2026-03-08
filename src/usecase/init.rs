@@ -368,31 +368,33 @@ pub fn generate_toml(
         .join(", ");
     out.push_str(&format!("languages = [{}]\n", langs_str));
 
-    // [resolve.python] — Python プロジェクトの場合のみ出力
-    if languages.iter().any(|l| l == "python") {
-        let mut pkg_names: BTreeSet<String> = BTreeSet::new();
-        for layer in layers {
-            for path in &layer.paths {
-                // "crawler/src/domain/**" → "domain"
-                // "src/domain/**" → "domain"
+    // Derive Python package names from layer path base directories.
+    // Used for [resolve.python] and to filter internal names from external_allow.
+    let is_python = languages.iter().any(|l| l == "python");
+    let py_pkg_names: BTreeSet<String> = if is_python {
+        layers
+            .iter()
+            .flat_map(|layer| layer.paths.iter())
+            .filter_map(|path| {
                 let p = path.trim_end_matches("/**").trim_end_matches('/');
-                if let Some(base) = p.split('/').next_back() {
-                    if is_valid_python_identifier(base) {
-                        pkg_names.insert(base.to_string());
-                    }
-                }
-            }
-        }
-        if !pkg_names.is_empty() {
-            out.push('\n');
-            out.push_str("[resolve.python]\n");
-            let names_str = pkg_names
-                .iter()
-                .map(|n| format!("\"{}\"", n))
-                .collect::<Vec<_>>()
-                .join(", ");
-            out.push_str(&format!("package_names = [{}]\n", names_str));
-        }
+                p.split('/').next_back().map(|s| s.to_string())
+            })
+            .filter(|s| is_valid_python_identifier(s))
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
+
+    // [resolve.python] — Python プロジェクトの場合のみ出力
+    if is_python && !py_pkg_names.is_empty() {
+        out.push('\n');
+        out.push_str("[resolve.python]\n");
+        let names_str = py_pkg_names
+            .iter()
+            .map(|n| format!("\"{}\"", n))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!("package_names = [{}]\n", names_str));
     }
 
     // [[layers]] sections
@@ -433,9 +435,14 @@ pub fn generate_toml(
             mode_str(layer.external_mode)
         ));
 
-        if !layer.external_allow.is_empty() {
-            let ext_str = layer
-                .external_allow
+        // Python の場合、package_names に含まれる名前は内部パッケージなので external_allow から除外
+        let filtered_external: Vec<&String> = layer
+            .external_allow
+            .iter()
+            .filter(|e| !py_pkg_names.contains(*e))
+            .collect();
+        if !filtered_external.is_empty() {
+            let ext_str = filtered_external
                 .iter()
                 .map(|e| format!("\"{}\"", e))
                 .collect::<Vec<_>>()
@@ -947,23 +954,29 @@ mod tests {
         // external_allow に package_names と同じ名前が混入しないべき
         // (mille init スキャン時に "domain.entity" が External 扱いされて domain が混入するケース)
         let mut domain_layer = make_layer("domain", vec!["src/domain/**"]);
-        domain_layer.external_allow =
-            vec!["domain".to_string(), "abc".to_string(), "dataclasses".to_string()];
+        domain_layer.external_allow = vec![
+            "domain".to_string(),
+            "abc".to_string(),
+            "dataclasses".to_string(),
+        ];
         let layers = vec![domain_layer];
         let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
         // "domain" は package_names に含まれるので external_allow から除外されるべき
         // abc, dataclasses は残るべき
-        let layer_section = toml
-            .split("[[layers]]")
-            .nth(1)
-            .unwrap_or("");
+        // external_allow の行に "domain" が含まれないことを確認
+        let has_domain_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"domain\""));
         assert!(
-            !layer_section.contains("\"domain\""),
+            !has_domain_in_ext_allow,
             "domain は external_allow に出力されるべきでない\n{}",
             toml
         );
+        let has_abc_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"abc\""));
         assert!(
-            layer_section.contains("\"abc\""),
+            has_abc_in_ext_allow,
             "abc は external_allow に残るべき\n{}",
             toml
         );

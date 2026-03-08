@@ -38,6 +38,11 @@ pub struct GoResolveConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct PythonResolveConfig {
+    /// Source root relative to project root. Optional — if omitted, mille derives it
+    /// automatically from the importing file's path and `package_names`.
+    /// NOTE: this field is currently not consumed by the resolver; the resolver always
+    /// auto-derives the source root. The field is kept for forward compatibility.
+    #[serde(default)]
     pub src_root: String,
     /// Top-level package names that are part of this project.
     /// Imports starting with any of these names are classified as Internal.
@@ -149,7 +154,11 @@ dependency_mode = "opt-in"
 external_mode = "opt-in"
 "#;
         let result = toml::from_str::<MilleConfig>(toml);
-        assert!(result.is_ok(), "src_root ありも parse できるべき: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "src_root ありも parse できるべき: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
         let py = config.resolve.unwrap().python.unwrap();
         assert_eq!(py.src_root, "src");
