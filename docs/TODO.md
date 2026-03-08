@@ -21,6 +21,7 @@
 - ✅ `mille analyze` — 依存グラフ可視化 `terminal / json / dot / svg`（PR 13）
 - ✅ `[severity]` — 違反種別ごとの重大度設定 + `--fail-on` オプション（PR 14）
 - ✅ `mille report external` — 外部ライブラリ依存をレイヤーごとにテーブル/JSON出力（PR 15）
+- ✅ `mille init` 精度改善 — 異サブプロジェクトの同名ディレクトリ分離、`.venv` スキャン除外、Python サブモジュール `external_allow` マッチング修正
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 （現在なし）

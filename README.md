@@ -114,6 +114,12 @@ Generated 'mille.toml'
 
 The generated config includes `allow` (inferred internal dependencies) and `external_allow` (detected external packages) per layer. After generating, review the config and run `mille check` to see results.
 
+**Naming in monorepos**: When multiple sub-projects contain a directory with the same name (e.g. `crawler/src/domain` and `server/src/domain`), `mille init` gives each its own layer with a distinguishing prefix (`crawler_domain`, `server_domain`). Merging is left to you.
+
+**Excluded paths**: `mille check` automatically skips `.venv`, `venv`, `node_modules`, `target`, `dist`, `build`, and similar build/dependency directories, so generated `paths` patterns like `apps/**` are safe to use.
+
+**Python submodule imports**: `external_allow = ["matplotlib"]` correctly allows both `import matplotlib` and `import matplotlib.pyplot`.
+
 ### 2. (Or) Create `mille.toml` manually
 
 Place `mille.toml` in your project root:

@@ -6,12 +6,12 @@
 
 ## タスクリスト
 
-- [ ] Fix 1: 同名ディレクトリをマージしない (`src/usecase/init.rs`)
-- [ ] Fix 2: .venv スキャン除外 (`src/infrastructure/repository/fs_source_file_repository.rs`)
-- [ ] Fix 3: Python サブモジュールの external_allow マッチング (`src/domain/service/violation_detector.rs`)
-- [ ] RED commit: テストのみ (`--no-verify`)
-- [ ] GREEN commit: 実装 (lefthook 通過)
-- [ ] REFACTOR: docs/README/TODO 更新
+- [x] Fix 1: 同名ディレクトリをマージしない (`src/usecase/init.rs`)
+- [x] Fix 2: .venv スキャン除外 (`src/infrastructure/repository/fs_source_file_repository.rs`)
+- [x] Fix 3: Python サブモジュールの external_allow マッチング (`src/domain/service/violation_detector.rs`)
+- [x] RED commit: テストのみ (`--no-verify`)
+- [x] GREEN commit: 実装 (lefthook 通過)
+- [x] REFACTOR: docs/README/TODO 更新
 - [ ] PR 作成
 
 ## 修正詳細
@@ -36,4 +36,6 @@
 
 ## 実装状況サマリー
 
-(実装後に更新)
+- Fix 1: `find_distinguishing_prefix()` 関数を追加し `infer_layers()` の Pass 1 を置き換え。同名ディレクトリが複数ある場合は必ず prefix を付けて区別する。
+- Fix 2: `has_excluded_component()` フィルターを `collect()` の全ブランチに追加。`.venv`/`venv`/ドットディレクトリを除外。
+- Fix 3: `detect_external()` で `.py` ファイルは `.` 区切り、それ以外は `::` 区切りで crate_name を抽出。
