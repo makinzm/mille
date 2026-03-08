@@ -19,6 +19,7 @@ use crate::infrastructure::repository::fs_source_file_repository::FsSourceFileRe
 use crate::infrastructure::repository::toml_config_repository::TomlConfigRepository;
 use crate::infrastructure::resolver::DispatchingResolver;
 use crate::presentation::cli::args::AnalyzeFormat;
+use crate::presentation::cli::args::FailOn;
 use crate::presentation::cli::args::Format;
 use crate::presentation::cli::args::{Cli, Command};
 use crate::presentation::formatter::github_actions::format_all_ga;
@@ -182,7 +183,11 @@ fn run_cli_inner(cli: Cli) {
                 }
             }
         }
-        Command::Check { config, format, fail_on } => {
+        Command::Check {
+            config,
+            format,
+            fail_on,
+        } => {
             // Pre-load config to build the resolver, then pass path to check().
             // NOTE: Double-load is acceptable for a CLI tool.
             let config_repo = TomlConfigRepository;
@@ -221,11 +226,18 @@ fn run_cli_inner(cli: Cli) {
                         }
                     }
 
-                    let has_error = result
-                        .violations
-                        .iter()
-                        .any(|v| v.severity == Severity::Error);
-                    if has_error {
+                    let should_fail = match fail_on {
+                        // --fail-on warning: exit 1 for any violation (error or warning)
+                        Some(FailOn::Warning) => result.violations.iter().any(|v| {
+                            v.severity == Severity::Error || v.severity == Severity::Warning
+                        }),
+                        // default / --fail-on error: exit 1 only for errors
+                        _ => result
+                            .violations
+                            .iter()
+                            .any(|v| v.severity == Severity::Error),
+                    };
+                    if should_fail {
                         std::process::exit(1);
                     }
                 }

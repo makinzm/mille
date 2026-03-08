@@ -77,10 +77,11 @@ pub fn check(
         }
     }
 
-    let detector = ViolationDetector::new(&config.layers);
+    let detector = ViolationDetector::with_severity(&config.layers, config.severity.clone());
     let mut violations = detector.detect(&all_resolved);
     violations.extend(detector.detect_external(&all_resolved));
     violations.extend(detector.detect_call_patterns(&all_call_exprs, &all_resolved));
+    violations.extend(detector.detect_unknown(&all_resolved));
 
     for stat in &mut layer_stats {
         stat.violation_count = violations

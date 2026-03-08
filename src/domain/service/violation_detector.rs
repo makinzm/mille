@@ -105,7 +105,7 @@ impl<'a> ViolationDetector<'a> {
                     to_layer: crate_name.to_string(),
                     import_path: import.raw.path.clone(),
                     kind: ViolationKind::ExternalViolation,
-                    severity: Severity::Error,
+                    severity: parse_severity(&self.severity.external_violation),
                 });
             }
         }
@@ -172,7 +172,7 @@ impl<'a> ViolationDetector<'a> {
                         to_layer: pattern.callee_layer.clone(),
                         import_path: format!("{}::{}", receiver_type, call.method),
                         kind: ViolationKind::CallPatternViolation,
-                        severity: Severity::Error,
+                        severity: parse_severity(&self.severity.call_pattern_violation),
                     });
                 }
             }
@@ -186,7 +186,26 @@ impl<'a> ViolationDetector<'a> {
     /// These are imports the resolver could not classify (e.g. ambiguous module paths).
     /// Severity is controlled by `severity.unknown_import` in mille.toml.
     pub fn detect_unknown(&self, imports: &[ResolvedImport]) -> Vec<Violation> {
-        todo!()
+        let sev = parse_severity(&self.severity.unknown_import);
+        let mut violations = Vec::new();
+        for import in imports {
+            if import.category != ImportCategory::Unknown {
+                continue;
+            }
+            let Some(from_layer) = self.find_layer_for_file(&import.raw.file) else {
+                continue;
+            };
+            violations.push(Violation {
+                file: import.raw.file.clone(),
+                line: import.raw.line,
+                from_layer: from_layer.name.clone(),
+                to_layer: String::new(),
+                import_path: import.raw.path.clone(),
+                kind: ViolationKind::UnknownImport,
+                severity: sev.clone(),
+            });
+        }
+        violations
     }
 
     /// Check whether the dependency `from → to` is permitted.
@@ -215,8 +234,19 @@ impl<'a> ViolationDetector<'a> {
             to_layer: to.name.clone(),
             import_path: import.raw.path.clone(),
             kind: ViolationKind::DependencyViolation,
-            severity: Severity::Error,
+            severity: parse_severity(&self.severity.dependency_violation),
         })
+    }
+}
+
+/// Parse a severity string from config into a `Severity` enum value.
+///
+/// Invalid or unknown strings default to `Severity::Error` (safe default).
+fn parse_severity(s: &str) -> Severity {
+    match s {
+        "warning" => Severity::Warning,
+        "info" => Severity::Info,
+        _ => Severity::Error,
     }
 }
 
@@ -1087,15 +1117,6 @@ mod tests {
     // ------------------------------------------------------------------
     // severity configuration
     // ------------------------------------------------------------------
-
-    fn warning_severity() -> SeverityConfig {
-        SeverityConfig {
-            dependency_violation: "warning".to_string(),
-            external_violation: "warning".to_string(),
-            call_pattern_violation: "warning".to_string(),
-            unknown_import: "warning".to_string(),
-        }
-    }
 
     #[test]
     fn test_detect_dependency_violation_uses_configured_warning_severity() {

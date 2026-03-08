@@ -448,10 +448,10 @@ fn test_call_pattern_violation_output_contains_method() {
     );
     let out = mille(&["check", "--config", cfg.file_name()]);
     let s = stdout(&out);
-    // The import_path is formatted as "ViolationDetector::new"
+    // The import_path is formatted as "ViolationDetector::with_severity"
     assert!(
-        s.contains("new"),
-        "violation output must mention the forbidden method 'new'\nstdout:\n{}",
+        s.contains("with_severity"),
+        "violation output must mention the forbidden method 'with_severity'\nstdout:\n{}",
         s
     );
 }
