@@ -307,12 +307,20 @@ mille check --format github-actions  # GitHub Actions annotations (::error file=
 mille check --format json            # machine-readable JSON
 ```
 
+Fail threshold:
+
+```sh
+mille check                         # exit 1 on error-severity violations only (default)
+mille check --fail-on warning       # exit 1 on any violation (error or warning)
+mille check --fail-on error         # explicit default — same as no flag
+```
+
 Exit codes:
 
 | Code | Meaning |
 |---|---|
-| `0` | No violations |
-| `1` | One or more violations detected |
+| `0` | No violations (or only warnings without `--fail-on warning`) |
+| `1` | One or more violations at the configured fail threshold |
 | `3` | Configuration file error |
 
 ## Configuration Reference
@@ -366,6 +374,27 @@ test_patterns = ["**/*_test.go", "**/*.spec.ts", "**/*.test.ts"]
 
 - `paths`: Files that should not be analyzed at all (generated code, vendor directories, mocks)
 - `test_patterns`: Test files that intentionally import across layers (e.g., integration tests that import both domain and infrastructure)
+
+### `[severity]`
+
+Control the severity level of each violation type. Violations can be `"error"`, `"warning"`, or `"info"`.
+
+| Key | Default | Description |
+|---|---|---|
+| `dependency_violation` | `"error"` | Layer dependency rule violated |
+| `external_violation` | `"error"` | External library rule violated |
+| `call_pattern_violation` | `"error"` | DI entrypoint method call rule violated |
+| `unknown_import` | `"warning"` | Import that could not be classified |
+
+```toml
+[severity]
+dependency_violation   = "warning"   # treat as warning for gradual adoption
+external_violation     = "error"
+call_pattern_violation = "error"
+unknown_import         = "warning"
+```
+
+Use `--fail-on warning` to exit 1 even for warnings when integrating into CI gradually.
 
 ### `[resolve.typescript]`
 
