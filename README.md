@@ -120,6 +120,10 @@ The generated config includes `allow` (inferred internal dependencies) and `exte
 
 **Python submodule imports**: `external_allow = ["matplotlib"]` correctly allows both `import matplotlib` and `import matplotlib.pyplot`.
 
+**Go projects**: `mille init` reads `go.mod` and generates `[resolve.go] module_name` automatically — internal module imports are classified correctly during `mille check`. External packages appear in `external_allow` with their full import paths (e.g. `"github.com/cilium/ebpf"`, `"fmt"`, `"net/http"`).
+
+**TypeScript/JavaScript subpath imports**: `external_allow = ["vitest"]` correctly allows both `import "vitest"` and `import "vitest/config"`. Scoped packages (`@scope/name/sub`) are matched by `"@scope/name"`.
+
 ### 2. (Or) Create `mille.toml` manually
 
 Place `mille.toml` in your project root:
@@ -445,7 +449,7 @@ Use `--fail-on warning` to exit 1 even for warnings when integrating into CI gra
 
 | Key | Description |
 |---|---|
-| `module_name` | Go module name (matches `go.mod`) |
+| `module_name` | Go module name (matches `go.mod`). `mille init` generates this automatically from `go.mod`. |
 
 ### `[resolve.python]`
 
