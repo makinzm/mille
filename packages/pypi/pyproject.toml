@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "mille"
-version = "0.1.0"
+version = "0.0.10"
 description = "Architecture Checker — static analysis for layered architecture rules"
 readme = "README.md"
 requires-python = ">=3.9"
