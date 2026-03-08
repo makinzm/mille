@@ -23,6 +23,7 @@ use crate::presentation::cli::args::Format;
 use crate::presentation::cli::args::{Cli, Command};
 use crate::presentation::formatter::github_actions::format_all_ga;
 use crate::presentation::formatter::json::format_json;
+use crate::presentation::formatter::svg::format_svg;
 use crate::presentation::formatter::terminal::{
     format_layer_stats, format_summary, format_violation,
 };
@@ -67,15 +68,27 @@ fn run_cli_inner(cli: Cli) {
             let parser = DispatchingParser::new();
             let resolver = DispatchingResolver::from_config(&app_config, &config);
 
-            match analyze::analyze(&config, &config_repo, &FsSourceFileRepository, &parser, &resolver) {
-                Ok(result) => {
-                    match format {
-                        AnalyzeFormat::Terminal => todo!(),
-                        AnalyzeFormat::Json => todo!(),
-                        AnalyzeFormat::Dot => todo!(),
-                        AnalyzeFormat::Svg => todo!(),
+            match analyze::analyze(
+                &config,
+                &config_repo,
+                &FsSourceFileRepository,
+                &parser,
+                &resolver,
+            ) {
+                Ok(result) => match format {
+                    AnalyzeFormat::Terminal => {
+                        print!("{}", format_analyze_terminal(&result));
                     }
-                }
+                    AnalyzeFormat::Json => {
+                        print!("{}", format_analyze_json(&result));
+                    }
+                    AnalyzeFormat::Dot => {
+                        print!("{}", format_analyze_dot(&result));
+                    }
+                    AnalyzeFormat::Svg => {
+                        print!("{}", format_svg(&result));
+                    }
+                },
                 Err(e) => {
                     eprintln!("Error: {}", e);
                     std::process::exit(3);
@@ -561,6 +574,91 @@ fn resolve_to_known_dir(
     }
 
     None
+}
+
+// ---------------------------------------------------------------------------
+// Analyze output formatters
+// ---------------------------------------------------------------------------
+
+fn format_analyze_terminal(result: &analyze::AnalyzeResult) -> String {
+    let mut buf = String::new();
+    buf.push_str(&format!(
+        "Dependency Graph ({} layers)\n\n",
+        result.nodes.len()
+    ));
+    if result.edges.is_empty() {
+        buf.push_str("  (no cross-layer dependencies detected)\n");
+    } else {
+        let max_from = result.edges.iter().map(|e| e.from.len()).max().unwrap_or(0);
+        let max_to = result.edges.iter().map(|e| e.to.len()).max().unwrap_or(0);
+        for edge in &result.edges {
+            buf.push_str(&format!(
+                "  {:<from_w$} -> {:<to_w$}  ({})\n",
+                edge.from,
+                edge.to,
+                edge.import_count,
+                from_w = max_from,
+                to_w = max_to,
+            ));
+        }
+    }
+    buf.push('\n');
+    // Layer summary table
+    let max_name = result.nodes.iter().map(|n| n.name.len()).max().unwrap_or(0);
+    for node in &result.nodes {
+        buf.push_str(&format!(
+            "  {:<name_w$}  {} file{}\n",
+            node.name,
+            node.file_count,
+            if node.file_count == 1 { "" } else { "s" },
+            name_w = max_name,
+        ));
+    }
+    buf
+}
+
+fn format_analyze_json(result: &analyze::AnalyzeResult) -> String {
+    let nodes: Vec<String> = result
+        .nodes
+        .iter()
+        .map(|n| format!(r#"{{"layer":"{}","file_count":{}}}"#, n.name, n.file_count))
+        .collect();
+    let edges: Vec<String> = result
+        .edges
+        .iter()
+        .map(|e| {
+            format!(
+                r#"{{"from":"{}","to":"{}","import_count":{}}}"#,
+                e.from, e.to, e.import_count
+            )
+        })
+        .collect();
+    format!(
+        r#"{{"nodes":[{}],"edges":[{}]}}"#,
+        nodes.join(","),
+        edges.join(",")
+    )
+}
+
+fn format_analyze_dot(result: &analyze::AnalyzeResult) -> String {
+    let mut buf = String::from("digraph mille {\n  rankdir=TB;\n");
+    for node in &result.nodes {
+        let label = format!(
+            "{}\\n{} file{}",
+            node.name,
+            node.file_count,
+            if node.file_count == 1 { "" } else { "s" }
+        );
+        buf.push_str(&format!("  \"{}\" [label=\"{}\"];\n", node.name, label));
+    }
+    for edge in &result.edges {
+        buf.push_str(&format!(
+            "  \"{}\" -> \"{}\" [label=\"{}\"];\n",
+            edge.from, edge.to, edge.import_count
+        ));
+    }
+    buf.push_str("}\n");
+    buf
 }
 
 // ---------------------------------------------------------------------------

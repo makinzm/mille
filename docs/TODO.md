@@ -18,11 +18,12 @@
 - ✅ `--format terminal / json / github-actions` 出力フォーマット切り替え（PR 10）
 - ✅ `[ignore]` セクション — `paths` / `test_patterns` 適用（PR 12）
 - ✅ `mille init` コマンド — プロジェクトスキャンして `mille.toml` 自動生成（PR 11）
+- ✅ `mille analyze` — 依存グラフ可視化 `terminal / json / dot / svg`（PR 13）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 - ❌ `[severity]` — パースされるが無視される（常に Error で出力）
 - ❌ `--fail-on` オプション
-- ❌ `mille analyze` / `mille report external` コマンド
+- ❌ `mille report external` コマンド
 
 ---
 
@@ -55,13 +56,15 @@
 - [x] `check_architecture::check()` でテストファイルに対して依存ルールを緩める（`test_patterns`）
 - [x] E2E テストの追加
 
-### PR 13: `mille analyze` コマンド（依存グラフ可視化）
+### PR 13: `mille analyze` コマンド（依存グラフ可視化）✅ 完了
 
 **バズりポイント**: DOT/SVG グラフはスクリーンショットとして SNS に貼りやすく、「自分のプロジェクトのアーキテクチャが可視化された」という体験は Twitter/X やブログで紹介されやすい。
 
-- [ ] `mille analyze` サブコマンドの追加
-- [ ] DOT 形式での依存グラフ出力 (`--format dot`)
-- [ ] レイヤー間エッジの集計（ファイルレベルではなくレイヤーレベル）
+- [x] `mille analyze` サブコマンドの追加
+- [x] DOT 形式での依存グラフ出力 (`--format dot`)
+- [x] レイヤー間エッジの集計（ファイルレベルではなくレイヤーレベル）
+- [x] SVG 形式での自己完結グラフ画像出力 (`--format svg`)
+- [x] JSON 形式出力 (`--format json`)
 
 ### PR 14: `[severity]` 設定の実装
 
