@@ -90,3 +90,68 @@ impl Default for SeverityConfig {
         default_severity()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_python_resolve_config_without_src_root_parses() {
+        // src_root なしの [resolve.python] は parse エラーにならないべき
+        let toml = r#"
+[project]
+name = "myproject"
+root = "."
+languages = ["python"]
+
+[resolve.python]
+package_names = ["domain", "usecase"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-in"
+external_mode = "opt-in"
+"#;
+        let result = toml::from_str::<MilleConfig>(toml);
+        assert!(
+            result.is_ok(),
+            "src_root なしで parse できるべき: {:?}",
+            result.err()
+        );
+        let config = result.unwrap();
+        let py = config
+            .resolve
+            .unwrap()
+            .python
+            .expect("python config should exist");
+        assert_eq!(py.src_root, "");
+        assert_eq!(py.package_names, vec!["domain", "usecase"]);
+    }
+
+    #[test]
+    fn test_python_resolve_config_with_src_root_still_parses() {
+        // 既存の src_root ありの設定は引き続き parse できる (regression)
+        let toml = r#"
+[project]
+name = "myproject"
+root = "."
+languages = ["python"]
+
+[resolve.python]
+src_root = "src"
+package_names = ["domain"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-in"
+external_mode = "opt-in"
+"#;
+        let result = toml::from_str::<MilleConfig>(toml);
+        assert!(result.is_ok(), "src_root ありも parse できるべき: {:?}", result.err());
+        let config = result.unwrap();
+        let py = config.resolve.unwrap().python.unwrap();
+        assert_eq!(py.src_root, "src");
+    }
+}

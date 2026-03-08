@@ -942,6 +942,33 @@ mod tests {
         assert_eq!(domain_count, 1, "domain は重複なし。toml:\n{}", toml);
     }
 
+    #[test]
+    fn test_generate_toml_python_filters_package_names_from_external_allow() {
+        // external_allow に package_names と同じ名前が混入しないべき
+        // (mille init スキャン時に "domain.entity" が External 扱いされて domain が混入するケース)
+        let mut domain_layer = make_layer("domain", vec!["src/domain/**"]);
+        domain_layer.external_allow =
+            vec!["domain".to_string(), "abc".to_string(), "dataclasses".to_string()];
+        let layers = vec![domain_layer];
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        // "domain" は package_names に含まれるので external_allow から除外されるべき
+        // abc, dataclasses は残るべき
+        let layer_section = toml
+            .split("[[layers]]")
+            .nth(1)
+            .unwrap_or("");
+        assert!(
+            !layer_section.contains("\"domain\""),
+            "domain は external_allow に出力されるべきでない\n{}",
+            toml
+        );
+        assert!(
+            layer_section.contains("\"abc\""),
+            "abc は external_allow に残るべき\n{}",
+            toml
+        );
+    }
+
     // ------------------------------------------------------------------
     // detect_languages
     // ------------------------------------------------------------------
