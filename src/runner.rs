@@ -55,7 +55,11 @@ where
 
 fn run_cli_inner(cli: Cli) {
     match cli.command {
-        Command::Analyze { config, format, output: _ } => {
+        Command::Analyze {
+            config,
+            format,
+            output,
+        } => {
             let config_repo = TomlConfigRepository;
             let app_config = match config_repo.load(&config) {
                 Ok(c) => c,
@@ -75,20 +79,35 @@ fn run_cli_inner(cli: Cli) {
                 &parser,
                 &resolver,
             ) {
-                Ok(result) => match format {
-                    AnalyzeFormat::Terminal => {
-                        print!("{}", format_analyze_terminal(&result));
+                Ok(result) => {
+                    let content = match format {
+                        AnalyzeFormat::Terminal => format_analyze_terminal(&result),
+                        AnalyzeFormat::Json => format_analyze_json(&result),
+                        AnalyzeFormat::Dot => format_analyze_dot(&result),
+                        AnalyzeFormat::Svg => format_svg(&result),
+                    };
+
+                    match output {
+                        Some(path) => {
+                            // NOTE: Refuse to overwrite existing files to prevent accidental data loss.
+                            if std::path::Path::new(&path).exists() {
+                                eprintln!(
+                                    "Error: '{}' already exists. Remove it first if you want to overwrite.",
+                                    path
+                                );
+                                std::process::exit(1);
+                            }
+                            match fs::write(&path, &content) {
+                                Ok(_) => eprintln!("Written to '{}'", path),
+                                Err(e) => {
+                                    eprintln!("Error: failed to write '{}': {}", path, e);
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                        None => print!("{}", content),
                     }
-                    AnalyzeFormat::Json => {
-                        print!("{}", format_analyze_json(&result));
-                    }
-                    AnalyzeFormat::Dot => {
-                        print!("{}", format_analyze_dot(&result));
-                    }
-                    AnalyzeFormat::Svg => {
-                        print!("{}", format_svg(&result));
-                    }
-                },
+                }
                 Err(e) => {
                     eprintln!("Error: {}", e);
                     std::process::exit(3);
