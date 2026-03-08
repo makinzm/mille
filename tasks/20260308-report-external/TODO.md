@@ -5,9 +5,9 @@
 
 ## 実装ステップ
 
-- [ ] RED: ユニットテスト + E2Eテストのスタブを `--no-verify` でコミット
-- [ ] GREEN: usecase / CLI / formatter を実装して全テスト通過
-- [ ] REFACTOR: README.md + docs/TODO.md 更新 → PR 作成
+- [x] RED: ユニットテスト + E2Eテストのスタブを `--no-verify` でコミット
+- [x] GREEN: usecase / CLI / formatter を実装して全テスト通過
+- [x] REFACTOR: README.md + docs/TODO.md 更新 → PR 作成
 
 ## 機能仕様
 
