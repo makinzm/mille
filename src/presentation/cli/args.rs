@@ -54,6 +54,9 @@ pub enum Command {
         /// Output format: terminal (default), json, dot, svg
         #[arg(long, value_enum, default_value_t = AnalyzeFormat::Terminal)]
         format: AnalyzeFormat,
+        /// Write output to this file instead of stdout. Refuses to overwrite existing files.
+        #[arg(long)]
+        output: Option<String>,
     },
     /// Scan the project and generate a mille.toml configuration file.
     Init {

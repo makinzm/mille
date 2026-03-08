@@ -55,7 +55,7 @@ where
 
 fn run_cli_inner(cli: Cli) {
     match cli.command {
-        Command::Analyze { config, format } => {
+        Command::Analyze { config, format, output: _ } => {
             let config_repo = TomlConfigRepository;
             let app_config = match config_repo.load(&config) {
                 Ok(c) => c,
