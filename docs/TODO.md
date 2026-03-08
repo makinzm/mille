@@ -20,9 +20,10 @@
 - ✅ `mille init` コマンド — プロジェクトスキャンして `mille.toml` 自動生成（PR 11）
 - ✅ `mille analyze` — 依存グラフ可視化 `terminal / json / dot / svg`（PR 13）
 - ✅ `[severity]` — 違反種別ごとの重大度設定 + `--fail-on` オプション（PR 14）
+- ✅ `mille report external` — 外部ライブラリ依存をレイヤーごとにテーブル/JSON出力（PR 15）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
-- ❌ `mille report external` コマンド
+（現在なし）
 
 ---
 
@@ -75,10 +76,11 @@
 - [x] `--fail-on warning` オプションで warning でも exit code 1 にする
 - [x] E2E テストの追加（`tests/e2e_severity.rs`）
 
-### PR 15: `mille report external` コマンド
+### PR 15: `mille report external` コマンド ✅ 完了
 
-- [ ] `mille report external` サブコマンドの追加
-- [ ] 外部ライブラリ依存をレイヤーごとにテーブル形式で出力
+- [x] `mille report external` サブコマンドの追加
+- [x] 外部ライブラリ依存をレイヤーごとにテーブル形式で出力
+- [x] `--format json` / `--output <path>` オプション対応
 
 ---
 

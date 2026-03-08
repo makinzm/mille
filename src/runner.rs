@@ -21,7 +21,8 @@ use crate::infrastructure::resolver::DispatchingResolver;
 use crate::presentation::cli::args::AnalyzeFormat;
 use crate::presentation::cli::args::FailOn;
 use crate::presentation::cli::args::Format;
-use crate::presentation::cli::args::{Cli, Command};
+use crate::presentation::cli::args::ReportExternalFormat;
+use crate::presentation::cli::args::{Cli, Command, ReportCommand};
 use crate::presentation::formatter::github_actions::format_all_ga;
 use crate::presentation::formatter::json::format_json;
 use crate::presentation::formatter::svg::format_svg;
@@ -31,6 +32,7 @@ use crate::presentation::formatter::terminal::{
 use crate::usecase::analyze;
 use crate::usecase::check_architecture;
 use crate::usecase::init::{self, DirAnalysis};
+use crate::usecase::report_external;
 
 /// Parse `std::env::args()` and run the matching subcommand.
 ///
@@ -56,6 +58,66 @@ where
 
 fn run_cli_inner(cli: Cli) {
     match cli.command {
+        Command::Report { subcommand } => match subcommand {
+            ReportCommand::External {
+                config,
+                format,
+                output,
+            } => {
+                let config_repo = TomlConfigRepository;
+                let app_config = match config_repo.load(&config) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(3);
+                    }
+                };
+
+                let parser = DispatchingParser::new();
+                let resolver = DispatchingResolver::from_config(&app_config, &config);
+
+                match report_external::report_external(
+                    &config,
+                    &config_repo,
+                    &FsSourceFileRepository,
+                    &parser,
+                    &resolver,
+                ) {
+                    Ok(result) => {
+                        let content = match format {
+                            ReportExternalFormat::Terminal => {
+                                format_report_external_terminal(&result)
+                            }
+                            ReportExternalFormat::Json => format_report_external_json(&result),
+                        };
+
+                        match output {
+                            Some(path) => {
+                                if std::path::Path::new(&path).exists() {
+                                    eprintln!(
+                                        "Error: '{}' already exists. Remove it first if you want to overwrite.",
+                                        path
+                                    );
+                                    std::process::exit(1);
+                                }
+                                match fs::write(&path, &content) {
+                                    Ok(_) => eprintln!("Written to '{}'", path),
+                                    Err(e) => {
+                                        eprintln!("Error: failed to write '{}': {}", path, e);
+                                        std::process::exit(1);
+                                    }
+                                }
+                            }
+                            None => print!("{}", content),
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(3);
+                    }
+                }
+            }
+        },
         Command::Analyze {
             config,
             format,
@@ -610,6 +672,54 @@ fn resolve_to_known_dir(
 // ---------------------------------------------------------------------------
 // Analyze output formatters
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Report external formatters
+// ---------------------------------------------------------------------------
+
+fn format_report_external_terminal(result: &report_external::ReportExternalResult) -> String {
+    let mut buf = String::from("External Dependencies by Layer\n\n");
+    if result.layers.is_empty() {
+        buf.push_str("  (no layers configured)\n");
+        return buf;
+    }
+    let max_name = result
+        .layers
+        .iter()
+        .map(|l| l.layer_name.len())
+        .max()
+        .unwrap_or(0);
+    for layer in &result.layers {
+        let pkgs = if layer.packages.is_empty() {
+            "(none)".to_string()
+        } else {
+            layer.packages.join(", ")
+        };
+        buf.push_str(&format!(
+            "  {:<width$}  {}\n",
+            layer.layer_name,
+            pkgs,
+            width = max_name,
+        ));
+    }
+    buf
+}
+
+fn format_report_external_json(result: &report_external::ReportExternalResult) -> String {
+    let entries: Vec<String> = result
+        .layers
+        .iter()
+        .map(|l| {
+            let pkgs: Vec<String> = l.packages.iter().map(|p| format!("\"{}\"", p)).collect();
+            format!(
+                "{{\"layer\":\"{}\",\"packages\":[{}]}}",
+                l.layer_name,
+                pkgs.join(",")
+            )
+        })
+        .collect();
+    format!("[{}]\n", entries.join(","))
+}
 
 fn format_analyze_terminal(result: &analyze::AnalyzeResult) -> String {
     let mut buf = String::new();

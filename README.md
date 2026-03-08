@@ -293,7 +293,30 @@ mille analyze --format svg > graph.svg && open graph.svg
 
 `mille analyze` always exits `0` — it only visualizes, never enforces rules.
 
-### 3. Run `mille check`
+### 3. Inspect external dependencies with `mille report external`
+
+```sh
+mille report external                  # human-readable table (default)
+mille report external --format json    # machine-readable JSON
+mille report external --output report.json --format json   # write to file
+```
+
+Shows which external packages each layer actually imports — useful for auditing `external_allow` lists or documenting your dependency footprint.
+
+Example output:
+
+```
+External Dependencies by Layer
+
+  domain          (none)
+  usecase         (none)
+  infrastructure  database/sql
+  cmd             fmt, os
+```
+
+`mille report external` always exits `0` — it only reports, never enforces rules.
+
+### 4. Run `mille check`
 
 ```sh
 mille check

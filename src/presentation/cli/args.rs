@@ -1,5 +1,31 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
+/// Output format for `mille report external`.
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
+pub enum ReportExternalFormat {
+    /// Human-readable terminal output (default)
+    Terminal,
+    /// JSON output
+    Json,
+}
+
+/// Subcommands under `mille report`.
+#[derive(Subcommand, Debug)]
+pub enum ReportCommand {
+    /// Show external library dependencies for each layer.
+    External {
+        /// Path to mille.toml (default: ./mille.toml)
+        #[arg(long, default_value = "mille.toml")]
+        config: String,
+        /// Output format: terminal (default), json
+        #[arg(long, value_enum, default_value_t = ReportExternalFormat::Terminal)]
+        format: ReportExternalFormat,
+        /// Write output to this file instead of stdout. Refuses to overwrite existing files.
+        #[arg(long)]
+        output: Option<String>,
+    },
+}
+
 /// Threshold for exit code 1 in `mille check`.
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 pub enum FailOn {
@@ -70,6 +96,11 @@ pub enum Command {
         /// Write output to this file instead of stdout. Refuses to overwrite existing files.
         #[arg(long)]
         output: Option<String>,
+    },
+    /// Report external library dependencies by layer.
+    Report {
+        #[command(subcommand)]
+        subcommand: ReportCommand,
     },
     /// Scan the project and generate a mille.toml configuration file.
     Init {
