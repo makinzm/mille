@@ -265,6 +265,18 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
     suggestions
 }
 
+/// Return true if the string is a valid Python identifier (used to filter package names).
+/// Python identifiers start with a letter or underscore and contain only letters, digits,
+/// and underscores. Directory names like "2026-03-01-ml-knowledge-base" are excluded.
+fn is_valid_python_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_alphanumeric() || c == '_')
+}
+
 /// Return true if a directory name should be skipped during scanning.
 pub fn is_excluded_dir(name: &str) -> bool {
     matches!(
@@ -355,6 +367,33 @@ pub fn generate_toml(
         .collect::<Vec<_>>()
         .join(", ");
     out.push_str(&format!("languages = [{}]\n", langs_str));
+
+    // [resolve.python] — Python プロジェクトの場合のみ出力
+    if languages.iter().any(|l| l == "python") {
+        let mut pkg_names: BTreeSet<String> = BTreeSet::new();
+        for layer in layers {
+            for path in &layer.paths {
+                // "crawler/src/domain/**" → "domain"
+                // "src/domain/**" → "domain"
+                let p = path.trim_end_matches("/**").trim_end_matches('/');
+                if let Some(base) = p.split('/').next_back() {
+                    if is_valid_python_identifier(base) {
+                        pkg_names.insert(base.to_string());
+                    }
+                }
+            }
+        }
+        if !pkg_names.is_empty() {
+            out.push('\n');
+            out.push_str("[resolve.python]\n");
+            let names_str = pkg_names
+                .iter()
+                .map(|n| format!("\"{}\"", n))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("package_names = [{}]\n", names_str));
+        }
+    }
 
     // [[layers]] sections
     for layer in layers {
@@ -860,8 +899,16 @@ mod tests {
             "package_names フィールドが必要\n{}",
             toml
         );
-        assert!(toml.contains("\"domain\""), "domain が含まれるべき\n{}", toml);
-        assert!(toml.contains("\"usecase\""), "usecase が含まれるべき\n{}", toml);
+        assert!(
+            toml.contains("\"domain\""),
+            "domain が含まれるべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("\"usecase\""),
+            "usecase が含まれるべき\n{}",
+            toml
+        );
         assert!(
             toml.contains("\"infrastructure\""),
             "infrastructure が含まれるべき\n{}",

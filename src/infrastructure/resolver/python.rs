@@ -34,17 +34,30 @@ impl Resolver for PythonResolver {
 fn resolve_python_impl(import: &RawImport, package_names: &[String]) -> ResolvedImport {
     let category = classify_python(&import.path, package_names);
     let resolved_path = if category == ImportCategory::Internal {
-        // Compute a synthetic resolved path for the ViolationDetector to match against
-        // layer glob patterns.
-        // "domain.entity" → "domain/entity/_.py"  (matches "domain/**")
-        // ".entity"       → strip leading dot, use file directory
-        // "."             → current package (use file directory)
         let clean = import.path.trim_start_matches('.');
         if clean.is_empty() {
             // bare relative import "from . import X" — path is ambiguous without context
             None
+        } else if import.path.starts_with('.') {
+            // Relative import: resolve relative to the importing file's directory.
+            // ".entity" in "crawler/src/domain/repository.py"
+            //   → "crawler/src/domain/entity/_.py"
+            let file_dir = import.file.rsplit_once('/').map(|x| x.0).unwrap_or("");
+            Some(format!("{}/{}/_.py", file_dir, clean.replace('.', "/")))
         } else {
-            Some(format!("{}/_.py", clean.replace('.', "/")))
+            // Absolute internal import: derive src_root from the importing file's path
+            // so the resolved path matches layer glob patterns in monorepos.
+            // "domain.entity" in "crawler/src/infrastructure/file_storage.py"
+            //   (package_names includes "infrastructure")
+            //   → src_root = "crawler/src"
+            //   → "crawler/src/domain/entity/_.py"
+            let src_root = derive_src_root(&import.file, package_names);
+            let prefix = if src_root.is_empty() {
+                String::new()
+            } else {
+                format!("{}/", src_root)
+            };
+            Some(format!("{}{}/_.py", prefix, clean.replace('.', "/")))
         }
     } else {
         None
@@ -55,6 +68,39 @@ fn resolve_python_impl(import: &RawImport, package_names: &[String]) -> Resolved
         category,
         resolved_path,
     }
+}
+
+/// Derive the Python source root from the importing file's path.
+///
+/// Scans path components (excluding the filename) from left to right.
+/// Returns everything before the first component that matches a `package_name`.
+///
+/// Examples:
+/// - `"crawler/src/infrastructure/file.py"`, packages = `["infrastructure", "domain"]`
+///   → `"crawler/src"` (the `infrastructure` component is at index 2)
+/// - `"domain/entity.py"`, packages = `["domain"]`
+///   → `""` (the `domain` component is at index 0 — src_root is the project root)
+/// - `"src/domain/entity.py"`, packages = `["domain"]`
+///   → `"src"`
+fn derive_src_root<'a>(file: &'a str, package_names: &[String]) -> &'a str {
+    let components: Vec<&str> = file.split('/').collect();
+    // Skip the last component (filename).
+    let dir_components = components.len().saturating_sub(1);
+    for i in 0..dir_components {
+        if package_names.iter().any(|p| p.as_str() == components[i]) {
+            // src_root = file[..position_before_component_i]
+            // Compute byte offset: sum of lengths + separators for components[0..i]
+            if i == 0 {
+                return &file[..0]; // empty string slice at start
+            }
+            let prefix_len: usize =
+                components[..i].iter().map(|s| s.len()).sum::<usize>() + (i - 1); // separators between components[0..i-1]
+            return &file[..prefix_len];
+        }
+    }
+    // No package component found — use the file's directory as a fallback.
+    // This keeps the old behavior for files outside any package.
+    &file[..0]
 }
 
 /// Classify a Python import path.
