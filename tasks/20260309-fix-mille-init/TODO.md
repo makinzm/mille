@@ -12,7 +12,7 @@
 - [x] RED commit: テストのみ (`--no-verify`)
 - [x] GREEN commit: 実装 (lefthook 通過)
 - [x] REFACTOR: docs/README/TODO 更新
-- [ ] PR 作成
+- [x] PR 作成 (https://github.com/makinzm/mille/pull/55)
 
 ## 修正詳細
 
