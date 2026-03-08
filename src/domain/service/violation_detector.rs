@@ -1,4 +1,5 @@
 use crate::domain::entity::call_expr::RawCallExpr;
+use crate::domain::entity::config::SeverityConfig;
 use crate::domain::entity::import::ImportKind;
 use crate::domain::entity::layer::{DependencyMode, LayerConfig};
 use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
@@ -6,11 +7,21 @@ use crate::domain::entity::violation::{Severity, Violation, ViolationKind};
 
 pub struct ViolationDetector<'a> {
     layers: &'a [LayerConfig],
+    severity: SeverityConfig,
 }
 
 impl<'a> ViolationDetector<'a> {
+    /// Create a detector with default severity (all violations = Error, unknown_import = Warning).
     pub fn new(layers: &'a [LayerConfig]) -> Self {
-        Self { layers }
+        Self {
+            layers,
+            severity: SeverityConfig::default(),
+        }
+    }
+
+    /// Create a detector with explicit severity configuration.
+    pub fn with_severity(layers: &'a [LayerConfig], severity: SeverityConfig) -> Self {
+        Self { layers, severity }
     }
 
     /// Inspect a list of resolved imports and return all dependency violations.
@@ -94,7 +105,7 @@ impl<'a> ViolationDetector<'a> {
                     to_layer: crate_name.to_string(),
                     import_path: import.raw.path.clone(),
                     kind: ViolationKind::ExternalViolation,
-                    severity: Severity::Error,
+                    severity: parse_severity(&self.severity.external_violation),
                 });
             }
         }
@@ -161,12 +172,39 @@ impl<'a> ViolationDetector<'a> {
                         to_layer: pattern.callee_layer.clone(),
                         import_path: format!("{}::{}", receiver_type, call.method),
                         kind: ViolationKind::CallPatternViolation,
-                        severity: Severity::Error,
+                        severity: parse_severity(&self.severity.call_pattern_violation),
                     });
                 }
             }
         }
 
+        violations
+    }
+
+    /// Report all `ImportCategory::Unknown` imports from files that belong to a known layer.
+    ///
+    /// These are imports the resolver could not classify (e.g. ambiguous module paths).
+    /// Severity is controlled by `severity.unknown_import` in mille.toml.
+    pub fn detect_unknown(&self, imports: &[ResolvedImport]) -> Vec<Violation> {
+        let sev = parse_severity(&self.severity.unknown_import);
+        let mut violations = Vec::new();
+        for import in imports {
+            if import.category != ImportCategory::Unknown {
+                continue;
+            }
+            let Some(from_layer) = self.find_layer_for_file(&import.raw.file) else {
+                continue;
+            };
+            violations.push(Violation {
+                file: import.raw.file.clone(),
+                line: import.raw.line,
+                from_layer: from_layer.name.clone(),
+                to_layer: String::new(),
+                import_path: import.raw.path.clone(),
+                kind: ViolationKind::UnknownImport,
+                severity: sev.clone(),
+            });
+        }
         violations
     }
 
@@ -196,8 +234,19 @@ impl<'a> ViolationDetector<'a> {
             to_layer: to.name.clone(),
             import_path: import.raw.path.clone(),
             kind: ViolationKind::DependencyViolation,
-            severity: Severity::Error,
+            severity: parse_severity(&self.severity.dependency_violation),
         })
+    }
+}
+
+/// Parse a severity string from config into a `Severity` enum value.
+///
+/// Invalid or unknown strings default to `Severity::Error` (safe default).
+fn parse_severity(s: &str) -> Severity {
+    match s {
+        "warning" => Severity::Warning,
+        "info" => Severity::Info,
+        _ => Severity::Error,
     }
 }
 
@@ -1062,6 +1111,247 @@ mod tests {
         assert!(
             detector.detect_call_patterns(&calls, &imports).is_empty(),
             "Repo from domain should not be checked against infrastructure allow_call_patterns"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // severity configuration
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_detect_dependency_violation_uses_configured_warning_severity() {
+        let layers = vec![
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+            make_layer(
+                "infrastructure",
+                &["src/infrastructure/**"],
+                DependencyMode::OptIn,
+                &["domain"],
+                &[],
+            ),
+        ];
+        let severity = SeverityConfig {
+            dependency_violation: "warning".to_string(),
+            ..SeverityConfig::default()
+        };
+        let detector = ViolationDetector::with_severity(&layers, severity);
+        // domain → infra: violation, but configured as warning
+        let imports = vec![make_internal(
+            "src/domain/service/foo.rs",
+            5,
+            "crate::infrastructure::repo",
+            "src/infrastructure/repo",
+        )];
+        let violations = detector.detect(&imports);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].severity, Severity::Warning);
+        assert_eq!(violations[0].kind, ViolationKind::DependencyViolation);
+    }
+
+    #[test]
+    fn test_detect_external_violation_uses_configured_warning_severity() {
+        let layers = vec![make_layer_with_external(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let severity = SeverityConfig {
+            external_violation: "warning".to_string(),
+            ..SeverityConfig::default()
+        };
+        let detector = ViolationDetector::with_severity(&layers, severity);
+        let imports = vec![make_external(
+            "src/domain/entity/config.rs",
+            1,
+            "serde::Deserialize",
+        )];
+        let violations = detector.detect_external(&imports);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].severity, Severity::Warning);
+        assert_eq!(violations[0].kind, ViolationKind::ExternalViolation);
+    }
+
+    #[test]
+    fn test_detect_call_pattern_violation_uses_configured_warning_severity() {
+        let layers = vec![
+            make_layer_with_call_pattern("main", &["src/main.rs"], "infrastructure", &["new"]),
+            make_layer(
+                "infrastructure",
+                &["src/infrastructure/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+        ];
+        let severity = SeverityConfig {
+            call_pattern_violation: "warning".to_string(),
+            ..SeverityConfig::default()
+        };
+        let detector = ViolationDetector::with_severity(&layers, severity);
+        let calls = vec![make_static_call("src/main.rs", 10, "Repo", "find_user")];
+        let imports = vec![make_resolved_internal(
+            "src/main.rs",
+            "crate::infrastructure::Repo",
+            "src/infrastructure/Repo",
+        )];
+        let violations = detector.detect_call_patterns(&calls, &imports);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].severity, Severity::Warning);
+        assert_eq!(violations[0].kind, ViolationKind::CallPatternViolation);
+    }
+
+    #[test]
+    fn test_detect_unknown_reports_unknown_import_with_default_warning_severity() {
+        let layers = vec![make_layer(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "some-unresolvable-module".to_string(),
+                line: 3,
+                file: "src/domain/service/foo.rs".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::Unknown,
+            resolved_path: None,
+        }];
+        let violations = detector.detect_unknown(&imports);
+        assert_eq!(violations.len(), 1, "unknown import must be reported");
+        assert_eq!(violations[0].severity, Severity::Warning);
+        assert_eq!(violations[0].kind, ViolationKind::UnknownImport);
+        assert_eq!(violations[0].from_layer, "domain");
+        assert_eq!(violations[0].import_path, "some-unresolvable-module");
+    }
+
+    #[test]
+    fn test_detect_unknown_uses_configured_error_severity() {
+        let layers = vec![make_layer(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let severity = SeverityConfig {
+            unknown_import: "error".to_string(),
+            ..SeverityConfig::default()
+        };
+        let detector = ViolationDetector::with_severity(&layers, severity);
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "mystery-import".to_string(),
+                line: 7,
+                file: "src/domain/entity/config.rs".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::Unknown,
+            resolved_path: None,
+        }];
+        let violations = detector.detect_unknown(&imports);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn test_detect_unknown_skips_files_not_in_any_layer() {
+        let layers = vec![make_layer(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        // File is in "src/other/" which matches no layer
+        let imports = vec![ResolvedImport {
+            raw: RawImport {
+                path: "unknown-thing".to_string(),
+                line: 1,
+                file: "src/other/helper.rs".to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::Unknown,
+            resolved_path: None,
+        }];
+        assert!(
+            detector.detect_unknown(&imports).is_empty(),
+            "unknown imports from files outside any layer must be skipped"
+        );
+    }
+
+    #[test]
+    fn test_detect_unknown_skips_non_unknown_categories() {
+        let layers = vec![make_layer(
+            "domain",
+            &["src/domain/**"],
+            DependencyMode::OptIn,
+            &[],
+            &[],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let imports = vec![
+            make_internal(
+                "src/domain/service/foo.rs",
+                1,
+                "crate::domain::entity::config",
+                "src/domain/entity/config",
+            ),
+            make_external("src/domain/entity/config.rs", 2, "serde::Deserialize"),
+        ];
+        assert!(
+            detector.detect_unknown(&imports).is_empty(),
+            "Internal and External imports must not be reported by detect_unknown"
+        );
+    }
+
+    #[test]
+    fn test_detect_violation_default_severity_is_error() {
+        // Regression: without explicit severity config, violations must still be Error.
+        let layers = vec![
+            make_layer(
+                "domain",
+                &["src/domain/**"],
+                DependencyMode::OptIn,
+                &[],
+                &[],
+            ),
+            make_layer(
+                "infrastructure",
+                &["src/infrastructure/**"],
+                DependencyMode::OptIn,
+                &["domain"],
+                &[],
+            ),
+        ];
+        let detector = ViolationDetector::new(&layers); // default severity
+        let imports = vec![make_internal(
+            "src/domain/service/foo.rs",
+            5,
+            "crate::infrastructure::repo",
+            "src/infrastructure/repo",
+        )];
+        let violations = detector.detect(&imports);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(
+            violations[0].severity,
+            Severity::Error,
+            "default severity must be Error"
         );
     }
 }

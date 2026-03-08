@@ -21,6 +21,10 @@ pub fn format_violation(v: &Violation) -> String {
             "{} Call pattern violation\n   {}:{}\n   call: {}\n   '{}' is not in allow_methods\n\n",
             marker, v.file, v.line, v.import_path, v.to_layer
         ),
+        ViolationKind::UnknownImport => format!(
+            "{} Unknown import\n   {}:{}\n   import: {}\n   could not be classified\n\n",
+            marker, v.file, v.line, v.import_path
+        ),
     }
 }
 

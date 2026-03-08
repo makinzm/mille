@@ -84,3 +84,9 @@ fn default_severity() -> SeverityConfig {
         unknown_import: default_warning(),
     }
 }
+
+impl Default for SeverityConfig {
+    fn default() -> Self {
+        default_severity()
+    }
+}

@@ -19,10 +19,9 @@
 - ✅ `[ignore]` セクション — `paths` / `test_patterns` 適用（PR 12）
 - ✅ `mille init` コマンド — プロジェクトスキャンして `mille.toml` 自動生成（PR 11）
 - ✅ `mille analyze` — 依存グラフ可視化 `terminal / json / dot / svg`（PR 13）
+- ✅ `[severity]` — 違反種別ごとの重大度設定 + `--fail-on` オプション（PR 14）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
-- ❌ `[severity]` — パースされるが無視される（常に Error で出力）
-- ❌ `--fail-on` オプション
 - ❌ `mille report external` コマンド
 
 ---
@@ -66,15 +65,15 @@
 - [x] SVG 形式での自己完結グラフ画像出力 (`--format svg`)
 - [x] JSON 形式出力 (`--format json`)
 
-### PR 14: `[severity]` 設定の実装
+### PR 14: `[severity]` 設定の実装 ✅ 完了
 
 **バズりポイント**: warning/error の区別は段階的導入を可能にし、「既存プロジェクトへの追加しやすさ」を向上させる。採用率に寄与。
 
-- [ ] `ViolationDetector` に `SeverityConfig` を渡すようにする
-- [ ] `detect()` / `detect_external()` / `detect_call_patterns()` で severity を設定値から取得する
-- [ ] `--fail-on warning` オプションで warning でも exit code 1 にする
-- [ ] 終了コード `2`（warning あり、`--fail-on warning` 指定時）の実装
-- [ ] E2E テストの追加
+- [x] `ViolationDetector` に `SeverityConfig` を渡すようにする（`with_severity()` コンストラクタ）
+- [x] `detect()` / `detect_external()` / `detect_call_patterns()` で severity を設定値から取得する
+- [x] `detect_unknown()` — `ImportCategory::Unknown` を `unknown_import` severity で報告
+- [x] `--fail-on warning` オプションで warning でも exit code 1 にする
+- [x] E2E テストの追加（`tests/e2e_severity.rs`）
 
 ### PR 15: `mille report external` コマンド
 

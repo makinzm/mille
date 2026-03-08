@@ -22,6 +22,10 @@ pub fn format_violation_ga(v: &Violation) -> String {
             "Call pattern violation: '{}' is not in allow_methods (call: {})",
             v.to_layer, v.import_path
         ),
+        ViolationKind::UnknownImport => format!(
+            "Unknown import: '{}' could not be classified",
+            v.import_path
+        ),
     };
     format!("::{} file={},line={}::{}\n", level, v.file, v.line, message)
 }

@@ -25,6 +25,8 @@ pub enum ViolationKind {
     /// `allow_call_patterns` rule was broken: a method not in `allow_methods` was called on a type
     /// from `callee_layer`.
     CallPatternViolation,
+    /// Import could not be classified (Unknown category). `import_path` holds the raw import string.
+    UnknownImport,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
