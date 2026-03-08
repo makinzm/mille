@@ -73,7 +73,8 @@ jobs:
         shell: bash
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          rm -f Cargo.toml.bak
 
       - name: Build with cross
         if: matrix.use_cross == true
@@ -151,7 +152,8 @@ jobs:
       - name: Sync version in Cargo.toml
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          rm -f Cargo.toml.bak
 
       - name: Build with cross
         if: matrix.use_cross == true
@@ -231,7 +233,8 @@ jobs:
       - name: Sync version in Cargo.toml
         run: |
           VERSION=${{ needs.release.outputs.version }}
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          rm -f Cargo.toml.bak
 
       - name: Publish
         run: cargo publish --allow-dirty
@@ -295,8 +298,10 @@ jobs:
       - name: Sync version in pyproject.toml and Cargo.toml
         run: |
           VERSION="${{ needs.release.outputs.version }}"
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/pyproject.toml
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/pyproject.toml
+          rm -f packages/pypi/pyproject.toml.bak
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/Cargo.toml
+          rm -f packages/pypi/Cargo.toml.bak
 
       # NOTE: pyproject.toml の readme = "README.md" は packages/pypi/ からの相対パス。
       #       maturin-action はリポジトリルートで動くため packages/pypi/README.md へコピーする。
@@ -450,10 +455,14 @@ jobs:
       - name: Update versions in source files
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/pyproject.toml
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/Cargo.toml
-          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" packages/npm/package.json
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          rm -f Cargo.toml.bak
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/pyproject.toml
+          rm -f packages/pypi/pyproject.toml.bak
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/Cargo.toml
+          rm -f packages/pypi/Cargo.toml.bak
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" packages/npm/package.json
+          rm -f packages/npm/package.json.bak
 
       - name: Commit and push version bump
         run: |
