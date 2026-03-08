@@ -79,6 +79,66 @@ pub fn topological_sort(deps: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<St
     tiers
 }
 
+/// Given a list of directory paths that all share the same base name,
+/// return `(dir_path, layer_name)` pairs where each dir gets a unique name.
+///
+/// When only one dir is present the base name is used as-is.
+/// When multiple dirs exist, the first path segment where they differ
+/// is prepended as a prefix: e.g. "crawler_domain", "server_domain".
+fn find_distinguishing_prefix(dirs: &[String]) -> Vec<(String, String)> {
+    let base = dirs[0]
+        .split('/')
+        .next_back()
+        .unwrap_or(dirs[0].as_str())
+        .to_string();
+
+    if dirs.len() == 1 {
+        return vec![(dirs[0].clone(), base)];
+    }
+
+    // Collect parent segments (everything except the last base component) for each dir.
+    // Segments are stored root-first so index 0 is the top-level directory.
+    let parent_segs: Vec<Vec<&str>> = dirs
+        .iter()
+        .map(|d| {
+            let parts: Vec<&str> = d.split('/').collect();
+            if parts.len() > 1 {
+                parts[..parts.len() - 1].to_vec()
+            } else {
+                vec![]
+            }
+        })
+        .collect();
+
+    // Find the first position (root-first) where at least two dirs differ.
+    let depth = parent_segs.iter().map(|s| s.len()).min().unwrap_or(0);
+    let mut diff_pos: Option<usize> = None;
+    for i in 0..depth {
+        let first = parent_segs[0].get(i);
+        if parent_segs.iter().any(|s| s.get(i) != first) {
+            diff_pos = Some(i);
+            break;
+        }
+    }
+
+    dirs.iter()
+        .enumerate()
+        .map(|(idx, dir)| {
+            let prefix = match diff_pos {
+                Some(pos) => parent_segs[idx].get(pos).copied().unwrap_or(""),
+                // All common parents identical (or no parents): use last parent segment.
+                None => parent_segs[idx].last().copied().unwrap_or(""),
+            };
+            let name = if prefix.is_empty() {
+                base.clone()
+            } else {
+                format!("{}_{}", prefix, base)
+            };
+            (dir.clone(), name)
+        })
+        .collect()
+}
+
 /// Infer layer suggestions from per-directory import analysis.
 ///
 /// Algorithm:
@@ -113,13 +173,21 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
     let tiers = topological_sort(&dep_graph);
 
     // Pass 1: assign a layer name to every dir.
-    // Dirs with the same base name are merged only when their immediate parent
-    // also shares the same base name (e.g. monorepo siblings under the same "src" parent).
-    // Otherwise each gets a qualified name: "{parent_base}_{base}".
+    // Every dir with a unique base name is named by its base name.
+    // When multiple dirs share the same base name, each gets a qualified name
+    // using the first path segment where they differ as a prefix.
+    //
+    // Examples:
+    //   ["src/domain/entity", "src/infrastructure/entity"]
+    //     → parent segs differ at position 1 (domain vs infrastructure)
+    //     → "domain_entity", "infrastructure_entity"
+    //
+    //   ["apps/crawler/src/domain", "apps/server/src/domain"]
+    //     → parent segs differ at position 1 (crawler vs server)
+    //     → "crawler_domain", "server_domain"
     //
     // NOTE: We group across ALL tiers so that dirs in different tiers but with the same
-    // base name are still compared (e.g. domain/entity in tier 0 vs infrastructure/entity
-    // in tier 1 are both named "entity" → qualified to "domain_entity" / "infrastructure_entity").
+    // base name are still compared.
     let mut dir_to_layer: BTreeMap<String, String> = BTreeMap::new();
 
     // Collect all dirs across all tiers, group by base name
@@ -133,28 +201,9 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
         by_base.entry(base).or_default().push(dir.clone());
     }
 
-    for (base_name, dirs) in &by_base {
-        // Sub-group by immediate parent's base name
-        let mut by_parent: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for dir in dirs {
-            let parent_base = dir
-                .rsplit_once('/')
-                .map(|(parent, _)| parent.split('/').next_back().unwrap_or(""))
-                .unwrap_or("")
-                .to_string();
-            by_parent.entry(parent_base).or_default().push(dir.clone());
-        }
-
-        let needs_prefix = by_parent.len() > 1;
-        for (parent_base, group_dirs) in &by_parent {
-            let layer_name = if needs_prefix && !parent_base.is_empty() {
-                format!("{}_{}", parent_base, base_name)
-            } else {
-                base_name.clone()
-            };
-            for dir in group_dirs {
-                dir_to_layer.insert(dir.clone(), layer_name.clone());
-            }
+    for dirs in by_base.values() {
+        for (dir, layer_name) in find_distinguishing_prefix(dirs) {
+            dir_to_layer.insert(dir, layer_name);
         }
     }
 
@@ -214,6 +263,18 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
     }
 
     suggestions
+}
+
+/// Return true if the string is a valid Python identifier (used to filter package names).
+/// Python identifiers start with a letter or underscore and contain only letters, digits,
+/// and underscores. Directory names like "2026-03-01-ml-knowledge-base" are excluded.
+fn is_valid_python_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_alphanumeric() || c == '_')
 }
 
 /// Return true if a directory name should be skipped during scanning.
@@ -307,6 +368,35 @@ pub fn generate_toml(
         .join(", ");
     out.push_str(&format!("languages = [{}]\n", langs_str));
 
+    // Derive Python package names from layer path base directories.
+    // Used for [resolve.python] and to filter internal names from external_allow.
+    let is_python = languages.iter().any(|l| l == "python");
+    let py_pkg_names: BTreeSet<String> = if is_python {
+        layers
+            .iter()
+            .flat_map(|layer| layer.paths.iter())
+            .filter_map(|path| {
+                let p = path.trim_end_matches("/**").trim_end_matches('/');
+                p.split('/').next_back().map(|s| s.to_string())
+            })
+            .filter(|s| is_valid_python_identifier(s))
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
+
+    // [resolve.python] — Python プロジェクトの場合のみ出力
+    if is_python && !py_pkg_names.is_empty() {
+        out.push('\n');
+        out.push_str("[resolve.python]\n");
+        let names_str = py_pkg_names
+            .iter()
+            .map(|n| format!("\"{}\"", n))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!("package_names = [{}]\n", names_str));
+    }
+
     // [[layers]] sections
     for layer in layers {
         out.push('\n');
@@ -345,9 +435,14 @@ pub fn generate_toml(
             mode_str(layer.external_mode)
         ));
 
-        if !layer.external_allow.is_empty() {
-            let ext_str = layer
-                .external_allow
+        // Python の場合、package_names に含まれる名前は内部パッケージなので external_allow から除外
+        let filtered_external: Vec<&String> = layer
+            .external_allow
+            .iter()
+            .filter(|e| !py_pkg_names.contains(*e))
+            .collect();
+        if !filtered_external.is_empty() {
+            let ext_str = filtered_external
                 .iter()
                 .map(|e| format!("\"{}\"", e))
                 .collect::<Vec<_>>()
@@ -553,7 +648,8 @@ mod tests {
 
     #[test]
     fn test_infer_layers_groups_dirs_by_base_name() {
-        // Two sub-projects both have a "domain" dir → one merged layer
+        // Two sub-projects both have a "domain" dir with different parents →
+        // they must NOT be merged; each gets a distinguishing prefix.
         let mut analyses = BTreeMap::new();
         analyses.insert(
             "apps/crawler/src/domain".to_string(),
@@ -574,11 +670,55 @@ mod tests {
         let layers = infer_layers(&analyses);
         assert_eq!(
             layers.len(),
-            1,
-            "two domain dirs should merge into one layer"
+            2,
+            "two domain dirs from different sub-projects must be separate layers, got {:?}",
+            layers.iter().map(|l| &l.name).collect::<Vec<_>>()
         );
-        assert_eq!(layers[0].name, "domain");
-        assert_eq!(layers[0].paths.len(), 2);
+        let names: Vec<&str> = layers.iter().map(|l| l.name.as_str()).collect();
+        assert!(
+            names.contains(&"crawler_domain") || names.contains(&"server_domain"),
+            "layers should have distinguishing prefixes, got {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_infer_layers_separate_same_name_dirs_different_subproject() {
+        // crawler/src/domain + ingest/src/domain + server/src/domain → 3 separate layers
+        let mut analyses = BTreeMap::new();
+        for sub in &["crawler", "ingest", "server"] {
+            analyses.insert(
+                format!("apps/{}/src/domain", sub),
+                DirAnalysis {
+                    internal_deps: BTreeSet::new(),
+                    external_pkgs: BTreeSet::new(),
+                    file_count: 1,
+                },
+            );
+        }
+        let layers = infer_layers(&analyses);
+        assert_eq!(
+            layers.len(),
+            3,
+            "each sub-project domain must be a separate layer, got {:?}",
+            layers.iter().map(|l| &l.name).collect::<Vec<_>>()
+        );
+        let names: Vec<String> = layers.iter().map(|l| l.name.clone()).collect();
+        assert!(
+            names.contains(&"crawler_domain".to_string()),
+            "expected crawler_domain, got {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"ingest_domain".to_string()),
+            "expected ingest_domain, got {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"server_domain".to_string()),
+            "expected server_domain, got {:?}",
+            names
+        );
     }
 
     #[test]
@@ -740,6 +880,105 @@ mod tests {
         assert!(
             toml.contains("apps/server/src/domain/**"),
             "second path missing"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // generate_toml — resolve.python
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_generate_toml_python_adds_resolve_section() {
+        // Python プロジェクトでは [resolve.python] package_names が出力されるべき
+        let layers = vec![
+            make_layer("domain", vec!["src/domain/**"]),
+            make_layer("usecase", vec!["src/usecase/**"]),
+            make_layer("infrastructure", vec!["src/infrastructure/**"]),
+        ];
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        assert!(
+            toml.contains("[resolve.python]"),
+            "Python プロジェクトは [resolve.python] を含むべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("package_names"),
+            "package_names フィールドが必要\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("\"domain\""),
+            "domain が含まれるべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("\"usecase\""),
+            "usecase が含まれるべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("\"infrastructure\""),
+            "infrastructure が含まれるべき\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_rust_no_resolve_section() {
+        // Rust プロジェクトでは [resolve.python] は出力されない
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers);
+        assert!(
+            !toml.contains("[resolve.python]"),
+            "Rust プロジェクトに [resolve.python] は不要\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_python_monorepo_package_names_deduplicated() {
+        // 複数サブプロジェクトで同じ base name が重複しても一度だけ出力
+        let layers = vec![
+            make_layer("crawler_domain", vec!["crawler/src/domain/**"]),
+            make_layer("server_domain", vec!["server/src/domain/**"]),
+            make_layer("crawler_usecase", vec!["crawler/src/usecase/**"]),
+        ];
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        // "domain" は1回だけ
+        let domain_count = toml.matches("\"domain\"").count();
+        assert_eq!(domain_count, 1, "domain は重複なし。toml:\n{}", toml);
+    }
+
+    #[test]
+    fn test_generate_toml_python_filters_package_names_from_external_allow() {
+        // external_allow に package_names と同じ名前が混入しないべき
+        // (mille init スキャン時に "domain.entity" が External 扱いされて domain が混入するケース)
+        let mut domain_layer = make_layer("domain", vec!["src/domain/**"]);
+        domain_layer.external_allow = vec![
+            "domain".to_string(),
+            "abc".to_string(),
+            "dataclasses".to_string(),
+        ];
+        let layers = vec![domain_layer];
+        let toml = generate_toml("myproject", ".", &["python".to_string()], &layers);
+        // "domain" は package_names に含まれるので external_allow から除外されるべき
+        // abc, dataclasses は残るべき
+        // external_allow の行に "domain" が含まれないことを確認
+        let has_domain_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"domain\""));
+        assert!(
+            !has_domain_in_ext_allow,
+            "domain は external_allow に出力されるべきでない\n{}",
+            toml
+        );
+        let has_abc_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"abc\""));
+        assert!(
+            has_abc_in_ext_allow,
+            "abc は external_allow に残るべき\n{}",
+            toml
         );
     }
 
