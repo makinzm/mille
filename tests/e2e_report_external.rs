@@ -13,8 +13,7 @@ fn fixture_path(name: &str) -> PathBuf {
 }
 
 fn run_mille(args: &[&str], cwd: &PathBuf) -> std::process::Output {
-    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target/debug/mille");
+    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/mille");
     std::process::Command::new(binary)
         .args(args)
         .current_dir(cwd)
@@ -28,7 +27,10 @@ fn test_e2e_report_external_terminal() {
     let output = run_mille(&["report", "external"], &cwd);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    assert!(output.status.success(), "exit code should be 0\nstdout: {stdout}");
+    assert!(
+        output.status.success(),
+        "exit code should be 0\nstdout: {stdout}"
+    );
     // infrastructure layer should list database/sql
     assert!(
         stdout.contains("database/sql"),
@@ -45,12 +47,24 @@ fn test_e2e_report_external_json() {
     let output = run_mille(&["report", "external", "--format", "json"], &cwd);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    assert!(output.status.success(), "exit code should be 0\nstdout: {stdout}");
+    assert!(
+        output.status.success(),
+        "exit code should be 0\nstdout: {stdout}"
+    );
 
     // Basic JSON structure check
-    assert!(stdout.trim_start().starts_with('['), "JSON output should start with '['\n{stdout}");
-    assert!(stdout.contains("\"layer\""), "JSON should contain 'layer' key\n{stdout}");
-    assert!(stdout.contains("\"packages\""), "JSON should contain 'packages' key\n{stdout}");
+    assert!(
+        stdout.trim_start().starts_with('['),
+        "JSON output should start with '['\n{stdout}"
+    );
+    assert!(
+        stdout.contains("\"layer\""),
+        "JSON should contain 'layer' key\n{stdout}"
+    );
+    assert!(
+        stdout.contains("\"packages\""),
+        "JSON should contain 'packages' key\n{stdout}"
+    );
     assert!(
         stdout.contains("database/sql"),
         "JSON should include database/sql\n{stdout}"
@@ -63,7 +77,10 @@ fn test_e2e_report_external_no_external_layers() {
     let output = run_mille(&["report", "external"], &cwd);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    assert!(output.status.success(), "exit code should be 0\nstdout: {stdout}");
+    assert!(
+        output.status.success(),
+        "exit code should be 0\nstdout: {stdout}"
+    );
     // domain and usecase layers have no external imports; (none) should appear
     assert!(
         stdout.contains("(none)"),
@@ -81,9 +98,12 @@ fn test_e2e_report_external_output_file() {
 
     let output = run_mille(
         &[
-            "report", "external",
-            "--format", "json",
-            "--output", "_test_report_external_output.json",
+            "report",
+            "external",
+            "--format",
+            "json",
+            "--output",
+            "_test_report_external_output.json",
         ],
         &cwd,
     );
@@ -91,7 +111,10 @@ fn test_e2e_report_external_output_file() {
     assert!(out_file.exists(), "--output file should have been created");
 
     let content = std::fs::read_to_string(&out_file).unwrap();
-    assert!(content.contains("database/sql"), "output file should contain database/sql");
+    assert!(
+        content.contains("database/sql"),
+        "output file should contain database/sql"
+    );
 
     std::fs::remove_file(&out_file).unwrap();
 }
