@@ -13,6 +13,31 @@ fn is_source_file(path: &str) -> bool {
         .any(|ext| path.ends_with(&format!(".{}", ext)))
 }
 
+/// Returns true if the path contains an excluded directory component
+/// (e.g. `.venv`, `node_modules`, `target`, etc.).
+fn has_excluded_component(path: &str) -> bool {
+    path.split('/').any(|seg| {
+        matches!(
+            seg,
+            "target"
+                | "node_modules"
+                | "dist"
+                | "build"
+                | "out"
+                | "__pycache__"
+                | ".venv"
+                | "venv"
+                | "vendor"
+                | "coverage"
+                | ".next"
+                | ".nuxt"
+                | "migration"
+                | "migrations"
+        ) || (seg.starts_with('.') && seg.len() > 1)
+            || seg.starts_with("flycheck")
+    })
+}
+
 impl SourceFileRepository for FsSourceFileRepository {
     fn collect(&self, patterns: &[String]) -> Vec<String> {
         let mut files = Vec::new();
@@ -41,7 +66,8 @@ impl SourceFileRepository for FsSourceFileRepository {
                             files.extend(
                                 entries
                                     .filter_map(|e| e.ok())
-                                    .map(|p| p.to_string_lossy().to_string()),
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .filter(|p| !has_excluded_component(p)),
                             );
                         }
                     }
@@ -60,7 +86,8 @@ impl SourceFileRepository for FsSourceFileRepository {
                             files.extend(
                                 entries
                                     .filter_map(|e| e.ok())
-                                    .map(|p| p.to_string_lossy().to_string()),
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .filter(|p| !has_excluded_component(p)),
                             );
                         }
                     }
@@ -74,7 +101,8 @@ impl SourceFileRepository for FsSourceFileRepository {
                     entries
                         .filter_map(|e| e.ok())
                         .filter(|p| is_source_file(&p.to_string_lossy()))
-                        .map(|p| p.to_string_lossy().to_string()),
+                        .map(|p| p.to_string_lossy().to_string())
+                        .filter(|p| !has_excluded_component(p)),
                 );
             }
         }
@@ -144,10 +172,7 @@ mod tests {
     #[test]
     fn test_collect_skips_venv_paths() {
         // Create a temp dir with .venv/lib/fake.py — it must be excluded.
-        let tmp = std::env::temp_dir().join(format!(
-            "mille_venv_test_{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("mille_venv_test_{}", std::process::id()));
         std::fs::create_dir_all(tmp.join(".venv/lib")).unwrap();
         std::fs::write(tmp.join(".venv/lib/fake.py"), "# fake").unwrap();
         std::fs::create_dir_all(tmp.join("src")).unwrap();

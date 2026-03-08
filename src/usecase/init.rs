@@ -79,6 +79,66 @@ pub fn topological_sort(deps: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<St
     tiers
 }
 
+/// Given a list of directory paths that all share the same base name,
+/// return `(dir_path, layer_name)` pairs where each dir gets a unique name.
+///
+/// When only one dir is present the base name is used as-is.
+/// When multiple dirs exist, the first path segment where they differ
+/// is prepended as a prefix: e.g. "crawler_domain", "server_domain".
+fn find_distinguishing_prefix(dirs: &[String]) -> Vec<(String, String)> {
+    let base = dirs[0]
+        .split('/')
+        .next_back()
+        .unwrap_or(dirs[0].as_str())
+        .to_string();
+
+    if dirs.len() == 1 {
+        return vec![(dirs[0].clone(), base)];
+    }
+
+    // Collect parent segments (everything except the last base component) for each dir.
+    // Segments are stored root-first so index 0 is the top-level directory.
+    let parent_segs: Vec<Vec<&str>> = dirs
+        .iter()
+        .map(|d| {
+            let parts: Vec<&str> = d.split('/').collect();
+            if parts.len() > 1 {
+                parts[..parts.len() - 1].to_vec()
+            } else {
+                vec![]
+            }
+        })
+        .collect();
+
+    // Find the first position (root-first) where at least two dirs differ.
+    let depth = parent_segs.iter().map(|s| s.len()).min().unwrap_or(0);
+    let mut diff_pos: Option<usize> = None;
+    for i in 0..depth {
+        let first = parent_segs[0].get(i);
+        if parent_segs.iter().any(|s| s.get(i) != first) {
+            diff_pos = Some(i);
+            break;
+        }
+    }
+
+    dirs.iter()
+        .enumerate()
+        .map(|(idx, dir)| {
+            let prefix = match diff_pos {
+                Some(pos) => parent_segs[idx].get(pos).copied().unwrap_or(""),
+                // All common parents identical (or no parents): use last parent segment.
+                None => parent_segs[idx].last().copied().unwrap_or(""),
+            };
+            let name = if prefix.is_empty() {
+                base.clone()
+            } else {
+                format!("{}_{}", prefix, base)
+            };
+            (dir.clone(), name)
+        })
+        .collect()
+}
+
 /// Infer layer suggestions from per-directory import analysis.
 ///
 /// Algorithm:
@@ -113,13 +173,21 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
     let tiers = topological_sort(&dep_graph);
 
     // Pass 1: assign a layer name to every dir.
-    // Dirs with the same base name are merged only when their immediate parent
-    // also shares the same base name (e.g. monorepo siblings under the same "src" parent).
-    // Otherwise each gets a qualified name: "{parent_base}_{base}".
+    // Every dir with a unique base name is named by its base name.
+    // When multiple dirs share the same base name, each gets a qualified name
+    // using the first path segment where they differ as a prefix.
+    //
+    // Examples:
+    //   ["src/domain/entity", "src/infrastructure/entity"]
+    //     → parent segs differ at position 1 (domain vs infrastructure)
+    //     → "domain_entity", "infrastructure_entity"
+    //
+    //   ["apps/crawler/src/domain", "apps/server/src/domain"]
+    //     → parent segs differ at position 1 (crawler vs server)
+    //     → "crawler_domain", "server_domain"
     //
     // NOTE: We group across ALL tiers so that dirs in different tiers but with the same
-    // base name are still compared (e.g. domain/entity in tier 0 vs infrastructure/entity
-    // in tier 1 are both named "entity" → qualified to "domain_entity" / "infrastructure_entity").
+    // base name are still compared.
     let mut dir_to_layer: BTreeMap<String, String> = BTreeMap::new();
 
     // Collect all dirs across all tiers, group by base name
@@ -133,28 +201,9 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
         by_base.entry(base).or_default().push(dir.clone());
     }
 
-    for (base_name, dirs) in &by_base {
-        // Sub-group by immediate parent's base name
-        let mut by_parent: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for dir in dirs {
-            let parent_base = dir
-                .rsplit_once('/')
-                .map(|(parent, _)| parent.split('/').next_back().unwrap_or(""))
-                .unwrap_or("")
-                .to_string();
-            by_parent.entry(parent_base).or_default().push(dir.clone());
-        }
-
-        let needs_prefix = by_parent.len() > 1;
-        for (parent_base, group_dirs) in &by_parent {
-            let layer_name = if needs_prefix && !parent_base.is_empty() {
-                format!("{}_{}", parent_base, base_name)
-            } else {
-                base_name.clone()
-            };
-            for dir in group_dirs {
-                dir_to_layer.insert(dir.clone(), layer_name.clone());
-            }
+    for dirs in by_base.values() {
+        for (dir, layer_name) in find_distinguishing_prefix(dirs) {
+            dir_to_layer.insert(dir, layer_name);
         }
     }
 

@@ -81,12 +81,23 @@ impl<'a> ViolationDetector<'a> {
             let Some(from_layer) = self.find_layer_for_file(&import.raw.file) else {
                 continue;
             };
-            let crate_name = import
-                .raw
-                .path
-                .split("::")
-                .next()
-                .unwrap_or(&import.raw.path);
+            let crate_name: &str = if import.raw.file.ends_with(".py") {
+                // Python: "matplotlib.pyplot" → "matplotlib"
+                import
+                    .raw
+                    .path
+                    .split('.')
+                    .next()
+                    .unwrap_or(&import.raw.path)
+            } else {
+                // Rust/Go: "serde::Deserialize" → "serde"
+                import
+                    .raw
+                    .path
+                    .split("::")
+                    .next()
+                    .unwrap_or(&import.raw.path)
+            };
             let allowed = match from_layer.external_mode {
                 DependencyMode::OptIn => from_layer
                     .external_allow
@@ -970,7 +981,10 @@ mod tests {
         }];
         let violations = detector.detect_external(&imports);
         assert_eq!(violations.len(), 1, "unknown.submodule must be a violation");
-        assert_eq!(violations[0].to_layer, "unknown", "crate_name should be 'unknown'");
+        assert_eq!(
+            violations[0].to_layer, "unknown",
+            "crate_name should be 'unknown'"
+        );
     }
 
     #[test]
