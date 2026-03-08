@@ -18,13 +18,16 @@ use crate::infrastructure::parser::DispatchingParser;
 use crate::infrastructure::repository::fs_source_file_repository::FsSourceFileRepository;
 use crate::infrastructure::repository::toml_config_repository::TomlConfigRepository;
 use crate::infrastructure::resolver::DispatchingResolver;
+use crate::presentation::cli::args::AnalyzeFormat;
 use crate::presentation::cli::args::Format;
 use crate::presentation::cli::args::{Cli, Command};
 use crate::presentation::formatter::github_actions::format_all_ga;
 use crate::presentation::formatter::json::format_json;
+use crate::presentation::formatter::svg::format_svg;
 use crate::presentation::formatter::terminal::{
     format_layer_stats, format_summary, format_violation,
 };
+use crate::usecase::analyze;
 use crate::usecase::check_architecture;
 use crate::usecase::init::{self, DirAnalysis};
 
@@ -52,6 +55,65 @@ where
 
 fn run_cli_inner(cli: Cli) {
     match cli.command {
+        Command::Analyze {
+            config,
+            format,
+            output,
+        } => {
+            let config_repo = TomlConfigRepository;
+            let app_config = match config_repo.load(&config) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(3);
+                }
+            };
+
+            let parser = DispatchingParser::new();
+            let resolver = DispatchingResolver::from_config(&app_config, &config);
+
+            match analyze::analyze(
+                &config,
+                &config_repo,
+                &FsSourceFileRepository,
+                &parser,
+                &resolver,
+            ) {
+                Ok(result) => {
+                    let content = match format {
+                        AnalyzeFormat::Terminal => format_analyze_terminal(&result),
+                        AnalyzeFormat::Json => format_analyze_json(&result),
+                        AnalyzeFormat::Dot => format_analyze_dot(&result),
+                        AnalyzeFormat::Svg => format_svg(&result),
+                    };
+
+                    match output {
+                        Some(path) => {
+                            // NOTE: Refuse to overwrite existing files to prevent accidental data loss.
+                            if std::path::Path::new(&path).exists() {
+                                eprintln!(
+                                    "Error: '{}' already exists. Remove it first if you want to overwrite.",
+                                    path
+                                );
+                                std::process::exit(1);
+                            }
+                            match fs::write(&path, &content) {
+                                Ok(_) => eprintln!("Written to '{}'", path),
+                                Err(e) => {
+                                    eprintln!("Error: failed to write '{}': {}", path, e);
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                        None => print!("{}", content),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(3);
+                }
+            }
+        }
         Command::Init {
             output,
             force,
@@ -531,6 +593,91 @@ fn resolve_to_known_dir(
     }
 
     None
+}
+
+// ---------------------------------------------------------------------------
+// Analyze output formatters
+// ---------------------------------------------------------------------------
+
+fn format_analyze_terminal(result: &analyze::AnalyzeResult) -> String {
+    let mut buf = String::new();
+    buf.push_str(&format!(
+        "Dependency Graph ({} layers)\n\n",
+        result.nodes.len()
+    ));
+    if result.edges.is_empty() {
+        buf.push_str("  (no cross-layer dependencies detected)\n");
+    } else {
+        let max_from = result.edges.iter().map(|e| e.from.len()).max().unwrap_or(0);
+        let max_to = result.edges.iter().map(|e| e.to.len()).max().unwrap_or(0);
+        for edge in &result.edges {
+            buf.push_str(&format!(
+                "  {:<from_w$} -> {:<to_w$}  ({})\n",
+                edge.from,
+                edge.to,
+                edge.import_count,
+                from_w = max_from,
+                to_w = max_to,
+            ));
+        }
+    }
+    buf.push('\n');
+    // Layer summary table
+    let max_name = result.nodes.iter().map(|n| n.name.len()).max().unwrap_or(0);
+    for node in &result.nodes {
+        buf.push_str(&format!(
+            "  {:<name_w$}  {} file{}\n",
+            node.name,
+            node.file_count,
+            if node.file_count == 1 { "" } else { "s" },
+            name_w = max_name,
+        ));
+    }
+    buf
+}
+
+fn format_analyze_json(result: &analyze::AnalyzeResult) -> String {
+    let nodes: Vec<String> = result
+        .nodes
+        .iter()
+        .map(|n| format!(r#"{{"layer":"{}","file_count":{}}}"#, n.name, n.file_count))
+        .collect();
+    let edges: Vec<String> = result
+        .edges
+        .iter()
+        .map(|e| {
+            format!(
+                r#"{{"from":"{}","to":"{}","import_count":{}}}"#,
+                e.from, e.to, e.import_count
+            )
+        })
+        .collect();
+    format!(
+        r#"{{"nodes":[{}],"edges":[{}]}}"#,
+        nodes.join(","),
+        edges.join(",")
+    )
+}
+
+fn format_analyze_dot(result: &analyze::AnalyzeResult) -> String {
+    let mut buf = String::from("digraph mille {\n  rankdir=TB;\n");
+    for node in &result.nodes {
+        let label = format!(
+            "{}\\n{} file{}",
+            node.name,
+            node.file_count,
+            if node.file_count == 1 { "" } else { "s" }
+        );
+        buf.push_str(&format!("  \"{}\" [label=\"{}\"];\n", node.name, label));
+    }
+    for edge in &result.edges {
+        buf.push_str(&format!(
+            "  \"{}\" -> \"{}\" [label=\"{}\"];\n",
+            edge.from, edge.to, edge.import_count
+        ));
+    }
+    buf.push_str("}\n");
+    buf
 }
 
 // ---------------------------------------------------------------------------

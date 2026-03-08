@@ -274,7 +274,26 @@ external_mode   = "opt-out"
 external_deny   = []
 ```
 
-### 2. Run `mille check`
+### 2. Visualize with `mille analyze`
+
+Before enforcing rules, you can inspect the actual dependency graph:
+
+```sh
+mille analyze                  # human-readable terminal output (default)
+mille analyze --format json    # machine-readable JSON graph
+mille analyze --format dot     # Graphviz DOT (pipe to: dot -Tsvg -o graph.svg)
+mille analyze --format svg     # self-contained SVG image (open in a browser)
+```
+
+Example SVG output (dark theme, green edges):
+
+```sh
+mille analyze --format svg > graph.svg && open graph.svg
+```
+
+`mille analyze` always exits `0` — it only visualizes, never enforces rules.
+
+### 3. Run `mille check`
 
 ```sh
 mille check

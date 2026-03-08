@@ -11,6 +11,19 @@ pub enum Format {
     GithubActions,
 }
 
+/// Output format for `mille analyze`.
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
+pub enum AnalyzeFormat {
+    /// Human-readable terminal output (default)
+    Terminal,
+    /// JSON graph data
+    Json,
+    /// Graphviz DOT format
+    Dot,
+    /// Self-contained SVG image
+    Svg,
+}
+
 #[derive(Parser, Debug)]
 #[command(
     name = "mille",
@@ -32,6 +45,18 @@ pub enum Command {
         /// Output format: terminal (default), json, github-actions
         #[arg(long, value_enum, default_value_t = Format::Terminal)]
         format: Format,
+    },
+    /// Visualize the dependency graph without applying rules.
+    Analyze {
+        /// Path to mille.toml (default: ./mille.toml)
+        #[arg(long, default_value = "mille.toml")]
+        config: String,
+        /// Output format: terminal (default), json, dot, svg
+        #[arg(long, value_enum, default_value_t = AnalyzeFormat::Terminal)]
+        format: AnalyzeFormat,
+        /// Write output to this file instead of stdout. Refuses to overwrite existing files.
+        #[arg(long)]
+        output: Option<String>,
     },
     /// Scan the project and generate a mille.toml configuration file.
     Init {
