@@ -1052,6 +1052,75 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
+    // generate_toml — resolve.java
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_generate_toml_java_with_module_name() {
+        // Java プロジェクトで module_name が渡された場合 [resolve.java] が出力される
+        let layers = vec![
+            make_layer("domain", vec!["**/domain/**"]),
+            make_layer("usecase", vec!["**/usecase/**"]),
+        ];
+        let toml = generate_toml(
+            "myapp",
+            ".",
+            &["java".to_string()],
+            &layers,
+            None,
+            Some("com.example.myapp"),
+        );
+        assert!(
+            toml.contains("[resolve.java]"),
+            "Java プロジェクトは [resolve.java] を含むべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("module_name = \"com.example.myapp\""),
+            "module_name が出力されるべき\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_java_without_module_name() {
+        // Java プロジェクトでも module_name が None なら [resolve.java] は出力しない
+        let layers = vec![make_layer("domain", vec!["**/domain/**"])];
+        let toml = generate_toml(
+            "myapp",
+            ".",
+            &["java".to_string()],
+            &layers,
+            None,
+            None,
+        );
+        assert!(
+            !toml.contains("[resolve.java]"),
+            "module_name なしは [resolve.java] を出力しない\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_rust_no_resolve_java_section() {
+        // Rust プロジェクトでは java_module_name を渡しても [resolve.java] は出力しない
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["rust".to_string()],
+            &layers,
+            None,
+            Some("com.example.ignored"),
+        );
+        assert!(
+            !toml.contains("[resolve.java]"),
+            "Rust プロジェクトに [resolve.java] は不要\n{}",
+            toml
+        );
+    }
+
+    // ------------------------------------------------------------------
     // detect_languages
     // ------------------------------------------------------------------
 

@@ -282,3 +282,246 @@ fn test_init_existing_file_with_force_overwrites() {
         content
     );
 }
+
+// ---------------------------------------------------------------------------
+// Java: flat layout (src/domain/, src/usecase/, ...)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_java_init_flat_detects_layers() {
+    let tmp = TempDir::new().unwrap();
+    // domain — no imports
+    make_file(
+        tmp.path(),
+        "src/domain/User.java",
+        "package com.example.myapp.domain;\npublic class User {}",
+    );
+    // usecase — imports domain
+    make_file(
+        tmp.path(),
+        "src/usecase/UserService.java",
+        "package com.example.myapp.usecase;\nimport com.example.myapp.domain.User;\npublic class UserService {}",
+    );
+    // infrastructure — imports domain
+    make_file(
+        tmp.path(),
+        "src/infrastructure/UserRepo.java",
+        "package com.example.myapp.infrastructure;\nimport com.example.myapp.domain.User;\nimport java.util.List;\npublic class UserRepo {}",
+    );
+
+    let out = mille_init(tmp.path(), &[]);
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "mille init should exit 0 for flat Java layout\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("\"domain\""),
+        "domain layer must be detected\n{}",
+        content
+    );
+    assert!(
+        content.contains("\"usecase\""),
+        "usecase layer must be detected\n{}",
+        content
+    );
+    assert!(
+        content.contains("\"infrastructure\""),
+        "infrastructure layer must be detected\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_java_init_flat_usecase_allows_domain() {
+    let tmp = TempDir::new().unwrap();
+    make_file(
+        tmp.path(),
+        "src/domain/User.java",
+        "package com.example.myapp.domain;\npublic class User {}",
+    );
+    make_file(
+        tmp.path(),
+        "src/usecase/UserService.java",
+        "package com.example.myapp.usecase;\nimport com.example.myapp.domain.User;\npublic class UserService {}",
+    );
+
+    let out = mille_init(tmp.path(), &[]);
+    assert_eq!(exit_code(&out), 0, "stdout:\n{}", stdout(&out));
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("allow = [\"domain\"]"),
+        "usecase should allow domain\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_java_init_flat_paths_use_glob_prefix() {
+    // Java layer paths must be "**/domain/**" form, not "src/domain/**"
+    let tmp = TempDir::new().unwrap();
+    make_file(
+        tmp.path(),
+        "src/domain/User.java",
+        "package com.example.myapp.domain;\npublic class User {}",
+    );
+    make_file(
+        tmp.path(),
+        "src/usecase/UserService.java",
+        "package com.example.myapp.usecase;\nimport com.example.myapp.domain.User;\npublic class UserService {}",
+    );
+
+    let out = mille_init(tmp.path(), &[]);
+    assert_eq!(exit_code(&out), 0, "stdout:\n{}", stdout(&out));
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("**/domain/**"),
+        "domain path should use **/domain/** glob\n{}",
+        content
+    );
+    assert!(
+        content.contains("**/usecase/**"),
+        "usecase path should use **/usecase/** glob\n{}",
+        content
+    );
+    assert!(
+        !content.contains("src/domain"),
+        "should NOT use src/domain (depth-based) path\n{}",
+        content
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Java: Maven standard layout (src/main/java/com/example/myapp/...)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_java_init_maven_detects_layers() {
+    let tmp = TempDir::new().unwrap();
+
+    make_file(
+        tmp.path(),
+        "pom.xml",
+        r#"<?xml version="1.0"?><project><groupId>com.example</groupId><artifactId>myapp</artifactId></project>"#,
+    );
+    make_file(
+        tmp.path(),
+        "src/main/java/com/example/myapp/domain/User.java",
+        "package com.example.myapp.domain;\npublic class User {}",
+    );
+    make_file(
+        tmp.path(),
+        "src/main/java/com/example/myapp/usecase/UserService.java",
+        "package com.example.myapp.usecase;\nimport com.example.myapp.domain.User;\npublic class UserService {}",
+    );
+    make_file(
+        tmp.path(),
+        "src/main/java/com/example/myapp/infrastructure/UserRepo.java",
+        "package com.example.myapp.infrastructure;\nimport com.example.myapp.domain.User;\npublic class UserRepo {}",
+    );
+
+    let out = mille_init(tmp.path(), &[]);
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "mille init should exit 0 for Maven layout\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("\"domain\""),
+        "domain layer must be detected in Maven layout\n{}",
+        content
+    );
+    assert!(
+        content.contains("\"usecase\""),
+        "usecase layer must be detected\n{}",
+        content
+    );
+    assert!(
+        content.contains("\"infrastructure\""),
+        "infrastructure layer must be detected\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_java_init_maven_output_has_resolve_java() {
+    let tmp = TempDir::new().unwrap();
+
+    make_file(
+        tmp.path(),
+        "pom.xml",
+        r#"<?xml version="1.0"?><project><groupId>com.example</groupId><artifactId>myapp</artifactId></project>"#,
+    );
+    make_file(
+        tmp.path(),
+        "src/main/java/com/example/myapp/domain/User.java",
+        "package com.example.myapp.domain;\npublic class User {}",
+    );
+    make_file(
+        tmp.path(),
+        "src/main/java/com/example/myapp/usecase/UserService.java",
+        "package com.example.myapp.usecase;\nimport com.example.myapp.domain.User;\npublic class UserService {}",
+    );
+
+    let out = mille_init(tmp.path(), &[]);
+    assert_eq!(exit_code(&out), 0, "stdout:\n{}", stdout(&out));
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("[resolve.java]"),
+        "Maven project must have [resolve.java] section\n{}",
+        content
+    );
+    assert!(
+        content.contains("module_name = \"com.example.myapp\""),
+        "module_name must be auto-detected from pom.xml\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_java_init_maven_paths_use_glob_prefix() {
+    // Maven layout: paths must be **/domain/** not src/main/java/com/example/myapp/domain/**
+    let tmp = TempDir::new().unwrap();
+
+    make_file(
+        tmp.path(),
+        "pom.xml",
+        r#"<?xml version="1.0"?><project><groupId>com.example</groupId><artifactId>myapp</artifactId></project>"#,
+    );
+    make_file(
+        tmp.path(),
+        "src/main/java/com/example/myapp/domain/User.java",
+        "package com.example.myapp.domain;\npublic class User {}",
+    );
+    make_file(
+        tmp.path(),
+        "src/main/java/com/example/myapp/usecase/UserService.java",
+        "package com.example.myapp.usecase;\nimport com.example.myapp.domain.User;\npublic class UserService {}",
+    );
+
+    let out = mille_init(tmp.path(), &[]);
+    assert_eq!(exit_code(&out), 0, "stdout:\n{}", stdout(&out));
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("**/domain/**"),
+        "domain path must use **/domain/** glob\n{}",
+        content
+    );
+    assert!(
+        !content.contains("src/main/java"),
+        "path must NOT include Maven source root prefix\n{}",
+        content
+    );
+}
