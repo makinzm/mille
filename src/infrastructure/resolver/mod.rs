@@ -1,4 +1,5 @@
 pub mod go;
+pub mod java;
 pub mod python;
 pub mod rust;
 pub mod typescript;
@@ -6,6 +7,7 @@ pub mod typescript;
 use std::collections::HashMap;
 
 use self::go::GoResolver;
+use self::java::JavaResolver;
 use self::python::PythonResolver;
 use self::rust::RustResolver;
 use self::typescript::TypeScriptResolver;
@@ -20,6 +22,7 @@ pub struct DispatchingResolver {
     go: GoResolver,
     python: PythonResolver,
     typescript: TypeScriptResolver,
+    java: JavaResolver,
 }
 
 impl DispatchingResolver {
@@ -29,6 +32,7 @@ impl DispatchingResolver {
             go,
             python,
             typescript,
+            java: JavaResolver::new(String::new()),
         }
     }
 
@@ -54,11 +58,19 @@ impl DispatchingResolver {
 
         let ts_aliases = load_ts_aliases(config_path, app_config);
 
+        let java_module = app_config
+            .resolve
+            .as_ref()
+            .and_then(|r| r.java.as_ref())
+            .map(|j| j.module_name.clone())
+            .unwrap_or_default();
+
         DispatchingResolver {
             rust: RustResolver,
             go: GoResolver::new(go_module),
             python: PythonResolver::new(python_packages),
             typescript: TypeScriptResolver::with_aliases(ts_aliases),
+            java: JavaResolver::new(java_module),
         }
     }
 }
@@ -168,6 +180,8 @@ impl Resolver for DispatchingResolver {
             self.python.resolve(import)
         } else if is_ts_js(&import.file) {
             self.typescript.resolve(import)
+        } else if import.file.ends_with(".java") {
+            self.java.resolve(import)
         } else {
             self.rust.resolve(import)
         }
@@ -180,6 +194,8 @@ impl Resolver for DispatchingResolver {
             self.python.resolve_for_project(import, own_crate)
         } else if is_ts_js(&import.file) {
             self.typescript.resolve_for_project(import, own_crate)
+        } else if import.file.ends_with(".java") {
+            self.java.resolve_for_project(import, own_crate)
         } else {
             self.rust.resolve_for_project(import, own_crate)
         }

@@ -22,6 +22,7 @@ pub struct ResolveConfig {
     pub typescript: Option<TsResolveConfig>,
     pub go: Option<GoResolveConfig>,
     pub python: Option<PythonResolveConfig>,
+    pub java: Option<JavaResolveConfig>,
     #[serde(default)]
     pub aliases: std::collections::HashMap<String, String>,
 }
@@ -33,6 +34,13 @@ pub struct TsResolveConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct GoResolveConfig {
+    pub module_name: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct JavaResolveConfig {
+    /// Base package name that identifies internal imports.
+    /// e.g. "com.example.myapp" — imports starting with this prefix are Internal.
     pub module_name: String,
 }
 

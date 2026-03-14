@@ -7,7 +7,27 @@
 - `tree-sitter-java` クレートを使用（他言語と同系列）
 - fixture 構成と E2E テストケースを設計
 
-### RED フェーズ (開始)
-- TODO.md と timeline.md 作成
-- スタブ実装とテストを `--no-verify` でコミット予定
+### RED フェーズ (完了)
+- スタブ実装 (`todo!()`) とテストを作成
+- `cargo test` で Java 関連 10 テストが期待通り失敗: `not yet implemented`
+  - `infrastructure::parser::java::tests::test_parse_java_*` (4 テスト)
+  - `infrastructure::resolver::java::tests::test_java_*` (6 テスト)
+- 既存 245 テストは全て通過（デグレなし）
+- `--no-verify` でコミット実施
+
+エラーログ:
+```
+failures:
+    infrastructure::parser::java::tests::test_parse_java_multiple_imports
+    infrastructure::parser::java::tests::test_parse_java_no_imports
+    infrastructure::parser::java::tests::test_parse_java_single_import
+    infrastructure::parser::java::tests::test_parse_java_static_import
+    infrastructure::resolver::java::tests::test_java_external_is_external
+    infrastructure::resolver::java::tests::test_java_internal_is_internal
+    infrastructure::resolver::java::tests::test_java_resolver_external_resolve
+    infrastructure::resolver::java::tests::test_java_resolver_ignores_own_crate_param
+    infrastructure::resolver::java::tests::test_java_resolver_internal_resolve
+    infrastructure::resolver::java::tests::test_java_stdlib_is_external
+test result: FAILED. 245 passed; 10 failed
+```
 
