@@ -15,6 +15,72 @@ impl JavaResolver {
     pub fn new(module_name: String) -> Self {
         JavaResolver { module_name }
     }
+
+    /// Build a `JavaResolver` from optional build file paths.
+    ///
+    /// Priority:
+    /// 1. `manual_module_name` — explicit value from `[resolve.java] module_name`
+    /// 2. `pom_xml` — auto-detect from Maven pom.xml (groupId.artifactId)
+    /// 3. `build_gradle` + `settings_gradle` — auto-detect from Gradle files
+    /// 4. Empty string (no classification possible)
+    pub fn from_config(
+        manual_module_name: Option<&str>,
+        pom_xml_path: Option<&str>,
+        build_gradle_path: Option<&str>,
+        settings_gradle_path: Option<&str>,
+    ) -> Self {
+        let module_name = if let Some(name) = manual_module_name {
+            name.to_string()
+        } else if let Some(pom_path) = pom_xml_path {
+            read_module_from_pom(pom_path).unwrap_or_default()
+        } else if let Some(gradle_path) = build_gradle_path {
+            read_module_from_gradle(gradle_path, settings_gradle_path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        JavaResolver { module_name }
+    }
+}
+
+/// Parse `groupId` and `artifactId` from a pom.xml file path.
+/// Returns `"groupId.artifactId"` or `None` if not found.
+pub fn read_module_from_pom(path: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    read_module_from_pom_content(&content)
+}
+
+/// Parse module name from pom.xml content string.
+pub fn read_module_from_pom_content(content: &str) -> Option<String> {
+    todo!("parse groupId and artifactId from pom.xml content")
+}
+
+/// Parse `group` from build.gradle and `rootProject.name` from settings.gradle.
+/// Returns `"group.name"` or `None` if not found.
+pub fn read_module_from_gradle(
+    build_gradle_path: &str,
+    settings_gradle_path: Option<&str>,
+) -> Option<String> {
+    let build_content = std::fs::read_to_string(build_gradle_path).ok()?;
+    let settings_path = settings_gradle_path.unwrap_or("settings.gradle");
+    // Try to find settings.gradle in the same directory as build.gradle
+    let settings_content = {
+        let dir = std::path::Path::new(build_gradle_path)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+        let candidate = dir.join(settings_path);
+        std::fs::read_to_string(&candidate)
+            .or_else(|_| std::fs::read_to_string(settings_path))
+            .unwrap_or_default()
+    };
+    read_module_from_gradle_content(&build_content, &settings_content)
+}
+
+/// Parse module name from build.gradle and settings.gradle content strings.
+pub fn read_module_from_gradle_content(
+    build_gradle: &str,
+    settings_gradle: &str,
+) -> Option<String> {
+    todo!("parse group from build.gradle and rootProject.name from settings.gradle")
 }
 
 impl Resolver for JavaResolver {
@@ -135,11 +201,65 @@ mod tests {
         let import = raw_java("com.example.myapp.domain.User");
         let resolved = resolver.resolve(&import);
         assert_eq!(resolved.category, ImportCategory::Internal);
-        // resolved_path should enable ViolationDetector to match "src/domain/**"
+        // resolved_path uses slash-separated path so globs like "**/domain/**" work.
+        // e.g. "com.example.myapp.domain.User" -> "com/example/myapp/domain/User.java"
         assert_eq!(
             resolved.resolved_path,
-            Some("src/domain/_.java".to_string())
+            Some("com/example/myapp/domain/User.java".to_string())
         );
+    }
+
+    #[test]
+    fn test_java_resolver_path_uses_slashes() {
+        // Dots in the import path must become slashes so that globs like
+        // "**/domain/**" can match the resolved path.
+        let resolver = JavaResolver::new(MODULE.to_string());
+        let import = raw_java("com.example.myapp.usecase.UserService");
+        let resolved = resolver.resolve(&import);
+        assert_eq!(resolved.category, ImportCategory::Internal);
+        assert_eq!(
+            resolved.resolved_path,
+            Some("com/example/myapp/usecase/UserService.java".to_string())
+        );
+    }
+
+    #[test]
+    fn test_read_module_from_pom_xml() {
+        let pom_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>1.0.0</version>
+</project>"#;
+        let result = read_module_from_pom_content(pom_xml);
+        assert_eq!(result, Some("com.example.myapp".to_string()));
+    }
+
+    #[test]
+    fn test_read_module_from_pom_xml_missing_group_id() {
+        let pom_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <artifactId>myapp</artifactId>
+</project>"#;
+        let result = read_module_from_pom_content(pom_xml);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_read_module_from_gradle_content() {
+        let build_gradle = r"group = 'com.example'\nversion = '1.0.0'";
+        let settings_gradle = "rootProject.name = 'myapp'";
+        let result = read_module_from_gradle_content(build_gradle, settings_gradle);
+        assert_eq!(result, Some("com.example.myapp".to_string()));
+    }
+
+    #[test]
+    fn test_read_module_from_gradle_content_double_quotes() {
+        let build_gradle = r#"group = "com.example"
+version = "1.0.0""#;
+        let settings_gradle = r#"rootProject.name = "myapp""#;
+        let result = read_module_from_gradle_content(build_gradle, settings_gradle);
+        assert_eq!(result, Some("com.example.myapp".to_string()));
     }
 
     #[test]

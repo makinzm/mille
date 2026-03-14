@@ -58,19 +58,42 @@ impl DispatchingResolver {
 
         let ts_aliases = load_ts_aliases(config_path, app_config);
 
-        let java_module = app_config
+        let java_config = app_config
             .resolve
             .as_ref()
-            .and_then(|r| r.java.as_ref())
-            .map(|j| j.module_name.clone())
-            .unwrap_or_default();
+            .and_then(|r| r.java.as_ref());
+
+        // Resolve config_dir so relative pom.xml / build.gradle paths work.
+        let config_dir = std::path::Path::new(config_path)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+
+        let java_resolver = if let Some(jcfg) = java_config {
+            let manual_name = jcfg.module_name.as_deref();
+            let pom_path = jcfg
+                .pom_xml
+                .as_deref()
+                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+            let gradle_path = jcfg
+                .build_gradle
+                .as_deref()
+                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+            JavaResolver::from_config(
+                manual_name,
+                pom_path.as_deref(),
+                gradle_path.as_deref(),
+                None, // settings.gradle auto-discovered relative to build.gradle
+            )
+        } else {
+            JavaResolver::new(String::new())
+        };
 
         DispatchingResolver {
             rust: RustResolver,
             go: GoResolver::new(go_module),
             python: PythonResolver::new(python_packages),
             typescript: TypeScriptResolver::with_aliases(ts_aliases),
-            java: JavaResolver::new(java_module),
+            java: java_resolver,
         }
     }
 }
