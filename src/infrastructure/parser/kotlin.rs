@@ -1,0 +1,125 @@
+use tree_sitter::Node;
+
+use crate::domain::entity::call_expr::RawCallExpr;
+use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::repository::parser::Parser;
+
+/// Concrete implementation of the `Parser` port for Kotlin source files.
+pub struct KotlinParser;
+
+impl Parser for KotlinParser {
+    fn parse_imports(&self, source: &str, file_path: &str) -> Vec<RawImport> {
+        parse_kotlin_imports(source, file_path)
+    }
+
+    fn parse_call_exprs(&self, _source: &str, _file_path: &str) -> Vec<RawCallExpr> {
+        vec![]
+    }
+}
+
+/// Parse Kotlin source code and extract all `import` declarations.
+pub fn parse_kotlin_imports(source: &str, file_path: &str) -> Vec<RawImport> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_kotlin::language())
+        .expect("Failed to load Kotlin grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut imports = Vec::new();
+    collect_kotlin_imports(root, source.as_bytes(), file_path, &mut imports);
+    imports
+}
+
+fn collect_kotlin_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawImport>) {
+    if node.kind() == "import_header" {
+        let line = node.start_position().row + 1;
+        if let Some(path) = extract_kotlin_import_path(&node, source) {
+            out.push(RawImport {
+                path,
+                line,
+                file: file_path.to_string(),
+                kind: ImportKind::Import,
+                named_imports: vec![],
+            });
+        }
+        return;
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_kotlin_imports(child, source, file_path, out);
+        }
+    }
+}
+
+/// Extract the dotted import path from an `import_header` node.
+///
+/// Grammar: `'import' $identifier optional(seq('.', '*'))`
+/// The identifier child contains the full dotted path (wildcard stripped).
+fn extract_kotlin_import_path(node: &Node, source: &[u8]) -> Option<String> {
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            if child.kind() == "identifier" {
+                let text = child.utf8_text(source).unwrap_or("").to_string();
+                if !text.is_empty() {
+                    return Some(text);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::entity::import::ImportKind;
+
+    #[test]
+    fn test_parse_kotlin_single_import() {
+        let source = "package com.example\n\nimport com.example.usecase.UserService\n\nclass Foo\n";
+        let imports = parse_kotlin_imports(source, "Foo.kt");
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "com.example.usecase.UserService");
+        assert_eq!(imports[0].kind, ImportKind::Import);
+        assert_eq!(imports[0].line, 3);
+        assert_eq!(imports[0].file, "Foo.kt");
+    }
+
+    #[test]
+    fn test_parse_kotlin_wildcard_import() {
+        let source = "package com.example\n\nimport com.example.domain.*\n\nclass Foo\n";
+        let imports = parse_kotlin_imports(source, "Foo.kt");
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "com.example.domain");
+        assert_eq!(imports[0].kind, ImportKind::Import);
+    }
+
+    #[test]
+    fn test_parse_kotlin_multiple_imports() {
+        let source = "package com.example\n\nimport com.example.domain.User\nimport com.example.usecase.UserService\nimport kotlin.collections.List\n\nclass Foo\n";
+        let imports = parse_kotlin_imports(source, "Foo.kt");
+        assert_eq!(imports.len(), 3);
+        let paths: Vec<&str> = imports.iter().map(|i| i.path.as_str()).collect();
+        assert!(paths.contains(&"com.example.domain.User"));
+        assert!(paths.contains(&"com.example.usecase.UserService"));
+        assert!(paths.contains(&"kotlin.collections.List"));
+    }
+
+    #[test]
+    fn test_parse_kotlin_no_imports() {
+        let source = "package com.example\n\nclass Foo\n";
+        let imports = parse_kotlin_imports(source, "Foo.kt");
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn test_parse_kotlin_call_exprs_empty() {
+        let parser = KotlinParser;
+        let source = "package com.example\n\nclass Foo { fun bar() {} }\n";
+        let calls = parser.parse_call_exprs(source, "Foo.kt");
+        assert!(calls.is_empty());
+    }
+}

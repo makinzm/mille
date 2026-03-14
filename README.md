@@ -18,11 +18,11 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 
 ## What it checks
 
-| Check | Rust | Go | TypeScript | JavaScript | Python |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## Install
 
@@ -300,13 +300,13 @@ external_mode   = "opt-out"
 external_deny   = []
 ```
 
-**Java:**
+**Java / Kotlin:**
 
 ```toml
 [project]
 name      = "my-java-app"
 root      = "."
-languages = ["java"]
+languages = ["java"]   # or ["kotlin"] for Kotlin projects
 
 [resolve.java]
 module_name = "com.example.myapp"
@@ -416,7 +416,7 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"` |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"` |
 
 ### `[[layers]]`
 

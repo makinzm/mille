@@ -135,6 +135,12 @@ jobs:
       - name: Self-check — Java Gradle fixture (tests/fixtures/java_gradle_sample)
         working-directory: tests/fixtures/java_gradle_sample
         run: ${{ github.workspace }}/target/release/mille check
+      - name: Self-check — Kotlin flat fixture (tests/fixtures/kotlin_sample)
+        working-directory: tests/fixtures/kotlin_sample
+        run: ${{ github.workspace }}/target/release/mille check
+      - name: Self-check — Kotlin Gradle fixture (tests/fixtures/kotlin_gradle_sample)
+        working-directory: tests/fixtures/kotlin_gradle_sample
+        run: ${{ github.workspace }}/target/release/mille check
 
   # ------------------------------------------------------------------ #
   # 3b. Dogfooding-python — maturin build → pytest + mille check     #

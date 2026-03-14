@@ -1,0 +1,36 @@
+[project]
+name = "kotlinapp"
+root = "."
+languages = ["kotlin"]
+
+[resolve.java]
+build_gradle = "build.gradle"
+
+[[layers]]
+name = "domain"
+paths = ["**/domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure", "main"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["**/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+
+[[layers]]
+name = "infrastructure"
+paths = ["**/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+
+[[layers]]
+name = "main"
+paths = ["**/kotlinapp/main/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-out"

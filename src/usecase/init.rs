@@ -338,6 +338,7 @@ fn ext_to_language(ext: &str) -> Option<&'static str> {
         "go" => Some("go"),
         "py" => Some("python"),
         "java" => Some("java"),
+        "kt" => Some("kotlin"),
         _ => None,
     }
 }

@@ -1,11 +1,13 @@
 pub mod go;
 pub mod java;
+pub mod kotlin;
 pub mod python;
 pub mod rust;
 pub mod typescript;
 
 use self::go::GoParser;
 use self::java::JavaParser;
+use self::kotlin::KotlinParser;
 use self::python::PythonParser;
 use self::rust::RustParser;
 use self::typescript::TypeScriptParser;
@@ -20,6 +22,7 @@ pub struct DispatchingParser {
     python: PythonParser,
     typescript: TypeScriptParser,
     java: JavaParser,
+    kotlin: KotlinParser,
 }
 
 impl DispatchingParser {
@@ -30,6 +33,7 @@ impl DispatchingParser {
             python: PythonParser,
             typescript: TypeScriptParser,
             java: JavaParser,
+            kotlin: KotlinParser,
         }
     }
 }
@@ -57,6 +61,8 @@ impl Parser for DispatchingParser {
             self.typescript.parse_imports(source, file_path)
         } else if file_path.ends_with(".java") {
             self.java.parse_imports(source, file_path)
+        } else if file_path.ends_with(".kt") {
+            self.kotlin.parse_imports(source, file_path)
         } else {
             self.rust.parse_imports(source, file_path)
         }
@@ -71,6 +77,8 @@ impl Parser for DispatchingParser {
             self.typescript.parse_call_exprs(source, file_path)
         } else if file_path.ends_with(".java") {
             self.java.parse_call_exprs(source, file_path)
+        } else if file_path.ends_with(".kt") {
+            self.kotlin.parse_call_exprs(source, file_path)
         } else {
             self.rust.parse_call_exprs(source, file_path)
         }
