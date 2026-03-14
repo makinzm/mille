@@ -1,0 +1,37 @@
+[project]
+name = "javasample"
+root = "."
+languages = ["java"]
+
+[resolve.java]
+module_name = "com.example.javasample"
+
+[[layers]]
+name = "domain"
+paths = ["**/domain/**"]
+dependency_mode = "opt-out"
+deny = ["usecase", "infrastructure"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "usecase"
+paths = ["**/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+
+[[layers]]
+name = "infrastructure"
+paths = ["**/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["java.util.List"]
+
+[[layers]]
+name = "main"
+paths = ["**/main/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-out"

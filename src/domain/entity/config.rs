@@ -22,6 +22,7 @@ pub struct ResolveConfig {
     pub typescript: Option<TsResolveConfig>,
     pub go: Option<GoResolveConfig>,
     pub python: Option<PythonResolveConfig>,
+    pub java: Option<JavaResolveConfig>,
     #[serde(default)]
     pub aliases: std::collections::HashMap<String, String>,
 }
@@ -34,6 +35,23 @@ pub struct TsResolveConfig {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct GoResolveConfig {
     pub module_name: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct JavaResolveConfig {
+    /// Base package name that identifies internal imports.
+    /// e.g. "com.example.myapp" — imports starting with this prefix are Internal.
+    /// If omitted, mille auto-detects from `pom_xml` or `build_gradle`.
+    #[serde(default)]
+    pub module_name: Option<String>,
+    /// Path to pom.xml (relative to mille.toml). If set, `groupId.artifactId`
+    /// is used as the module name when `module_name` is not explicitly specified.
+    #[serde(default)]
+    pub pom_xml: Option<String>,
+    /// Path to build.gradle (relative to mille.toml). If set, `group.rootProject.name`
+    /// is used as the module name when `module_name` is not explicitly specified.
+    #[serde(default)]
+    pub build_gradle: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

@@ -23,6 +23,8 @@
 - ✅ `mille report external` — 外部ライブラリ依存をレイヤーごとにテーブル/JSON出力（PR 15）
 - ✅ `mille init` 精度改善 — 異サブプロジェクトの同名ディレクトリ分離、`.venv` スキャン除外、Python サブモジュール `external_allow` マッチング修正（PR #55）
 - ✅ `mille init` Go+TypeScript 対応改善 — `go.mod` から `module_name` 自動検出・生成、Go external_allow に完全パス使用、TypeScript サブパス (`vitest/config` → `vitest`) のマッチング修正（PR #56）
+- ✅ Java 言語サポート — `.java` ファイルのパース・Internal/External 分類、`[resolve.java] module_name` 設定、Maven/Gradle自動検出、`main` レイヤー対応、E2E テスト追加（PR #57）
+- ✅ `mille init` Java/Kotlin 対応 — パッケージ宣言ベースのレイヤー検出（depth 不問）、pom.xml/build.gradle から `module_name` 自動生成、`**/layer/**` glob 出力（PR #57）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 （現在なし）
@@ -88,11 +90,13 @@
 
 ## フェーズ 4: 言語・エコシステム拡張
 
-### PR 16: Java / Kotlin サポート
+### PR 16: Java サポート ✅ 完了 (PR #57)
 
-- [ ] `infrastructure::parser::java` / `kotlin` 実装 (tree-sitter-java)
-- [ ] `infrastructure::resolver::java` 実装
-- [ ] Java/Kotlin E2E テスト追加
+- [x] `infrastructure::parser::java` 実装 (tree-sitter-java)
+- [x] `infrastructure::resolver::java` 実装（pom.xml/build.gradle から `module_name` 自動検出）
+- [x] Java E2E テスト追加（flat/Maven/Gradle レイアウト、main レイヤー）
+- [x] `mille init` Java/Kotlin 対応（パッケージ宣言ベース、depth 不問）
+- [ ] Kotlin サポート（別 PR）
 
 ---
 

@@ -124,6 +124,22 @@ The generated config includes `allow` (inferred internal dependencies) and `exte
 
 **TypeScript/JavaScript subpath imports**: `external_allow = ["vitest"]` correctly allows both `import "vitest"` and `import "vitest/config"`. Scoped packages (`@scope/name/sub`) are matched by `"@scope/name"`.
 
+**Java/Kotlin projects**: `mille init` uses `package` declarations — not directory depth — to detect layers. This works correctly for Maven's `src/main/java/com/example/myapp/domain/` as well as flat `src/domain/` layouts. `pom.xml` (Maven) and `build.gradle` + `settings.gradle` (Gradle) are read automatically to generate `[resolve.java] module_name`. Layer paths use `**/layer/**` globs so `mille check` matches regardless of the source root depth.
+
+```
+Detected languages: java
+Scanning imports...
+
+Inferred layer structure:
+  domain               ← (no internal dependencies)
+  infrastructure       → domain
+    external: java.util.List
+  usecase              → domain
+  main                 → domain, infrastructure, usecase
+
+Generated 'mille.toml'
+```
+
 ### 2. (Or) Create `mille.toml` manually
 
 Place `mille.toml` in your project root:
@@ -284,6 +300,42 @@ external_mode   = "opt-out"
 external_deny   = []
 ```
 
+**Java:**
+
+```toml
+[project]
+name      = "my-java-app"
+root      = "."
+languages = ["java"]
+
+[resolve.java]
+module_name = "com.example.myapp"
+
+[[layers]]
+name            = "domain"
+paths           = ["src/domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+external_mode   = "opt-out"
+
+[[layers]]
+name            = "usecase"
+paths           = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+external_mode   = "opt-out"
+
+[[layers]]
+name            = "infrastructure"
+paths           = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+external_mode   = "opt-in"
+external_allow  = ["java.util.List", "java.util.Map"]
+```
+
+> `module_name` is the base package of your project (e.g. `com.example.myapp`). Imports starting with this prefix are classified as **Internal** and matched against layer globs. All other imports (including `java.util.*` stdlib) are classified as **External** and subject to `external_allow` / `external_deny` rules.
+
 ### 2. Visualize with `mille analyze`
 
 Before enforcing rules, you can inspect the actual dependency graph:
@@ -364,7 +416,7 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"` |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"` |
 
 ### `[[layers]]`
 
@@ -466,6 +518,24 @@ Use `--fail-on warning` to exit 1 even for warnings when integrating into CI gra
 | `import domain.entity` (matches `package_names`) | Internal |
 | `import os`, `import sqlalchemy` | External |
 
+### `[resolve.java]`
+
+| Key | Description |
+|---|---|
+| `module_name` | Base package of your project (e.g. `com.example.myapp`). Imports starting with this prefix are classified as Internal. Generated automatically by `mille init`. |
+| `pom_xml` | Path to `pom.xml` (relative to `mille.toml`). `groupId.artifactId` is used as `module_name` when `module_name` is not set. |
+| `build_gradle` | Path to `build.gradle` (relative to `mille.toml`). `group` + `rootProject.name` from `settings.gradle` is used as `module_name` when `module_name` is not set. |
+
+**How Java imports are classified:**
+
+| Import | Classification |
+|---|---|
+| `import com.example.myapp.domain.User` (starts with `module_name`) | Internal |
+| `import static com.example.myapp.util.Helper.method` | Internal |
+| `import java.util.List`, `import org.springframework.*` | External |
+
+> Both regular and static imports are supported. Wildcard imports (`import java.util.*`) are not yet extracted by the parser.
+
 ## How it Works
 
 mille uses [tree-sitter](https://tree-sitter.github.io/) for AST-based import extraction — no regex heuristics.
@@ -476,7 +546,7 @@ mille.toml
     ▼
 Layer definitions
     │
-Source files (*.rs, *.go, *.py, *.ts, *.js, ...)
+Source files (*.rs, *.go, *.py, *.ts, *.js, *.java, ...)
     │ tree-sitter parse
     ▼
 RawImport list

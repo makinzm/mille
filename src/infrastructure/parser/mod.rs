@@ -1,9 +1,11 @@
 pub mod go;
+pub mod java;
 pub mod python;
 pub mod rust;
 pub mod typescript;
 
 use self::go::GoParser;
+use self::java::JavaParser;
 use self::python::PythonParser;
 use self::rust::RustParser;
 use self::typescript::TypeScriptParser;
@@ -17,6 +19,7 @@ pub struct DispatchingParser {
     go: GoParser,
     python: PythonParser,
     typescript: TypeScriptParser,
+    java: JavaParser,
 }
 
 impl DispatchingParser {
@@ -26,6 +29,7 @@ impl DispatchingParser {
             go: GoParser,
             python: PythonParser,
             typescript: TypeScriptParser,
+            java: JavaParser,
         }
     }
 }
@@ -51,6 +55,8 @@ impl Parser for DispatchingParser {
             self.python.parse_imports(source, file_path)
         } else if is_ts_js(file_path) {
             self.typescript.parse_imports(source, file_path)
+        } else if file_path.ends_with(".java") {
+            self.java.parse_imports(source, file_path)
         } else {
             self.rust.parse_imports(source, file_path)
         }
@@ -63,6 +69,8 @@ impl Parser for DispatchingParser {
             self.python.parse_call_exprs(source, file_path)
         } else if is_ts_js(file_path) {
             self.typescript.parse_call_exprs(source, file_path)
+        } else if file_path.ends_with(".java") {
+            self.java.parse_call_exprs(source, file_path)
         } else {
             self.rust.parse_call_exprs(source, file_path)
         }

@@ -1,4 +1,5 @@
 pub mod go;
+pub mod java;
 pub mod python;
 pub mod rust;
 pub mod typescript;
@@ -6,6 +7,7 @@ pub mod typescript;
 use std::collections::HashMap;
 
 use self::go::GoResolver;
+use self::java::JavaResolver;
 use self::python::PythonResolver;
 use self::rust::RustResolver;
 use self::typescript::TypeScriptResolver;
@@ -20,6 +22,7 @@ pub struct DispatchingResolver {
     go: GoResolver,
     python: PythonResolver,
     typescript: TypeScriptResolver,
+    java: JavaResolver,
 }
 
 impl DispatchingResolver {
@@ -29,6 +32,7 @@ impl DispatchingResolver {
             go,
             python,
             typescript,
+            java: JavaResolver::new(String::new()),
         }
     }
 
@@ -54,11 +58,39 @@ impl DispatchingResolver {
 
         let ts_aliases = load_ts_aliases(config_path, app_config);
 
+        let java_config = app_config.resolve.as_ref().and_then(|r| r.java.as_ref());
+
+        // Resolve config_dir so relative pom.xml / build.gradle paths work.
+        let config_dir = std::path::Path::new(config_path)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+
+        let java_resolver = if let Some(jcfg) = java_config {
+            let manual_name = jcfg.module_name.as_deref();
+            let pom_path = jcfg
+                .pom_xml
+                .as_deref()
+                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+            let gradle_path = jcfg
+                .build_gradle
+                .as_deref()
+                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+            JavaResolver::from_config(
+                manual_name,
+                pom_path.as_deref(),
+                gradle_path.as_deref(),
+                None, // settings.gradle auto-discovered relative to build.gradle
+            )
+        } else {
+            JavaResolver::new(String::new())
+        };
+
         DispatchingResolver {
             rust: RustResolver,
             go: GoResolver::new(go_module),
             python: PythonResolver::new(python_packages),
             typescript: TypeScriptResolver::with_aliases(ts_aliases),
+            java: java_resolver,
         }
     }
 }
@@ -168,6 +200,8 @@ impl Resolver for DispatchingResolver {
             self.python.resolve(import)
         } else if is_ts_js(&import.file) {
             self.typescript.resolve(import)
+        } else if import.file.ends_with(".java") {
+            self.java.resolve(import)
         } else {
             self.rust.resolve(import)
         }
@@ -180,6 +214,8 @@ impl Resolver for DispatchingResolver {
             self.python.resolve_for_project(import, own_crate)
         } else if is_ts_js(&import.file) {
             self.typescript.resolve_for_project(import, own_crate)
+        } else if import.file.ends_with(".java") {
+            self.java.resolve_for_project(import, own_crate)
         } else {
             self.rust.resolve_for_project(import, own_crate)
         }

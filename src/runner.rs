@@ -214,9 +214,23 @@ fn run_cli_inner(cli: Cli) {
                 None
             };
 
+            // Detect Java/Kotlin module name from pom.xml or build.gradle (if present)
+            let is_jvm = languages.iter().any(|l| l == "java" || l == "kotlin");
+            let java_module_name = if is_jvm {
+                detect_java_module_name(Path::new(&cwd))
+            } else {
+                None
+            };
+
             println!("Scanning imports...");
             let parser = DispatchingParser::new();
-            let analyses = scan_project(Path::new(&cwd), &parser, depth, go_module_name.as_deref());
+
+            // JVM languages bypass depth-based scanning: package declarations define layers
+            let analyses = if is_jvm {
+                scan_jvm_project(Path::new(&cwd), &parser, java_module_name.as_deref())
+            } else {
+                scan_project(Path::new(&cwd), &parser, depth, go_module_name.as_deref())
+            };
 
             let mut layers = init::infer_layers(&analyses);
 
@@ -237,9 +251,14 @@ fn run_cli_inner(cli: Cli) {
                 println!("No layers detected.");
             }
 
-            // Append /** glob to each path
+            // JVM: use **/layer/** globs (package-based, depth-independent).
+            // Others: append /** to the scanned directory path.
             for layer in &mut layers {
-                layer.paths = layer.paths.iter().map(|p| format!("{}/**", p)).collect();
+                if is_jvm {
+                    layer.paths = layer.paths.iter().map(|p| format!("**/{p}/**")).collect();
+                } else {
+                    layer.paths = layer.paths.iter().map(|p| format!("{}/**", p)).collect();
+                }
             }
 
             let toml_content = init::generate_toml(
@@ -248,6 +267,7 @@ fn run_cli_inner(cli: Cli) {
                 &languages,
                 &layers,
                 go_module_name.as_deref(),
+                java_module_name.as_deref(),
             );
 
             match std::fs::write(output_path, &toml_content) {
@@ -345,6 +365,208 @@ fn detect_go_module_name(root: &Path) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
+// Java/Kotlin module detection
+// ---------------------------------------------------------------------------
+
+/// Detect the Java module name from `pom.xml` (Maven) or `build.gradle` + `settings.gradle` (Gradle).
+/// Returns `None` if neither file is present or parseable.
+fn detect_java_module_name(root: &Path) -> Option<String> {
+    use crate::infrastructure::resolver::java::{read_module_from_gradle, read_module_from_pom};
+    let pom = root.join("pom.xml");
+    if pom.exists() {
+        if let Some(name) = read_module_from_pom(pom.to_str()?) {
+            return Some(name);
+        }
+    }
+    let gradle = root.join("build.gradle");
+    if gradle.exists() {
+        if let Some(name) = read_module_from_gradle(gradle.to_str()?, None) {
+            return Some(name);
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// JVM project scanning — package-declaration-based, depth-independent
+// ---------------------------------------------------------------------------
+
+/// Scan a JVM project (Java/Kotlin) and build `DirAnalysis` keyed by layer name.
+///
+/// Unlike the depth-based `scan_project`, this function uses the `package` declaration
+/// in each source file to determine which layer it belongs to. This makes it independent
+/// of the directory depth (e.g., Maven's `src/main/java/com/example/myapp/domain/` is
+/// handled the same as a flat `src/domain/`).
+///
+/// Layer key = first package segment after `module_name` prefix.
+/// e.g. `package com.example.myapp.domain;` with module `com.example.myapp` → key `"domain"`.
+fn scan_jvm_project(
+    root: &Path,
+    parser: &DispatchingParser,
+    module_name: Option<&str>,
+) -> BTreeMap<String, DirAnalysis> {
+    let mut analyses: BTreeMap<String, DirAnalysis> = BTreeMap::new();
+    scan_jvm_dir(root, root, parser, module_name, &mut analyses);
+    analyses
+}
+
+fn scan_jvm_dir(
+    root: &Path,
+    dir: &Path,
+    parser: &DispatchingParser,
+    module_name: Option<&str>,
+    analyses: &mut BTreeMap<String, DirAnalysis>,
+) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if init::is_excluded_dir(&name) {
+            continue;
+        }
+        if path.is_dir() {
+            scan_jvm_dir(root, &path, parser, module_name, analyses);
+        } else if name.ends_with(".java") || name.ends_with(".kt") {
+            process_jvm_file(root, &path, parser, module_name, analyses);
+        }
+    }
+}
+
+fn process_jvm_file(
+    root: &Path,
+    file: &Path,
+    parser: &DispatchingParser,
+    module_name: Option<&str>,
+    analyses: &mut BTreeMap<String, DirAnalysis>,
+) {
+    let Ok(source) = fs::read_to_string(file) else {
+        return;
+    };
+    let file_rel = file.strip_prefix(root).unwrap_or(file);
+    let file_rel_str = file_rel.to_string_lossy().to_string();
+
+    // Determine layer from the package declaration in the source file.
+    let Some(pkg) = extract_jvm_package(&source) else {
+        return;
+    };
+    let Some(layer_key) = package_to_layer(&pkg, module_name) else {
+        return;
+    };
+
+    // If module_name was not provided, derive it from this file's own package.
+    // e.g. package="com.example.myapp.usecase", layer="usecase" → module="com.example.myapp"
+    let derived_module: Option<String> = if module_name.map(|m| !m.is_empty()).unwrap_or(false) {
+        None
+    } else {
+        let suffix = format!(".{}", layer_key);
+        pkg.strip_suffix(&suffix).map(|s| s.to_string())
+    };
+    let effective_module: Option<&str> = module_name
+        .filter(|m| !m.is_empty())
+        .or(derived_module.as_deref());
+
+    let imports = SourceParser::parse_imports(parser, &source, &file_rel_str);
+    let analysis = analyses.entry(layer_key.clone()).or_default();
+    analysis.file_count += 1;
+
+    for imp in &imports {
+        if imp.kind == ImportKind::Mod {
+            continue;
+        }
+        match classify_java_import_for_init(&imp.path, effective_module) {
+            Some(InitImport::Internal(seg)) | Some(InitImport::TryInternal(seg)) => {
+                if seg != layer_key && !seg.is_empty() {
+                    analysis.internal_deps.insert(seg);
+                }
+            }
+            Some(InitImport::External(pkg)) => {
+                analysis.external_pkgs.insert(pkg);
+            }
+            None => {}
+        }
+    }
+}
+
+/// Extract the package name from a Java or Kotlin source file.
+///
+/// Scans lines until the first `package` declaration is found.
+/// Java: `package com.example.myapp.domain;`
+/// Kotlin: `package com.example.myapp.domain`
+fn extract_jvm_package(source: &str) -> Option<String> {
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("package ") {
+            let pkg = rest.trim_end_matches(';').trim().to_string();
+            if !pkg.is_empty() {
+                return Some(pkg);
+            }
+        }
+    }
+    None
+}
+
+/// Derive the layer key from a package name given the project's module name.
+///
+/// - `com.example.myapp.domain` with module `com.example.myapp` → `"domain"`
+/// - `com.example.myapp` (root package) → `None`
+/// - Without module_name: uses the last segment heuristically
+fn package_to_layer(package: &str, module_name: Option<&str>) -> Option<String> {
+    if let Some(mn) = module_name.filter(|m| !m.is_empty()) {
+        let prefix = format!("{}.", mn);
+        let rest = package.strip_prefix(&prefix)?;
+        let seg = rest.split('.').next()?.to_string();
+        if seg.is_empty() {
+            return None;
+        }
+        Some(seg)
+    } else {
+        // Heuristic: use the last segment of the package as the layer name.
+        // e.g. "com.example.domain" → "domain"
+        package.split('.').next_back().map(|s| s.to_string())
+    }
+}
+
+/// Classify a Java/Kotlin import path for `mille init` layer inference.
+fn classify_java_import_for_init(path: &str, module_name: Option<&str>) -> Option<InitImport> {
+    // Java/javax stdlib — record as external so they appear in external_allow.
+    // Using the full dotted path (e.g. "java.util.List") so external_allow matches exactly.
+    if path.starts_with("java.")
+        || path.starts_with("javax.")
+        || path.starts_with("sun.")
+        || path.starts_with("com.sun.")
+    {
+        return Some(InitImport::External(path.to_string()));
+    }
+
+    if let Some(mn) = module_name.filter(|m| !m.is_empty()) {
+        let prefix = format!("{}.", mn);
+        if path.starts_with(&prefix) || path == mn {
+            let rest = path.strip_prefix(&prefix).unwrap_or("");
+            let seg = rest.split('.').next()?.to_string();
+            if seg.is_empty() {
+                return None;
+            }
+            return Some(InitImport::TryInternal(seg));
+        }
+        // Has module_name context — anything else is external
+        let pkg = path.split('.').next()?.to_string();
+        return Some(InitImport::External(pkg));
+    }
+
+    // No module_name: heuristic — treat first segment as potentially internal
+    let seg = path.split('.').next()?.to_string();
+    if seg.is_empty() {
+        return None;
+    }
+    Some(InitImport::TryInternal(seg))
+}
+
+// ---------------------------------------------------------------------------
 // Project scanning — builds DirAnalysis per source directory
 // ---------------------------------------------------------------------------
 
@@ -389,7 +611,7 @@ fn scan_project(
 fn is_source_file(name: &str) -> bool {
     matches!(
         name.rsplit('.').next().unwrap_or(""),
-        "rs" | "ts" | "tsx" | "js" | "jsx" | "go" | "py"
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "go" | "py" | "java" | "kt"
     )
 }
 
