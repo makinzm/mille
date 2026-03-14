@@ -1,3 +1,5 @@
+use tree_sitter::Node;
+
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
 use crate::domain::repository::parser::Parser;
@@ -16,8 +18,58 @@ impl Parser for KotlinParser {
 }
 
 /// Parse Kotlin source code and extract all `import` declarations.
-pub fn parse_kotlin_imports(_source: &str, _file_path: &str) -> Vec<RawImport> {
-    todo!("KotlinParser not yet implemented")
+pub fn parse_kotlin_imports(source: &str, file_path: &str) -> Vec<RawImport> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_kotlin::language())
+        .expect("Failed to load Kotlin grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut imports = Vec::new();
+    collect_kotlin_imports(root, source.as_bytes(), file_path, &mut imports);
+    imports
+}
+
+fn collect_kotlin_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawImport>) {
+    if node.kind() == "import_header" {
+        let line = node.start_position().row + 1;
+        if let Some(path) = extract_kotlin_import_path(&node, source) {
+            out.push(RawImport {
+                path,
+                line,
+                file: file_path.to_string(),
+                kind: ImportKind::Import,
+                named_imports: vec![],
+            });
+        }
+        return;
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_kotlin_imports(child, source, file_path, out);
+        }
+    }
+}
+
+/// Extract the dotted import path from an `import_header` node.
+///
+/// Grammar: `'import' $identifier optional(seq('.', '*'))`
+/// The identifier child contains the full dotted path (wildcard stripped).
+fn extract_kotlin_import_path(node: &Node, source: &[u8]) -> Option<String> {
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            if child.kind() == "identifier" {
+                let text = child.utf8_text(source).unwrap_or("").to_string();
+                if !text.is_empty() {
+                    return Some(text);
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]

@@ -200,7 +200,7 @@ impl Resolver for DispatchingResolver {
             self.python.resolve(import)
         } else if is_ts_js(&import.file) {
             self.typescript.resolve(import)
-        } else if import.file.ends_with(".java") {
+        } else if import.file.ends_with(".java") || import.file.ends_with(".kt") {
             self.java.resolve(import)
         } else {
             self.rust.resolve(import)
@@ -214,7 +214,7 @@ impl Resolver for DispatchingResolver {
             self.python.resolve_for_project(import, own_crate)
         } else if is_ts_js(&import.file) {
             self.typescript.resolve_for_project(import, own_crate)
-        } else if import.file.ends_with(".java") {
+        } else if import.file.ends_with(".java") || import.file.ends_with(".kt") {
             self.java.resolve_for_project(import, own_crate)
         } else {
             self.rust.resolve_for_project(import, own_crate)

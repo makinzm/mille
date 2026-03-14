@@ -2,10 +2,10 @@ use crate::domain::repository::source_file_repository::SourceFileRepository;
 
 /// Concrete implementation of the `SourceFileRepository` port.
 /// Expands glob patterns and returns source file paths relative to the working directory.
-/// Supported extensions: `.rs`, `.go`, `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.java`
+/// Supported extensions: `.rs`, `.go`, `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.java`, `.kt`
 pub struct FsSourceFileRepository;
 
-const SOURCE_EXTENSIONS: &[&str] = &["rs", "go", "py", "ts", "tsx", "js", "jsx", "java"];
+const SOURCE_EXTENSIONS: &[&str] = &["rs", "go", "py", "ts", "tsx", "js", "jsx", "java", "kt"];
 
 fn is_source_file(path: &str) -> bool {
     SOURCE_EXTENSIONS
