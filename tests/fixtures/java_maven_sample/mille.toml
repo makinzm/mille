@@ -1,25 +1,16 @@
 [project]
-name = "myapp"
+name = "java_maven_sample"
 root = "."
 languages = ["java"]
 
 [resolve.java]
-pom_xml = "pom.xml"
+module_name = "com.example.myapp"
 
 [[layers]]
 name = "domain"
 paths = ["**/domain/**"]
-dependency_mode = "opt-out"
-deny = ["usecase", "infrastructure", "main"]
-external_mode = "opt-in"
-external_allow = []
-
-[[layers]]
-name = "usecase"
-paths = ["**/usecase/**"]
 dependency_mode = "opt-in"
-allow = ["domain"]
-external_mode = "opt-out"
+external_mode = "opt-in"
 
 [[layers]]
 name = "infrastructure"
@@ -30,8 +21,15 @@ external_mode = "opt-in"
 external_allow = ["java.util.List"]
 
 [[layers]]
-name = "main"
-paths = ["**/myapp/main/**"]
+name = "usecase"
+paths = ["**/usecase/**"]
 dependency_mode = "opt-in"
-allow = ["domain", "usecase", "infrastructure"]
-external_mode = "opt-out"
+allow = ["domain"]
+external_mode = "opt-in"
+
+[[layers]]
+name = "main"
+paths = ["**/main/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "infrastructure", "usecase"]
+external_mode = "opt-in"
