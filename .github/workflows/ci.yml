@@ -124,6 +124,18 @@ jobs:
         working-directory: packages/npm
         run: ${{ github.workspace }}/target/release/mille check
 
+      - name: Self-check — Java flat fixture (tests/fixtures/java_sample)
+        working-directory: tests/fixtures/java_sample
+        run: ${{ github.workspace }}/target/release/mille check
+
+      - name: Self-check — Java Maven fixture (tests/fixtures/java_maven_sample)
+        working-directory: tests/fixtures/java_maven_sample
+        run: ${{ github.workspace }}/target/release/mille check
+
+      - name: Self-check — Java Gradle fixture (tests/fixtures/java_gradle_sample)
+        working-directory: tests/fixtures/java_gradle_sample
+        run: ${{ github.workspace }}/target/release/mille check
+
   # ------------------------------------------------------------------ #
   # 3b. Dogfooding-python — maturin build → pytest + mille check     #
   # ------------------------------------------------------------------ #
