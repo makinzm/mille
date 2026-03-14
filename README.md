@@ -284,6 +284,42 @@ external_mode   = "opt-out"
 external_deny   = []
 ```
 
+**Java:**
+
+```toml
+[project]
+name      = "my-java-app"
+root      = "."
+languages = ["java"]
+
+[resolve.java]
+module_name = "com.example.myapp"
+
+[[layers]]
+name            = "domain"
+paths           = ["src/domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+external_mode   = "opt-out"
+
+[[layers]]
+name            = "usecase"
+paths           = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+external_mode   = "opt-out"
+
+[[layers]]
+name            = "infrastructure"
+paths           = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+external_mode   = "opt-in"
+external_allow  = ["java.util.List", "java.util.Map"]
+```
+
+> `module_name` is the base package of your project (e.g. `com.example.myapp`). Imports starting with this prefix are classified as **Internal** and matched against layer globs. All other imports (including `java.util.*` stdlib) are classified as **External** and subject to `external_allow` / `external_deny` rules.
+
 ### 2. Visualize with `mille analyze`
 
 Before enforcing rules, you can inspect the actual dependency graph:
@@ -364,7 +400,7 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"` |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"` |
 
 ### `[[layers]]`
 
@@ -466,6 +502,22 @@ Use `--fail-on warning` to exit 1 even for warnings when integrating into CI gra
 | `import domain.entity` (matches `package_names`) | Internal |
 | `import os`, `import sqlalchemy` | External |
 
+### `[resolve.java]`
+
+| Key | Description |
+|---|---|
+| `module_name` | Base package of your project (e.g. `com.example.myapp`). Imports starting with this prefix are classified as Internal. |
+
+**How Java imports are classified:**
+
+| Import | Classification |
+|---|---|
+| `import com.example.myapp.domain.User` (starts with `module_name`) | Internal |
+| `import static com.example.myapp.util.Helper.method` | Internal |
+| `import java.util.List`, `import org.springframework.*` | External |
+
+> Both regular and static imports are supported. Wildcard imports (`import java.util.*`) are not yet extracted by the parser.
+
 ## How it Works
 
 mille uses [tree-sitter](https://tree-sitter.github.io/) for AST-based import extraction — no regex heuristics.
@@ -476,7 +528,7 @@ mille.toml
     ▼
 Layer definitions
     │
-Source files (*.rs, *.go, *.py, *.ts, *.js, ...)
+Source files (*.rs, *.go, *.py, *.ts, *.js, *.java, ...)
     │ tree-sitter parse
     ▼
 RawImport list

@@ -38,12 +38,9 @@ fn collect_java_imports(node: Node, source: &[u8], file_path: &str, out: &mut Ve
     if node.kind() == "import_declaration" {
         let line = node.start_position().row + 1;
 
-        // Check if this is a static import by scanning for a "static" child token.
+        // Both regular and static imports use the same `ImportKind::Import`.
         // Grammar: 'import' optional('static') $._name optional(seq('.', asterisk)) ';'
-        let _is_static = (0..node.child_count())
-            .any(|i| node.child(i).map(|c| c.kind() == "static").unwrap_or(false));
-
-        // Extract the import path from the scoped_identifier or identifier child.
+        // The import path is extracted from the `scoped_identifier` or `identifier` child.
         if let Some(path) = extract_java_import_path(&node, source) {
             out.push(RawImport {
                 path,

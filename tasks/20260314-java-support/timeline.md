@@ -7,6 +7,12 @@
 - `tree-sitter-java` クレートを使用（他言語と同系列）
 - fixture 構成と E2E テストケースを設計
 
+### REFACTOR フェーズ (完了)
+- `java.rs` parser: `_is_static` 未使用変数を削除し、コメントで意図を明示
+- `cargo fmt` でフォーマット統一
+- `docs/TODO.md` 更新: PR #57 完了チェック
+- `README.md` 更新: Java 設定例・`[resolve.java]` リファレンス追加
+
 ### GREEN フェーズ (完了)
 - `src/infrastructure/parser/java.rs`: tree-sitter-java を使った実装（通常 import + static import 対応）
 - `src/infrastructure/resolver/java.rs`: module_name prefix で Internal/External を分類
