@@ -50,8 +50,22 @@ pub fn read_module_from_pom(path: &str) -> Option<String> {
 }
 
 /// Parse module name from pom.xml content string.
+///
+/// Extracts the first `<groupId>` and first `<artifactId>` tags from the
+/// content and returns `"groupId.artifactId"`.
 pub fn read_module_from_pom_content(content: &str) -> Option<String> {
-    todo!("parse groupId and artifactId from pom.xml content")
+    let group_id = extract_xml_tag(content, "groupId")?;
+    let artifact_id = extract_xml_tag(content, "artifactId")?;
+    Some(format!("{}.{}", group_id, artifact_id))
+}
+
+/// Extract the text content of the first occurrence of `<tag>text</tag>` in `s`.
+fn extract_xml_tag<'a>(s: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{}>", tag);
+    let close = format!("</{}>", tag);
+    let start = s.find(&open)? + open.len();
+    let end = s[start..].find(&close)? + start;
+    Some(s[start..end].trim())
 }
 
 /// Parse `group` from build.gradle and `rootProject.name` from settings.gradle.
@@ -76,11 +90,43 @@ pub fn read_module_from_gradle(
 }
 
 /// Parse module name from build.gradle and settings.gradle content strings.
+///
+/// Extracts `group` from build.gradle (e.g. `group = 'com.example'`) and
+/// `rootProject.name` from settings.gradle (e.g. `rootProject.name = 'myapp'`),
+/// then returns `"group.name"`.
 pub fn read_module_from_gradle_content(
     build_gradle: &str,
     settings_gradle: &str,
 ) -> Option<String> {
-    todo!("parse group from build.gradle and rootProject.name from settings.gradle")
+    let group = extract_gradle_value(build_gradle, "group")?;
+    let name = extract_gradle_value(settings_gradle, "rootProject.name")?;
+    Some(format!("{}.{}", group, name))
+}
+
+/// Extract a value assigned via `key = 'value'` or `key = "value"` from a Gradle file.
+fn extract_gradle_value<'a>(content: &'a str, key: &str) -> Option<&'a str> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // Match `key = 'value'` or `key = "value"` or `key='value'` etc.
+        if let Some(rest) = trimmed.strip_prefix(key) {
+            let rest = rest.trim();
+            if let Some(rest) = rest.strip_prefix('=') {
+                let rest = rest.trim();
+                // Strip surrounding quotes
+                let value = if (rest.starts_with('\'') && rest.ends_with('\''))
+                    || (rest.starts_with('"') && rest.ends_with('"'))
+                {
+                    &rest[1..rest.len() - 1]
+                } else {
+                    rest
+                };
+                if !value.is_empty() {
+                    return Some(value);
+                }
+            }
+        }
+    }
+    None
 }
 
 impl Resolver for JavaResolver {
@@ -96,21 +142,16 @@ impl Resolver for JavaResolver {
 
 fn resolve_java_impl(import: &RawImport, module_name: &str) -> ResolvedImport {
     let category = classify_java(&import.path, module_name);
-    // For internal Java imports, compute a synthetic resolved path so the
-    // ViolationDetector can match it against layer glob patterns.
-    // e.g. "com.example.myapp.domain.User" (module="com.example.myapp")
-    //   → relative = "domain.User" → resolved_path = "src/domain/_.java"
+    // For internal Java imports, compute a resolved path using slashes so that
+    // the ViolationDetector can match it against layer glob patterns like
+    // "**/domain/**".
     //
-    // NOTE: Java packages use dots as separators. We take only the first component
-    // of the relative path (the sub-package name) to construct a directory-like path
-    // that matches typical layer glob patterns such as "src/domain/**".
+    // e.g. "com.example.myapp.domain.User" → "com/example/myapp/domain/User.java"
+    // This enables both "src/domain/**" (if the project uses src/ prefix) and
+    // "**/domain/**" to match correctly.
     let resolved_path = if category == ImportCategory::Internal && !module_name.is_empty() {
-        let prefix = format!("{}.", module_name);
-        import.path.strip_prefix(&prefix).map(|rel| {
-            // rel = "domain.User" → first segment = "domain"
-            let first_segment = rel.split('.').next().unwrap_or(rel);
-            format!("src/{}/_.java", first_segment)
-        })
+        let slash_path = import.path.replace('.', "/");
+        Some(format!("{}.java", slash_path))
     } else {
         None
     };
@@ -247,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_read_module_from_gradle_content() {
-        let build_gradle = r"group = 'com.example'\nversion = '1.0.0'";
+        let build_gradle = "group = 'com.example'\nversion = '1.0.0'";
         let settings_gradle = "rootProject.name = 'myapp'";
         let result = read_module_from_gradle_content(build_gradle, settings_gradle);
         assert_eq!(result, Some("com.example.myapp".to_string()));

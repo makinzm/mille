@@ -1,16 +1,16 @@
 [project]
-name = "javasample"
+name = "myapp"
 root = "."
 languages = ["java"]
 
 [resolve.java]
-module_name = "com.example.javasample"
+build_gradle = "build.gradle"
 
 [[layers]]
 name = "domain"
 paths = ["**/domain/**"]
 dependency_mode = "opt-out"
-deny = ["usecase", "infrastructure"]
+deny = ["usecase", "infrastructure", "main"]
 external_mode = "opt-in"
 external_allow = []
 
@@ -31,7 +31,7 @@ external_allow = ["java.util.List"]
 
 [[layers]]
 name = "main"
-paths = ["**/main/**"]
+paths = ["**/myapp/main/**"]
 dependency_mode = "opt-in"
 allow = ["domain", "usecase", "infrastructure"]
 external_mode = "opt-out"

@@ -58,10 +58,7 @@ impl DispatchingResolver {
 
         let ts_aliases = load_ts_aliases(config_path, app_config);
 
-        let java_config = app_config
-            .resolve
-            .as_ref()
-            .and_then(|r| r.java.as_ref());
+        let java_config = app_config.resolve.as_ref().and_then(|r| r.java.as_ref());
 
         // Resolve config_dir so relative pom.xml / build.gradle paths work.
         let config_dir = std::path::Path::new(config_path)

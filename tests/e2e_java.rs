@@ -114,21 +114,21 @@ module_name = "com.example.javasample"
 
 [[layers]]
 name = "domain"
-paths = ["src/domain/**"]
+paths = ["**/domain/**"]
 dependency_mode = "opt-out"
 deny = ["usecase", "infrastructure"]
 external_mode = "opt-out"
 
 [[layers]]
 name = "usecase"
-paths = ["src/usecase/**"]
+paths = ["**/usecase/**"]
 dependency_mode = "opt-in"
 allow = []
 external_mode = "opt-out"
 
 [[layers]]
 name = "infrastructure"
-paths = ["src/infrastructure/**"]
+paths = ["**/infrastructure/**"]
 dependency_mode = "opt-in"
 allow = ["domain"]
 external_mode = "opt-out"
@@ -185,21 +185,21 @@ module_name = "com.example.javasample"
 
 [[layers]]
 name = "domain"
-paths = ["src/domain/**"]
+paths = ["**/domain/**"]
 dependency_mode = "opt-out"
 deny = ["usecase", "infrastructure"]
 external_mode = "opt-out"
 
 [[layers]]
 name = "usecase"
-paths = ["src/usecase/**"]
+paths = ["**/usecase/**"]
 dependency_mode = "opt-in"
 allow = ["domain"]
 external_mode = "opt-out"
 
 [[layers]]
 name = "infrastructure"
-paths = ["src/infrastructure/**"]
+paths = ["**/infrastructure/**"]
 dependency_mode = "opt-in"
 allow = ["domain"]
 external_mode = "opt-in"
