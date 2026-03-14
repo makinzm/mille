@@ -124,6 +124,22 @@ The generated config includes `allow` (inferred internal dependencies) and `exte
 
 **TypeScript/JavaScript subpath imports**: `external_allow = ["vitest"]` correctly allows both `import "vitest"` and `import "vitest/config"`. Scoped packages (`@scope/name/sub`) are matched by `"@scope/name"`.
 
+**Java/Kotlin projects**: `mille init` uses `package` declarations — not directory depth — to detect layers. This works correctly for Maven's `src/main/java/com/example/myapp/domain/` as well as flat `src/domain/` layouts. `pom.xml` (Maven) and `build.gradle` + `settings.gradle` (Gradle) are read automatically to generate `[resolve.java] module_name`. Layer paths use `**/layer/**` globs so `mille check` matches regardless of the source root depth.
+
+```
+Detected languages: java
+Scanning imports...
+
+Inferred layer structure:
+  domain               ← (no internal dependencies)
+  infrastructure       → domain
+    external: java.util.List
+  usecase              → domain
+  main                 → domain, infrastructure, usecase
+
+Generated 'mille.toml'
+```
+
 ### 2. (Or) Create `mille.toml` manually
 
 Place `mille.toml` in your project root:
@@ -506,7 +522,9 @@ Use `--fail-on warning` to exit 1 even for warnings when integrating into CI gra
 
 | Key | Description |
 |---|---|
-| `module_name` | Base package of your project (e.g. `com.example.myapp`). Imports starting with this prefix are classified as Internal. |
+| `module_name` | Base package of your project (e.g. `com.example.myapp`). Imports starting with this prefix are classified as Internal. Generated automatically by `mille init`. |
+| `pom_xml` | Path to `pom.xml` (relative to `mille.toml`). `groupId.artifactId` is used as `module_name` when `module_name` is not set. |
+| `build_gradle` | Path to `build.gradle` (relative to `mille.toml`). `group` + `rootProject.name` from `settings.gradle` is used as `module_name` when `module_name` is not set. |
 
 **How Java imports are classified:**
 
