@@ -28,16 +28,45 @@ impl Resolver for JavaResolver {
     }
 }
 
-fn resolve_java_impl(_import: &RawImport, _module_name: &str) -> ResolvedImport {
-    todo!("JavaResolver::resolve_java_impl not yet implemented")
+fn resolve_java_impl(import: &RawImport, module_name: &str) -> ResolvedImport {
+    let category = classify_java(&import.path, module_name);
+    // For internal Java imports, compute a synthetic resolved path so the
+    // ViolationDetector can match it against layer glob patterns.
+    // e.g. "com.example.myapp.domain.User" (module="com.example.myapp")
+    //   → relative = "domain.User" → resolved_path = "src/domain/_.java"
+    //
+    // NOTE: Java packages use dots as separators. We take only the first component
+    // of the relative path (the sub-package name) to construct a directory-like path
+    // that matches typical layer glob patterns such as "src/domain/**".
+    let resolved_path = if category == ImportCategory::Internal && !module_name.is_empty() {
+        let prefix = format!("{}.", module_name);
+        import.path.strip_prefix(&prefix).map(|rel| {
+            // rel = "domain.User" → first segment = "domain"
+            let first_segment = rel.split('.').next().unwrap_or(rel);
+            format!("src/{}/_.java", first_segment)
+        })
+    } else {
+        None
+    };
+    ResolvedImport {
+        raw: import.clone(),
+        category,
+        resolved_path,
+    }
 }
 
 /// Classify a Java import path.
 ///
 /// - internal: path starts with `module_name`
 /// - external: everything else (java.util.*, third-party, etc.)
-pub fn classify_java(_path: &str, _module_name: &str) -> ImportCategory {
-    todo!("classify_java not yet implemented")
+pub fn classify_java(path: &str, module_name: &str) -> ImportCategory {
+    if !module_name.is_empty()
+        && (path == module_name || path.starts_with(&format!("{}.", module_name)))
+    {
+        return ImportCategory::Internal;
+    }
+
+    ImportCategory::External
 }
 
 #[cfg(test)]
@@ -72,7 +101,10 @@ mod tests {
     #[test]
     fn test_java_external_is_external() {
         assert_eq!(
-            classify_java("org.springframework.web.bind.annotation.RestController", MODULE),
+            classify_java(
+                "org.springframework.web.bind.annotation.RestController",
+                MODULE
+            ),
             ImportCategory::External
         );
         assert_eq!(
@@ -83,9 +115,18 @@ mod tests {
 
     #[test]
     fn test_java_stdlib_is_external() {
-        assert_eq!(classify_java("java.util.List", MODULE), ImportCategory::External);
-        assert_eq!(classify_java("java.io.InputStream", MODULE), ImportCategory::External);
-        assert_eq!(classify_java("javax.persistence.Entity", MODULE), ImportCategory::External);
+        assert_eq!(
+            classify_java("java.util.List", MODULE),
+            ImportCategory::External
+        );
+        assert_eq!(
+            classify_java("java.io.InputStream", MODULE),
+            ImportCategory::External
+        );
+        assert_eq!(
+            classify_java("javax.persistence.Entity", MODULE),
+            ImportCategory::External
+        );
     }
 
     #[test]
@@ -94,8 +135,11 @@ mod tests {
         let import = raw_java("com.example.myapp.domain.User");
         let resolved = resolver.resolve(&import);
         assert_eq!(resolved.category, ImportCategory::Internal);
-        // resolved_path should enable ViolationDetector to match "domain/**"
-        assert!(resolved.resolved_path.is_some());
+        // resolved_path should enable ViolationDetector to match "src/domain/**"
+        assert_eq!(
+            resolved.resolved_path,
+            Some("src/domain/_.java".to_string())
+        );
     }
 
     #[test]

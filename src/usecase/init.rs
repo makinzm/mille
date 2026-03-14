@@ -337,6 +337,7 @@ fn ext_to_language(ext: &str) -> Option<&'static str> {
         "js" | "jsx" | "mjs" | "cjs" => Some("javascript"),
         "go" => Some("go"),
         "py" => Some("python"),
+        "java" => Some("java"),
         _ => None,
     }
 }

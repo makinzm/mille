@@ -7,6 +7,19 @@
 - `tree-sitter-java` クレートを使用（他言語と同系列）
 - fixture 構成と E2E テストケースを設計
 
+### GREEN フェーズ (完了)
+- `src/infrastructure/parser/java.rs`: tree-sitter-java を使った実装（通常 import + static import 対応）
+- `src/infrastructure/resolver/java.rs`: module_name prefix で Internal/External を分類
+- `src/infrastructure/repository/fs_source_file_repository.rs`: `SOURCE_EXTENSIONS` に `"java"` 追加
+- `src/usecase/init.rs`: `ext_to_language` に `"java"` 追加
+- `src/domain/entity/config.rs`: `JavaResolveConfig` 追加
+- `cargo test`: 全テスト通過 (255 unit + 7 e2e_java + 他 E2E すべて)
+
+```
+test result: ok. 255 passed (lib)
+test result: ok. 7 passed (e2e_java)
+```
+
 ### RED フェーズ (完了)
 - スタブ実装 (`todo!()`) とテストを作成
 - `cargo test` で Java 関連 10 テストが期待通り失敗: `not yet implemented`

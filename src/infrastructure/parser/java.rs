@@ -1,5 +1,7 @@
+use tree_sitter::Node;
+
 use crate::domain::entity::call_expr::RawCallExpr;
-use crate::domain::entity::import::RawImport;
+use crate::domain::entity::import::{ImportKind, RawImport};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Java source files.
@@ -18,8 +20,68 @@ impl Parser for JavaParser {
 }
 
 /// Parse Java source code and extract all `import` declarations.
-pub fn parse_java_imports(_source: &str, _file_path: &str) -> Vec<RawImport> {
-    todo!("JavaParser::parse_java_imports not yet implemented")
+pub fn parse_java_imports(source: &str, file_path: &str) -> Vec<RawImport> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_java::language())
+        .expect("Failed to load Java grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut imports = Vec::new();
+    collect_java_imports(root, source.as_bytes(), file_path, &mut imports);
+    imports
+}
+
+fn collect_java_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawImport>) {
+    if node.kind() == "import_declaration" {
+        let line = node.start_position().row + 1;
+
+        // Check if this is a static import by scanning for a "static" child token.
+        // Grammar: 'import' optional('static') $._name optional(seq('.', asterisk)) ';'
+        let _is_static = (0..node.child_count())
+            .any(|i| node.child(i).map(|c| c.kind() == "static").unwrap_or(false));
+
+        // Extract the import path from the scoped_identifier or identifier child.
+        if let Some(path) = extract_java_import_path(&node, source) {
+            out.push(RawImport {
+                path,
+                line,
+                file: file_path.to_string(),
+                kind: ImportKind::Import,
+                named_imports: vec![],
+            });
+        }
+        return;
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_java_imports(child, source, file_path, out);
+        }
+    }
+}
+
+/// Extract the dotted import path from an `import_declaration` node.
+///
+/// Grammar: `'import' optional('static') $._name optional(seq('.', asterisk)) ';'`
+/// The name is a `scoped_identifier` (e.g. `com.example.Foo`) or `identifier`.
+fn extract_java_import_path(node: &Node, source: &[u8]) -> Option<String> {
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            match child.kind() {
+                "scoped_identifier" | "identifier" => {
+                    let text = child.utf8_text(source).unwrap_or("").to_string();
+                    if !text.is_empty() {
+                        return Some(text);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
