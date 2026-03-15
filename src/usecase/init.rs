@@ -1035,6 +1035,136 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
+    // generate_toml — Python namespace package (src/ layout)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_generate_toml_namespace_src_layout_adds_src_to_package_names() {
+        // src/domain/** のようなパスで、external_allow に "src" が含まれる場合、
+        // "src" は名前空間パッケージとして package_names に昇格されるべき。
+        // また、src_domain レイヤーの external_allow から "src" は除外されるべき。
+        let mut src_domain = make_layer("src_domain", vec!["src/domain/**"]);
+        src_domain.external_allow = vec!["src".to_string(), "dataclasses".to_string()];
+        let mut src_usecase = make_layer("src_usecase", vec!["src/usecase/**"]);
+        src_usecase.external_allow = vec![];
+        let layers = vec![src_domain, src_usecase];
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["python".to_string()],
+            &layers,
+            None,
+            None,
+        );
+        // "src" が package_names に含まれるべき
+        let has_src_in_pkg_names = toml
+            .lines()
+            .any(|line| line.contains("package_names") && line.contains("\"src\""));
+        assert!(
+            has_src_in_pkg_names,
+            "src は package_names に昇格されるべき\n{}",
+            toml
+        );
+        // "src" は external_allow に出力されないべき
+        let has_src_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"src\""));
+        assert!(
+            !has_src_in_ext_allow,
+            "src は external_allow に残るべきでない\n{}",
+            toml
+        );
+        // "dataclasses" は external_allow に残るべき
+        let has_dataclasses_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"dataclasses\""));
+        assert!(
+            has_dataclasses_in_ext_allow,
+            "dataclasses は external_allow に残るべき\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_flat_layout_unchanged() {
+        // フラットレイアウト (domain/**, usecase/**) では既存の動作が変わらない。
+        // package_names = ["domain", "usecase"] のみ含まれ "src" は含まれない。
+        let layers = vec![
+            make_layer("domain", vec!["domain/**"]),
+            make_layer("usecase", vec!["usecase/**"]),
+        ];
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["python".to_string()],
+            &layers,
+            None,
+            None,
+        );
+        assert!(
+            toml.contains("\"domain\""),
+            "domain は package_names に含まれるべき\n{}",
+            toml
+        );
+        assert!(
+            toml.contains("\"usecase\""),
+            "usecase は package_names に含まれるべき\n{}",
+            toml
+        );
+        // "src" は出現しないべき
+        assert!(
+            !toml.contains("\"src\""),
+            "フラットレイアウトで src は出現しないべき\n{}",
+            toml
+        );
+    }
+
+    #[test]
+    fn test_generate_toml_namespace_only_path_component_promoted() {
+        // external_allow に含まれるパッケージのうち、パスコンポーネントであるもののみ昇格する。
+        // "kaggle" はパスコンポーネントではないので external_allow に残るべき。
+        // "src" はパスコンポーネントなので package_names に昇格されるべき。
+        let mut layer = make_layer("src_domain", vec!["src/domain/**"]);
+        layer.external_allow = vec!["kaggle".to_string(), "src".to_string()];
+        let layers = vec![layer];
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["python".to_string()],
+            &layers,
+            None,
+            None,
+        );
+        // "src" は package_names に昇格されるべき
+        let has_src_in_pkg_names = toml
+            .lines()
+            .any(|line| line.contains("package_names") && line.contains("\"src\""));
+        assert!(
+            has_src_in_pkg_names,
+            "src は package_names に昇格されるべき\n{}",
+            toml
+        );
+        // "kaggle" は external_allow に残るべき
+        let has_kaggle_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"kaggle\""));
+        assert!(
+            has_kaggle_in_ext_allow,
+            "kaggle は external_allow に残るべき\n{}",
+            toml
+        );
+        // "src" は external_allow に出力されないべき
+        let has_src_in_ext_allow = toml
+            .lines()
+            .any(|line| line.contains("external_allow") && line.contains("\"src\""));
+        assert!(
+            !has_src_in_ext_allow,
+            "src は external_allow に残るべきでない\n{}",
+            toml
+        );
+    }
+
+    // ------------------------------------------------------------------
     // generate_toml — resolve.go
     // ------------------------------------------------------------------
 
