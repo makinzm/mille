@@ -396,7 +396,8 @@ pub fn generate_toml(
     // Used for [resolve.python] and to filter internal names from external_allow.
     let is_python = languages.iter().any(|l| l == "python");
     let py_pkg_names: BTreeSet<String> = if is_python {
-        layers
+        // Base: last path component of each layer (e.g. "domain" from "src/domain/**").
+        let base: BTreeSet<String> = layers
             .iter()
             .flat_map(|layer| layer.paths.iter())
             .filter_map(|path| {
@@ -404,7 +405,31 @@ pub fn generate_toml(
                 p.split('/').next_back().map(|s| s.to_string())
             })
             .filter(|s| is_valid_python_identifier(s))
-            .collect()
+            .collect();
+
+        // All path directory components — candidates for namespace package prefixes.
+        // NOTE: e.g. for "src/domain/**" this yields both "src" and "domain".
+        let all_components: BTreeSet<String> = layers
+            .iter()
+            .flat_map(|layer| layer.paths.iter())
+            .flat_map(|path| {
+                let p = path.trim_end_matches("/**").trim_end_matches('/');
+                p.split('/').map(|s| s.to_string()).collect::<Vec<_>>()
+            })
+            .filter(|s| is_valid_python_identifier(s))
+            .collect();
+
+        // If a path component appears in external_allow of any layer, real imports use it
+        // as a top-level prefix (e.g. `from src.domain...`). Promote it to package_names
+        // so it is classified as Internal and filtered out of external_allow below.
+        let namespace_pkgs: BTreeSet<String> = layers
+            .iter()
+            .flat_map(|layer| layer.external_allow.iter())
+            .filter(|pkg| all_components.contains(pkg.as_str()))
+            .cloned()
+            .collect();
+
+        base.into_iter().chain(namespace_pkgs).collect()
     } else {
         BTreeSet::new()
     };
