@@ -27,12 +27,12 @@
 
 ## タスク
 
-- [ ] feat/pr63-fix-init-scan-namespace-imports ブランチ作成
-- [ ] tasks/TODO.md, timeline.md 作成
-- [ ] RED: テスト3件を追加して失敗を確認 (`--no-verify` コミット)
-- [ ] GREEN: `classify_py_import` と `resolve_to_known_dir` を修正してテスト通過
-- [ ] REFACTOR: docs/TODO.md, README.md 更新
-- [ ] PR 作成
+- [x] feat/pr62-fix-init-namespace-package-names ブランチで作業
+- [x] tasks/TODO.md, timeline.md 作成
+- [x] RED: テスト5件を追加して失敗を確認 (`--no-verify` コミット)
+- [x] GREEN: `classify_py_import` と `resolve_to_known_dir` を修正してテスト通過、Bug2 (src/main.py skip) も修正
+- [x] REFACTOR: docs/TODO.md, README.md 更新
+- [ ] PR #62 に push
 
 ## テストケース
 
