@@ -1278,4 +1278,128 @@ mod tests {
 
         assert!(result.is_none(), "missing go.mod should return None");
     }
+
+    // ------------------------------------------------------------------
+    // Bug 1: classify_py_import — absolute imports should return full dotted path
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_classify_py_import_returns_full_path() {
+        // Absolute imports must return the full dotted path so
+        // resolve_to_known_dir can try all slash-prefixes.
+        match classify_py_import("src.domain.entity") {
+            Some(InitImport::TryInternal(seg)) => {
+                assert_eq!(seg, "src.domain.entity");
+            }
+            other => panic!("expected TryInternal(\"src.domain.entity\"), got {:?}", other),
+        }
+        match classify_py_import("domain.entity") {
+            Some(InitImport::TryInternal(seg)) => {
+                assert_eq!(seg, "domain.entity");
+            }
+            other => panic!("expected TryInternal(\"domain.entity\"), got {:?}", other),
+        }
+        // Relative imports (.domain) should still return single segment
+        match classify_py_import(".domain") {
+            Some(InitImport::TryInternal(seg)) => {
+                assert_eq!(seg, "domain");
+            }
+            other => panic!("expected TryInternal(\"domain\") for relative, got {:?}", other),
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Bug 1: resolve_to_known_dir — dotted namespace paths
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_resolve_to_known_dir_dotted_namespace() {
+        let dirs: BTreeSet<String> = ["src/domain", "src/infrastructure"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        // "src.domain.entity" from "src/infrastructure" → "src/domain"
+        assert_eq!(
+            resolve_to_known_dir("src.domain.entity", "src/infrastructure", &dirs),
+            Some("src/domain".to_string()),
+            "dotted path prefix src/domain should match layer dir"
+        );
+
+        // "src.infrastructure.db" from "src/domain" → "src/infrastructure"
+        assert_eq!(
+            resolve_to_known_dir("src.infrastructure.db", "src/domain", &dirs),
+            Some("src/infrastructure".to_string()),
+        );
+
+        // "src.unknown.thing" → no match
+        assert_eq!(
+            resolve_to_known_dir("src.unknown.thing", "src/domain", &dirs),
+            None,
+            "unknown sub-package should return None"
+        );
+    }
+
+    #[test]
+    fn test_resolve_to_known_dir_flat_import_still_works() {
+        // Flat layout (no src/ prefix): "domain.entity" from "infrastructure" → "domain"
+        let dirs: BTreeSet<String> = ["domain", "infrastructure"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        assert_eq!(
+            resolve_to_known_dir("domain.entity", "infrastructure", &dirs),
+            Some("domain".to_string()),
+            "flat layout backward compatibility must be preserved"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Bug 2: ancestor_at_depth regression guard
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_ancestor_at_depth_shallower_returns_none() {
+        // "src" at depth=2 → None (verified regression: Bug 2 was using this as skip)
+        assert_eq!(ancestor_at_depth("src", 2), None);
+    }
+
+    // ------------------------------------------------------------------
+    // Bug 2: scan_project must include files shallower than target_depth
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_scan_main_py_creates_layer() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path();
+
+        // src/main.py — shallower than target_depth=2
+        let src_dir = root.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(src_dir.join("main.py"), "# no imports\n").unwrap();
+
+        // src/domain/entity.py — at target_depth=2
+        let domain_dir = src_dir.join("domain");
+        std::fs::create_dir_all(&domain_dir).unwrap();
+        std::fs::write(domain_dir.join("entity.py"), "# no imports\n").unwrap();
+
+        // src/infrastructure/repo.py — at target_depth=2
+        let infra_dir = src_dir.join("infrastructure");
+        std::fs::create_dir_all(&infra_dir).unwrap();
+        std::fs::write(infra_dir.join("repo.py"), "# no imports\n").unwrap();
+
+        let parser = crate::infrastructure::parser::DispatchingParser::new();
+        let analyses = scan_project(root, &parser, None, None);
+
+        assert!(
+            analyses.contains_key("src"),
+            "analyses must contain a 'src' layer for src/main.py; got keys: {:?}",
+            analyses.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            analyses["src"].file_count >= 1,
+            "src layer file_count should be >= 1"
+        );
+    }
 }
