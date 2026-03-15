@@ -120,6 +120,8 @@ The generated config includes `allow` (inferred internal dependencies) and `exte
 
 **Python submodule imports**: `external_allow = ["matplotlib"]` correctly allows both `import matplotlib` and `import matplotlib.pyplot`.
 
+**Python `src/` layout (namespace packages)**: When your project uses a `src/` layout and imports like `from src.domain.entity import Foo`, `mille init` detects that `src` is used as a top-level import prefix and automatically adds it to `package_names`. This means `from src.domain...` is classified as Internal and `src` does not appear in `external_allow`.
+
 **Go projects**: `mille init` reads `go.mod` and generates `[resolve.go] module_name` automatically — internal module imports are classified correctly during `mille check`. External packages appear in `external_allow` with their full import paths (e.g. `"github.com/cilium/ebpf"`, `"fmt"`, `"net/http"`).
 
 **TypeScript/JavaScript subpath imports**: `external_allow = ["vitest"]` correctly allows both `import "vitest"` and `import "vitest/config"`. Scoped packages (`@scope/name/sub`) are matched by `"@scope/name"`.

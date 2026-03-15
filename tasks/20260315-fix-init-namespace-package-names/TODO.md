@@ -16,14 +16,14 @@
 ## タスク
 
 - [x] ブランチ作成: `feat/pr62-fix-init-namespace-package-names`
-- [ ] テストを書く（RED）
-  - [ ] `test_generate_toml_namespace_src_layout_adds_src_to_package_names`
-  - [ ] `test_generate_toml_flat_layout_unchanged`
-  - [ ] `test_generate_toml_namespace_only_path_component_promoted`
-- [ ] 実装（GREEN）
-- [ ] リファクタ（REFACTOR）
-- [ ] `docs/TODO.md` 更新
-- [ ] `README.md` 確認・更新
+- [x] テストを書く（RED）
+  - [x] `test_generate_toml_namespace_src_layout_adds_src_to_package_names`
+  - [x] `test_generate_toml_flat_layout_unchanged`
+  - [x] `test_generate_toml_namespace_only_path_component_promoted`
+- [x] 実装（GREEN）
+- [x] リファクタ（REFACTOR）
+- [x] `docs/TODO.md` 更新
+- [x] `README.md` 更新
 - [ ] PR 作成
 
 ## 完了条件
