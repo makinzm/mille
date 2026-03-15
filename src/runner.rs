@@ -721,11 +721,10 @@ fn process_source_file(
         return;
     }
 
-    // Roll up the immediate dir to the target layer depth
-    let layer_dir = match ancestor_at_depth(&dir_rel, target_depth) {
-        Some(d) => d,
-        None => return, // shallower than target depth → skip
-    };
+    // Roll up the immediate dir to the target layer depth.
+    // NOTE: files shallower than target_depth (e.g. src/main.py when depth=2)
+    // use dir_rel itself as the layer dir so they are not silently dropped.
+    let layer_dir = ancestor_at_depth(&dir_rel, target_depth).unwrap_or_else(|| dir_rel.clone());
 
     let imports = SourceParser::parse_imports(parser, &source, &file_rel_str);
     let analysis = analyses.entry(layer_dir.clone()).or_default();
@@ -891,12 +890,12 @@ fn classify_py_import(path: &str) -> Option<InitImport> {
         }
         return Some(InitImport::TryInternal(seg));
     }
-    // Absolute import — first segment might be internal or external
-    let seg = path.split('.').next()?.to_string();
-    if seg.is_empty() {
+    // Absolute import — return full dotted path so resolve_to_known_dir can
+    // try all slash-prefixes (e.g. "src.domain.entity" → try "src", "src/domain").
+    if path.is_empty() {
         return None;
     }
-    Some(InitImport::TryInternal(seg))
+    Some(InitImport::TryInternal(path.to_string()))
 }
 
 /// Return the ancestor of `dir` at `depth` path segments, or `None` if `dir` is shallower.
@@ -937,19 +936,65 @@ pub(crate) fn auto_detect_layer_depth(all_source_dirs: &BTreeSet<String>) -> usi
     1
 }
 
-/// Find a known directory whose base name matches `module_seg`.
-/// Prefers directories that share the same parent as `current_dir`.
+/// Find a known directory that matches a module path (dotted or slash).
+///
+/// Accepts a dotted Python path (`"src.domain.entity"`), a plain single
+/// segment (`"domain"`), or a Rust/Go sub-segment (`"domain"`).
+///
+/// Strategy (in priority order):
+/// 1. Slash-prefix exact match, sibling-first  — handles Python src-layout
+///    e.g. `"src.domain.entity"` → tries `"src"`, `"src/domain"` → `"src/domain"`
+/// 2. Slash-prefix exact match, any dir
+/// 3. Base-name match, sibling-first           — handles Rust `crate::domain`
+///    where the known dir is `"src/domain"` but the segment is just `"domain"`
+/// 4. Base-name match, any dir
+///
+/// NOTE: steps 1–2 use full-path equality so a dotted path can't accidentally
+/// match a dir in a completely different subtree.
 fn resolve_to_known_dir(
-    module_seg: &str,
+    module_path: &str,
     current_dir: &str,
     known_dirs: &BTreeSet<String>,
 ) -> Option<String> {
     let current_parent = current_dir.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
 
-    // First try: sibling dir (same parent directory)
+    // Build slash-prefixes from dotted path:
+    // "src.domain.entity" → ["src", "src/domain", "src/domain/entity"]
+    let segments: Vec<&str> = module_path.split('.').collect();
+    let slash_prefixes: Vec<String> = (1..=segments.len())
+        .map(|n| segments[..n].join("/"))
+        .collect();
+
+    // Strategy 1: prefix exact-match, sibling-first
+    for prefix in &slash_prefixes {
+        for dir in known_dirs {
+            if dir == prefix && dir.as_str() != current_dir {
+                let parent = dir.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+                if parent == current_parent {
+                    return Some(dir.clone());
+                }
+            }
+        }
+    }
+
+    // Strategy 2: prefix exact-match, any dir
+    for prefix in &slash_prefixes {
+        for dir in known_dirs {
+            if dir == prefix && dir.as_str() != current_dir {
+                return Some(dir.clone());
+            }
+        }
+    }
+
+    // Strategy 3 & 4: base-name match (for Rust/Go single segments like "domain"
+    // that need to resolve to "src/domain").
+    // NOTE: only the last segment of module_path is used as the base name.
+    let base_seg = segments.last().copied().unwrap_or(module_path);
+
+    // Strategy 3: base-name, sibling-first
     for dir in known_dirs {
         let base = dir.rsplit('/').next().unwrap_or(dir.as_str());
-        if base == module_seg && dir.as_str() != current_dir {
+        if base == base_seg && dir.as_str() != current_dir {
             let parent = dir.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
             if parent == current_parent {
                 return Some(dir.clone());
@@ -957,10 +1002,10 @@ fn resolve_to_known_dir(
         }
     }
 
-    // Fallback: any known dir with matching base name
+    // Strategy 4: base-name, any dir
     for dir in known_dirs {
         let base = dir.rsplit('/').next().unwrap_or(dir.as_str());
-        if base == module_seg && dir.as_str() != current_dir {
+        if base == base_seg && dir.as_str() != current_dir {
             return Some(dir.clone());
         }
     }
@@ -1291,7 +1336,10 @@ mod tests {
             Some(InitImport::TryInternal(seg)) => {
                 assert_eq!(seg, "src.domain.entity");
             }
-            other => panic!("expected TryInternal(\"src.domain.entity\"), got {:?}", other),
+            other => panic!(
+                "expected TryInternal(\"src.domain.entity\"), got {:?}",
+                other
+            ),
         }
         match classify_py_import("domain.entity") {
             Some(InitImport::TryInternal(seg)) => {
@@ -1304,7 +1352,10 @@ mod tests {
             Some(InitImport::TryInternal(seg)) => {
                 assert_eq!(seg, "domain");
             }
-            other => panic!("expected TryInternal(\"domain\") for relative, got {:?}", other),
+            other => panic!(
+                "expected TryInternal(\"domain\") for relative, got {:?}",
+                other
+            ),
         }
     }
 

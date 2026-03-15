@@ -33,4 +33,28 @@ test result: FAILED. 272 passed; 4 failed
 - `resolve_to_known_dir`: ベース名比較のみ → プレフィックス照合必要
 - `ancestor_at_depth` が None のとき `return` → src/main.py がスキップされる
 
-<!-- GREEN/REFACTOR エントリをここに追記 -->
+### GREEN フェーズ (2026-03-15)
+
+3 件の変更で全テスト通過 (276 passed; 0 failed):
+
+1. `classify_py_import`: 絶対インポートをフルドットパスで返すよう変更
+   - 変更前: `path.split('.').next()` → `"src"`
+   - 変更後: `path.to_string()` → `"src.domain.entity"`
+
+2. `resolve_to_known_dir`: プレフィックス照合を追加 (4段階戦略)
+   - Strategy 1: スラッシュプレフィックス完全一致 + 同一親ディレクトリ
+   - Strategy 2: スラッシュプレフィックス完全一致 (任意)
+   - Strategy 3: ベース名一致 + 同一親ディレクトリ (Rust/Go の後方互換)
+   - Strategy 4: ベース名一致 (任意)
+   - NOTE: Strategy 3/4 を残すことで `Internal("domain")` → `"src/domain"` が継続動作
+
+3. `collect_file_imports` (Bug 2): `ancestor_at_depth` が None のとき `dir_rel` をそのまま使用
+   - 変更前: `None => return` → src/main.py がスキップされる
+   - 変更後: `.unwrap_or_else(|| dir_rel.clone())`
+
+regression 発見: `test_init_with_depth_flag` が Strategy 3/4 なしでは失敗
+→ Rust `crate::domain` は `Internal("domain")` を返し known_dirs が `"src/domain"` のためベース名照合が必要
+
+lefthook: clippy/fmt/test すべて通過
+
+<!-- REFACTOR エントリをここに追記 -->
