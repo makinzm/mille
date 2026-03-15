@@ -26,6 +26,8 @@
 - ✅ Java 言語サポート — `.java` ファイルのパース・Internal/External 分類、`[resolve.java] module_name` 設定、Maven/Gradle自動検出、`main` レイヤー対応、E2E テスト追加（PR #57）
 - ✅ `mille init` Java/Kotlin 対応 — パッケージ宣言ベースのレイヤー検出（depth 不問）、pom.xml/build.gradle から `module_name` 自動生成、`**/layer/**` glob 出力（PR #57）
 - ✅ Kotlin 言語サポート — `.kt` ファイルのパース（tree-sitter-kotlin）・`[resolve.java]` リゾルバー共用、flat/Gradle レイアウト対応、E2E テスト追加
+- ✅ `mille init` Python namespace パッケージ修正 — `src/` レイアウトで `from src.domain...` を使うプロジェクトで `src` が `package_names` に自動追加されるよう修正（PR #62）
+- ✅ `mille init` Python namespace インポートスキャン修正 — `from src.domain.entity import X` がレイヤー内部依存として正しく検出されるよう修正（`classify_py_import` フルパス返し + `resolve_to_known_dir` プレフィックス照合）、`src/main.py` 等の浅い階層ファイルがスキップされずレイヤーとして登録されるよう修正（PR #62）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 （現在なし）
