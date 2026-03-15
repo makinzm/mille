@@ -7,13 +7,13 @@
 
 ## タスク
 
-- [ ] `.github/workflows/security-audit.yml` を作成する
+- [x] `.github/workflows/security-audit.yml` を作成する
   - スケジュール実行（毎日 UTC 06:00）
   - push / PR 時に Cargo.lock 変更があればトリガー
   - `cargo audit` で依存パッケージをスキャン
   - 脆弱性検出時にスケジュール実行では GitHub Issue を自動作成
   - PR 上では annotations として表示
-- [ ] `actionlint` が通ることを確認する
+- [x] `actionlint` が通ることを確認する
 - [ ] PR 作成
 
 ## 設計メモ
