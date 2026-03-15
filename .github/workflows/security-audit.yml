@@ -1,0 +1,111 @@
+name: Security Audit
+
+on:
+  schedule:
+    # NOTE: 毎日 UTC 06:00 に実行。RustSec Advisory Database は日々更新されるため
+    #       定期スキャンで新規 CVE を早期検知する。
+    - cron: '0 6 * * *'
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # cargo audit — RustSec Advisory Database で依存脆弱性をスキャン     #
+  # ------------------------------------------------------------------ #
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      # NOTE: cargo-audit は crates.io からインストール。
+      #       Cargo.lock を参照するためリポジトリルートで実行する。
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        id: audit
+        run: |
+          if cargo audit --json > audit-result.json 2>&1; then
+            echo "vulnerable=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "vulnerable=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show audit result
+        if: always()
+        run: cat audit-result.json || true
+
+      # NOTE: スケジュール実行で脆弱性が見つかった場合のみ Issue を作成する。
+      #       push / PR 時はワークフローの fail で十分（Issue ノイズ回避）。
+      - name: Create GitHub Issue on vulnerability found (schedule only)
+        if: steps.audit.outputs.vulnerable == 'true' && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('audit-result.json', 'utf8'));
+            const vulns = result.vulnerabilities?.list ?? [];
+
+            const rows = vulns.map(v => {
+              const pkg = v.package;
+              const adv = v.advisory;
+              return `| \`${pkg.name}\` | ${pkg.version} | [${adv.id}](https://rustsec.org/advisories/${adv.id}) | ${adv.title} | ${adv.cvss ?? 'N/A'} |`;
+            }).join('\n');
+
+            const body = [
+              '## :rotating_light: Cargo 依存パッケージに脆弱性が検出されました',
+              '',
+              `検出日時: ${new Date().toISOString()}`,
+              `ワークフロー実行: [${context.runId}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              '',
+              '| パッケージ | バージョン | Advisory | 概要 | CVSS |',
+              '|---|---|---|---|---|',
+              rows,
+              '',
+              '### 対応手順',
+              '1. `cargo update -p <パッケージ名>` でパッチバージョンに更新',
+              '2. 修正バージョンがない場合は代替クレートを検討',
+              '3. 対応不要と判断した場合は `audit.toml` に `[ignore]` エントリを追加してクローズ',
+            ].join('\n');
+
+            // NOTE: 既存の未クローズ Issue がある場合は新規作成しない（重複防止）
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'security',
+              state: 'open',
+            });
+            const alreadyOpen = existing.data.some(i => i.title.startsWith('[Security]'));
+            if (alreadyOpen) {
+              console.log('Open security issue already exists. Skipping creation.');
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Security] Cargo 依存パッケージに脆弱性が検出されました (${new Date().toISOString().slice(0, 10)})`,
+              body,
+              labels: ['security'],
+            });
+
+      - name: Fail on vulnerability (push / PR)
+        if: steps.audit.outputs.vulnerable == 'true' && github.event_name != 'schedule'
+        run: |
+          echo "::error::Vulnerabilities found in dependencies. See audit-result.json for details."
+          exit 1
