@@ -35,9 +35,9 @@ paths = ["**/generated/**"]
 | セクション | 説明 |
 |---|---|
 | [`[project]`](#project) | プロジェクト名・ルート・対象言語 |
-| [`[[layers]]`](/mille/ja/configuration/layers/) | レイヤー定義と依存ルール |
-| [`[resolve.*]`](/mille/ja/configuration/resolve/) | 言語別のインポート解決設定 |
-| [`[severity]`](/mille/ja/configuration/severity/) | 違反の重大度設定 |
+| [`[[layers]]`](/mille/configuration/layers/) | レイヤー定義と依存ルール |
+| [`[resolve.*]`](/mille/configuration/resolve/) | 言語別のインポート解決設定 |
+| [`[severity]`](/mille/configuration/severity/) | 違反の重大度設定 |
 | `[ignore]` | 解析から除外するパス |
 
 ## `[project]`
