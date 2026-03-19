@@ -24,18 +24,18 @@ curl -fsSL https://moonrepo.dev/install/proto.sh | bash
 ```sh
 cd website
 
-# proto で Bun を使えるようにする（.prototools で 1.3.11 が固定）
+# proto で Bun をインストール（.prototools で 1.3.11 が固定）
 proto install bun
 
-# 依存関係のインストール
-bun install
+# 依存関係のインストール（proto 経由で bun を実行）
+proto run bun -- install
 ```
 
 ### 開発サーバー起動（ホットリロード付き）
 
 ```sh
 cd website
-bun run dev
+proto run bun -- run dev
 ```
 
 → http://localhost:4321/mille/ でサイトを確認できます。
@@ -44,13 +44,13 @@ bun run dev
 
 ```sh
 cd website
-bun run build   # dist/ に静的ファイルを生成（Pagefind インデックスも生成）
-bun run preview # dist/ をローカルサーブ
+proto run bun -- run build    # dist/ に静的ファイルを生成（Pagefind インデックスも生成）
+proto run bun -- run preview  # dist/ をローカルサーブ
 ```
 
 → http://localhost:4321/mille/ でビルド後のサイトを確認できます。
 
-> **Note**: 検索（Pagefind）は `bun run dev` では動作しません。`bun run build && bun run preview` で確認してください。
+> **Note**: 検索（Pagefind）は `dev` では動作しません。`build && preview` で確認してください。
 
 ## コンテンツを編集する
 
