@@ -13,9 +13,9 @@ export default defineConfig({
         src: './src/assets/mille.svg',
         replacesTitle: false,
       },
-      defaultLocale: 'ja',
+      defaultLocale: 'root',
       locales: {
-        ja: {
+        root: {
           label: '日本語',
           lang: 'ja',
         },
