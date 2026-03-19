@@ -1,0 +1,49 @@
+---
+title: Severity Configuration
+description: Control violation severity with error / warning / info
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## `[severity]`
+
+Control the severity level of each violation type.
+
+| Key | Default | Description |
+|---|---|---|
+| `dependency_violation` | `"error"` | Layer dependency rule violated |
+| `external_violation` | `"error"` | External library rule violated |
+| `call_pattern_violation` | `"error"` | DI entrypoint method call rule violated |
+| `unknown_import` | `"warning"` | Import that could not be classified |
+
+```toml
+[severity]
+dependency_violation   = "warning"   # downgrade for gradual adoption
+external_violation     = "error"
+call_pattern_violation = "error"
+unknown_import         = "warning"
+```
+
+## Combining with `--fail-on`
+
+```sh
+mille check                      # exit 1 on error only (default)
+mille check --fail-on warning    # exit 1 on warning or error
+mille check --fail-on error      # same as default
+```
+
+<Aside type="tip">
+**Recommended gradual adoption**
+
+1. Set `dependency_violation = "warning"` and add `mille check` to CI
+2. Fix violations incrementally while reviewing warnings
+3. Once fixed, switch back to `"error"` to enforce strictly
+</Aside>
+
+## Exit Codes
+
+| Code | Meaning |
+|---|---|
+| `0` | No violations (or only warnings without `--fail-on warning`) |
+| `1` | One or more violations at the configured threshold |
+| `3` | Configuration file error |

@@ -1,0 +1,61 @@
+---
+title: mille
+description: レイヤードアーキテクチャの依存ルールを静的解析する多言語対応 CLI ツール
+template: splash
+hero:
+  tagline: |
+    アーキテクチャを、一層ずつ守る。
+    One TOML config. Rust-powered. CI-ready.
+  image:
+    file: ../../../assets/mille.svg
+  actions:
+    - text: インストール
+      link: /mille/ja/getting-started/install/
+      icon: right-arrow
+      variant: primary
+    - text: クイックスタート
+      link: /mille/ja/getting-started/quickstart/
+      icon: open-book
+      variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+```
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  presentation
+  · · · · · · · · · · · · · · · · · ·  (deps only flow inward)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  infrastructure
+  · · · · · · · · · · · · · · · · · ·
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  usecase
+  · · · · · · · · · · · · · · · · · ·
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  domain
+```
+
+`mille` は、クリーンアーキテクチャ・オニオンアーキテクチャ・ヘキサゴナルアーキテクチャなど、**レイヤードアーキテクチャの依存ルールを静的解析する CLI ツール**です。
+
+## チェック機能
+
+| チェック | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| レイヤー依存ルール (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 外部ライブラリルール (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| DI メソッド呼び出しルール (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+<CardGrid>
+  <Card title="インストール" icon="rocket">
+    cargo / npm / pip / go install / バイナリダウンロード の5種類に対応。
+    [インストールガイドへ](/mille/ja/getting-started/install/)
+  </Card>
+  <Card title="クイックスタート" icon="open-book">
+    `mille init` でアーキテクチャを自動検出。5分で CI に組み込めます。
+    [クイックスタートへ](/mille/ja/getting-started/quickstart/)
+  </Card>
+  <Card title="設定リファレンス" icon="setting">
+    `mille.toml` の全オプションを解説。
+    [設定リファレンスへ](/mille/ja/configuration/overview/)
+  </Card>
+  <Card title="CI インテグレーション" icon="github">
+    GitHub Actions アノテーションで違反を直接 PR に表示。
+    [ガイドへ](/mille/ja/guides/ci-integration/)
+  </Card>
+</CardGrid>

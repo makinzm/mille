@@ -1,0 +1,61 @@
+---
+title: mille
+description: A multi-language static analysis CLI that enforces dependency rules for layered architectures
+template: splash
+hero:
+  tagline: |
+    Your architecture, one clean layer at a time.
+    One TOML config. Rust-powered. CI-ready.
+  image:
+    file: ../../../assets/mille.svg
+  actions:
+    - text: Install
+      link: /mille/en/getting-started/install/
+      icon: right-arrow
+      variant: primary
+    - text: Quick Start
+      link: /mille/en/getting-started/quickstart/
+      icon: open-book
+      variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+```
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  presentation
+  · · · · · · · · · · · · · · · · · ·  (deps only flow inward)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  infrastructure
+  · · · · · · · · · · · · · · · · · ·
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  usecase
+  · · · · · · · · · · · · · · · · · ·
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  domain
+```
+
+`mille` is a static analysis CLI that enforces **dependency rules for layered architectures** — Clean Architecture, Onion Architecture, Hexagonal Architecture, and more.
+
+## What it checks
+
+| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    Available via cargo, npm, pip, go install, or binary download.
+    [Installation Guide](/mille/en/getting-started/install/)
+  </Card>
+  <Card title="Quick Start" icon="open-book">
+    `mille init` auto-detects your architecture. CI-ready in 5 minutes.
+    [Quick Start Guide](/mille/en/getting-started/quickstart/)
+  </Card>
+  <Card title="Configuration" icon="setting">
+    Complete reference for all `mille.toml` options.
+    [Configuration Reference](/mille/en/configuration/overview/)
+  </Card>
+  <Card title="CI Integration" icon="github">
+    GitHub Actions annotations show violations directly in PRs.
+    [CI Guide](/mille/en/guides/ci-integration/)
+  </Card>
+</CardGrid>

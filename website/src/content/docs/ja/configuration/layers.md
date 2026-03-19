@@ -1,0 +1,101 @@
+---
+title: レイヤー設定
+description: "[[layers]] の全オプションと opt-in / opt-out モデルの解説"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## `[[layers]]`
+
+| キー | 説明 |
+|---|---|
+| `name` | レイヤー名 |
+| `paths` | このレイヤーに属するファイルのグロブパターン |
+| `dependency_mode` | `"opt-in"`（`allow` に列挙したもののみ許可）または `"opt-out"`（`deny` に列挙したもの以外を許可） |
+| `allow` | 依存を許可するレイヤー（`dependency_mode = "opt-in"` 時） |
+| `deny` | 依存を禁止するレイヤー（`dependency_mode = "opt-out"` 時） |
+| `external_mode` | `"opt-in"` または `"opt-out"`（外部ライブラリ向け） |
+| `external_allow` | 許可する外部パッケージ（`external_mode = "opt-in"` 時） |
+| `external_deny` | 禁止する外部パッケージ（`external_mode = "opt-out"` 時） |
+
+## opt-in / opt-out モデル
+
+| モード | デフォルト | 書くもの | 向いているレイヤー |
+|---|---|---|---|
+| `opt-in` | 全て NG | 許可するものを `allow` / `external_allow` に列挙 | domain, usecase, presentation |
+| `opt-out` | 全て OK | 禁止するものを `deny` / `external_deny` に列挙 | infrastructure |
+
+### 内部依存の例
+
+```toml
+[[layers]]
+name            = "domain"
+dependency_mode = "opt-in"
+allow           = []               # 何にも依存しない
+
+[[layers]]
+name            = "usecase"
+dependency_mode = "opt-in"
+allow           = ["domain"]       # domain のみ参照可
+
+[[layers]]
+name            = "infrastructure"
+dependency_mode = "opt-out"        # 内部レイヤーは全て OK
+deny            = []
+```
+
+### 外部ライブラリ依存の例
+
+`external_allow` / `external_deny` の値は正規表現で指定できます。
+
+```toml
+[[layers]]
+name           = "domain"
+external_mode  = "opt-in"
+external_allow = []                          # 外部ライブラリは原則 NG
+
+[[layers]]
+name           = "usecase"
+external_mode  = "opt-in"
+external_allow = ["serde", "uuid", "chrono"]
+
+[[layers]]
+name           = "infrastructure"
+external_mode  = "opt-out"                   # 何でも使って OK
+external_deny  = []
+```
+
+## `[[layers.allow_call_patterns]]`
+
+DI エントリポイント以外から infrastructure のメソッドを呼び出すことを禁止します。
+
+<Aside type="caution">
+`allow_call_patterns` は `main` レイヤー（または DI エントリポイント相当のレイヤー）にのみ定義できます。他のレイヤーに書くと設定エラーになります。
+</Aside>
+
+| キー | 説明 |
+|---|---|
+| `callee_layer` | メソッド呼び出しを制限する対象レイヤー |
+| `allow_methods` | 許可するメソッド名のリスト |
+
+```toml
+[[layers]]
+name            = "main"
+paths           = ["src/main.rs"]
+dependency_mode = "opt-in"
+allow           = ["domain", "infrastructure", "usecase"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer  = "infrastructure"
+  allow_methods = ["new", "build", "create", "init", "setup"]
+```
+
+これにより以下のような違反を検出できます:
+
+```rust
+// OK: インスタンス生成（allow_methods に該当）
+let repo = UserRepositoryImpl::new();
+
+// NG: ビジネスロジックの直接呼び出し
+repo.find_user(1);  // ❌ allow_methods に該当しない
+```
