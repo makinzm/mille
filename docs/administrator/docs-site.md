@@ -24,7 +24,7 @@ curl -fsSL https://moonrepo.dev/install/proto.sh | bash
 ```sh
 cd website
 
-# proto で Bun をインストール（.prototools で 1.3.11 が固定）
+# proto で Bun をインストール（.prototools の `[tools.bun] version = "1.3.11"` で固定）
 proto install bun
 
 # 依存関係のインストール（proto 経由で bun を実行）
