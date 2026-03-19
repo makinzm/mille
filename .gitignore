@@ -41,3 +41,7 @@ packages/npm/node_modules/
 dist/
 *.tsbuildinfo
 
+# Astro generated files
+website/.astro/data-store.json
+website/.astro/settings.json
+
