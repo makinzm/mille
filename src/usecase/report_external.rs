@@ -126,6 +126,7 @@ mod tests {
             name_deny: vec![],
             name_allow: vec![],
             name_targets: NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 

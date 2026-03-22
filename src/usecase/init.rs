@@ -261,6 +261,7 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
                 name_deny: vec![],
                 name_allow: vec![],
                 name_targets: NameTarget::all(),
+                name_deny_ignore: vec![],
             });
         }
     }
@@ -880,6 +881,7 @@ mod tests {
             name_deny: vec![],
             name_allow: vec![],
             name_targets: NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 

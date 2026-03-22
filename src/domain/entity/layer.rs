@@ -64,6 +64,11 @@ pub struct LayerConfig {
     /// Which targets to check. Defaults to all targets when omitted.
     #[serde(default = "default_name_targets")]
     pub name_targets: Vec<NameTarget>,
+    /// Glob patterns for files to exclude from naming checks.
+    /// Files matching any of these patterns are not checked against `name_deny`.
+    /// Useful to exclude test files from naming violation checks.
+    #[serde(default)]
+    pub name_deny_ignore: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]

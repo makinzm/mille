@@ -317,4 +317,34 @@ external_mode = "opt-out"
         let config = result.unwrap();
         assert_eq!(config.severity.naming_violation, "error");
     }
+
+    #[test]
+    fn test_layer_config_with_name_deny_ignore_parses() {
+        // name_deny_ignore を含む [[layers]] が parse できる
+        let toml = r#"
+[project]
+name = "myproject"
+root = "."
+languages = ["rust"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-out"
+external_mode = "opt-out"
+name_deny = ["aws", "gcp"]
+name_deny_ignore = ["**/test_*.rs", "tests/**"]
+"#;
+        let result = toml::from_str::<MilleConfig>(toml);
+        assert!(
+            result.is_ok(),
+            "name_deny_ignore で parse できるべき: {:?}",
+            result.err()
+        );
+        let config = result.unwrap();
+        assert_eq!(
+            config.layers[0].name_deny_ignore,
+            vec!["**/test_*.rs", "tests/**"]
+        );
+    }
 }

@@ -418,6 +418,7 @@ mod tests {
             name_deny: vec![],
             name_allow: vec![],
             name_targets: NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 
@@ -814,6 +815,7 @@ mod tests {
             name_deny: vec![],
             name_allow: vec![],
             name_targets: crate::domain::entity::layer::NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 
@@ -1258,6 +1260,7 @@ mod tests {
             name_deny: vec![],
             name_allow: vec![],
             name_targets: crate::domain::entity::layer::NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 
@@ -1697,6 +1700,7 @@ mod tests {
             name_deny: name_deny.iter().map(|s| s.to_string()).collect(),
             name_allow: vec![],
             name_targets,
+            name_deny_ignore: vec![],
         }
     }
 
@@ -1964,6 +1968,79 @@ mod tests {
             violations.len(),
             1,
             "GoCategory must still be flagged (standalone 'Go' remains after stripping 'category')"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_ignore_skips_symbols_in_matching_file() {
+        // Files matching name_deny_ignore should not produce violations
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["aws"], NameTarget::all());
+        layer.name_deny_ignore = vec!["**/test_*.rs".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            10,
+            "src/domain/test_helpers.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "test_helpers.rs matches **/test_*.rs so it should be ignored"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_ignore_does_not_affect_non_matching_files() {
+        // Files NOT matching name_deny_ignore are still checked
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["aws"], NameTarget::all());
+        layer.name_deny_ignore = vec!["**/test_*.rs".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            10,
+            "src/domain/entity/client.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "client.rs does not match the ignore pattern — should still be flagged"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_ignore_empty_by_default_checks_all_files() {
+        // Without name_deny_ignore, all files in the layer are checked (regression)
+        let layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["aws"], NameTarget::all());
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![
+            make_raw_name(
+                "AwsClient",
+                NameKind::Symbol,
+                10,
+                "src/domain/entity/foo.rs",
+            ),
+            make_raw_name(
+                "AwsHelper",
+                NameKind::Symbol,
+                20,
+                "src/domain/test_helper.rs",
+            ),
+        ];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            2,
+            "both files should be checked when ignore is empty"
         );
     }
 }
