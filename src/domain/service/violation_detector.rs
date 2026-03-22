@@ -245,6 +245,17 @@ impl<'a> ViolationDetector<'a> {
                 continue;
             }
 
+            // Skip files matching name_deny_ignore glob patterns
+            if !layer.name_deny_ignore.is_empty()
+                && layer.name_deny_ignore.iter().any(|pat| {
+                    glob::Pattern::new(pat)
+                        .map(|p| p.matches(&raw_name.file))
+                        .unwrap_or(false)
+                })
+            {
+                continue;
+            }
+
             // Check if this name's kind is in the layer's name_targets
             let target_kind = raw_name.kind;
             let is_targeted = layer
