@@ -12,12 +12,12 @@ Add PHP file analysis support to mille.
 
 ## Tasks
 
-- [ ] Create branch `feat/php-support`
-- [ ] RED: Write parser and resolver tests with stubs, commit `--no-verify`
-- [ ] GREEN: Implement `src/infrastructure/parser/php.rs`
-- [ ] GREEN: Implement `src/infrastructure/resolver/php.rs`
-- [ ] GREEN: Wire up `parser/mod.rs`, `resolver/mod.rs`, `usecase/init.rs`, `Cargo.toml`
-- [ ] REFACTOR: Update `README.md` and `docs/TODO.md`
+- [x] Create branch `feat/php-support`
+- [x] RED: Write parser and resolver tests with stubs, commit `--no-verify`
+- [x] GREEN: Implement `src/infrastructure/parser/php.rs`
+- [x] GREEN: Implement `src/infrastructure/resolver/php.rs`
+- [x] GREEN: Wire up `parser/mod.rs`, `resolver/mod.rs`, `usecase/init.rs`, `Cargo.toml`
+- [x] REFACTOR: Update `README.md` and `docs/TODO.md`
 - [ ] Create PR
 
 ## Acceptance Criteria

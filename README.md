@@ -18,11 +18,11 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 
 ## What it checks
 
-| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin | PHP |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## Install
@@ -419,7 +419,7 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"` |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"`, `"php"` |
 
 ### `[[layers]]`
 
@@ -468,7 +468,7 @@ name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from namin
   - `"symbol"`: function, class, struct, enum, trait, interface, type alias names
   - `"variable"`: variable, const, let, static declaration names
   - `"comment"`: inline comment content
-- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin
+- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP
 - Severity is controlled by `severity.naming_violation` (default: `"error"`)
 
 ### `[[layers.allow_call_patterns]]`
@@ -577,6 +577,54 @@ Use `--fail-on warning` to exit 1 even for warnings when integrating into CI gra
 | `import java.util.List`, `import org.springframework.*` | External |
 
 > Both regular and static imports are supported. Wildcard imports (`import java.util.*`) are not yet extracted by the parser.
+
+### `[resolve.php]`
+
+| Key | Description |
+|---|---|
+| `namespace` | Base namespace of your project (e.g. `App`). Imports starting with this prefix are classified as Internal. |
+| `composer_json` | Path to `composer.json` (relative to `mille.toml`). The first PSR-4 key in `autoload.psr-4` is used as the base namespace when `namespace` is not set. |
+
+**How PHP imports are classified:**
+
+| Import | Classification |
+|---|---|
+| `use App\Models\User` (starts with `namespace`) | Internal |
+| `use App\Services\{Auth, Logger}` (group use, expanded) | Internal |
+| `use function App\Helpers\format_date` | Internal |
+| `use DateTime`, `use PDO`, `use Exception` | Stdlib |
+| `use Illuminate\Http\Request` | External |
+
+> Supported use forms: simple, aliased (`as`), grouped (`{}`), `use function`, `use const`.
+> PHP stdlib classes (DateTime, PDO, Exception, etc.) are automatically classified as Stdlib without any configuration.
+
+**Example `mille.toml` for a Laravel project:**
+
+```toml
+[project]
+name    = "my-laravel-app"
+root    = "."
+languages = ["php"]
+
+[[layers]]
+name  = "domain"
+paths = ["app/Domain/**"]
+
+[[layers]]
+name  = "application"
+paths = ["app/Application/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+
+[[layers]]
+name  = "infrastructure"
+paths = ["app/Infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "application"]
+
+[resolve.php]
+composer_json = "composer.json"   # auto-detects "App\\" from autoload.psr-4
+```
 
 ## How it Works
 

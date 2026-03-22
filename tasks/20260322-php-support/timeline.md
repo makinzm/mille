@@ -23,5 +23,20 @@ failures:
 panicked at: not yet implemented (todo!())
 ```
 
-### Phase: GREEN (in progress)
-Implementing `parse_php_imports` and `parse_php_names` using tree-sitter-php 0.22.
+### Phase: GREEN (complete)
+Implemented `parse_php_imports` and `parse_php_names` using tree-sitter-php 0.22.8.
+Key technique: ran a temporary AST dump test to observe exact node types before implementing.
+
+Node types used:
+- `namespace_use_declaration` → top-level use statement
+- `namespace_use_clause` → simple/aliased/function/const imports
+- `namespace_use_group` + `namespace_use_group_clause` → grouped imports `{Auth, Logger}`
+- `class_declaration`, `function_definition` → Symbol names
+- `comment` → Comment names
+
+All 348 tests pass (no regressions). Committed: `[fix] implement PHP parser and resolver because of PHP support`
+
+### Phase: REFACTOR (complete)
+Updated README.md (`[resolve.php]` section, language table, Laravel example).
+Updated docs/TODO.md (PHP support entry in サマリー + completed PR entry).
+Updated tasks/20260322-php-support/TODO.md checkbox states.
