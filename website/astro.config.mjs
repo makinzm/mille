@@ -52,6 +52,7 @@ export default defineConfig({
           items: [
             { slug: 'configuration/overview', label: '概要', translations: { en: 'Overview' } },
             { slug: 'configuration/layers', label: 'レイヤー設定', translations: { en: 'Layers' } },
+            { slug: 'configuration/naming', label: 'ネーミング規則', translations: { en: 'Naming Rules' } },
             { slug: 'configuration/resolve', label: 'インポート解決', translations: { en: 'Import Resolution' } },
             { slug: 'configuration/severity', label: '重大度設定', translations: { en: 'Severity' } },
           ],

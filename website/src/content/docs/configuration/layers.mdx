@@ -17,6 +17,10 @@ import { Aside } from '@astrojs/starlight/components';
 | `external_mode` | `"opt-in"` または `"opt-out"`（外部ライブラリ向け） |
 | `external_allow` | 許可する外部パッケージ（`external_mode = "opt-in"` 時） |
 | `external_deny` | 禁止する外部パッケージ（`external_mode = "opt-out"` 時） |
+| `name_deny` | 禁止キーワード（大文字小文字区別なし・部分一致）→ 詳細は[ネーミング規則](/mille/configuration/naming/) |
+| `name_allow` | `name_deny` チェック前に除外する部分文字列 |
+| `name_targets` | チェック対象（`file`, `symbol`, `variable`, `comment`）デフォルト: 全て |
+| `name_deny_ignore` | チェック除外ファイルのグロブパターン |
 
 ## opt-in / opt-out モデル
 

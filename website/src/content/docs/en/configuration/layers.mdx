@@ -17,6 +17,10 @@ import { Aside } from '@astrojs/starlight/components';
 | `external_mode` | `"opt-in"` or `"opt-out"` for external libraries |
 | `external_allow` | Permitted external packages (`external_mode = "opt-in"`) |
 | `external_deny` | Forbidden external packages (`external_mode = "opt-out"`) |
+| `name_deny` | Forbidden keywords (case-insensitive, partial match) — see [Naming Rules](/mille/en/configuration/naming/) |
+| `name_allow` | Substrings stripped before `name_deny` check |
+| `name_targets` | Targets to check (`file`, `symbol`, `variable`, `comment`). Default: all |
+| `name_deny_ignore` | Glob patterns for files excluded from naming checks |
 
 ## opt-in / opt-out Model
 

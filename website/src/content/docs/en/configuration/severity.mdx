@@ -15,6 +15,7 @@ Control the severity level of each violation type.
 | `external_violation` | `"error"` | External library rule violated |
 | `call_pattern_violation` | `"error"` | DI entrypoint method call rule violated |
 | `unknown_import` | `"warning"` | Import that could not be classified |
+| `naming_violation` | `"error"` | Naming convention rule violated (`name_deny`) |
 
 ```toml
 [severity]
@@ -22,6 +23,7 @@ dependency_violation   = "warning"   # downgrade for gradual adoption
 external_violation     = "error"
 call_pattern_violation = "error"
 unknown_import         = "warning"
+naming_violation       = "error"
 ```
 
 ## Combining with `--fail-on`

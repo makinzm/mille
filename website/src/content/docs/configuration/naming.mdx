@@ -1,0 +1,131 @@
+---
+title: ネーミング規則
+description: "name_deny / name_allow / name_targets / name_deny_ignore で命名規約をチェックする"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概要
+
+Clean Architecture では、domain / usecase レイヤーに特定の技術実装名が含まれるべきではありません。
+例えば usecase 内に `AwsClient` や `RedisQueue` といったシンボルが現れるのは、レイヤーの責務を逸脱しています。
+
+mille の **ネーミング規則チェック** は、レイヤーごとに禁止キーワードを定義し、ファイル名・シンボル名・変数名・コメントに含まれていないかを検査します。
+
+## `[[layers]]` ネーミング設定
+
+| キー | デフォルト | 説明 |
+|---|---|---|
+| `name_deny` | `[]` | 禁止キーワードのリスト（大文字小文字区別なし・部分一致） |
+| `name_allow` | `[]` | `name_deny` チェック前に除外する部分文字列（false positive 抑制） |
+| `name_targets` | `["file", "symbol", "variable", "comment"]` | チェック対象。省略時は全ターゲット |
+| `name_deny_ignore` | `[]` | チェックから除外するファイルのグロブパターン |
+
+## 基本設定例
+
+```toml
+[[layers]]
+name            = "domain"
+paths           = ["src/domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+external_mode   = "opt-in"
+external_allow  = ["serde"]
+
+# domain レイヤーにインフラ固有の技術名が現れたら違反
+name_deny = ["aws", "gcp", "azure", "redis", "kafka", "mysql", "postgres"]
+```
+
+### マッチングルール
+
+- **大文字小文字を区別しない**: `AWS` = `aws` = `Aws`
+- **部分一致**: `ManageGcpResource` は `gcp` にマッチ
+- **1つの名前に対して最初にマッチしたキーワードのみ報告**
+
+## `name_allow` — false positive の抑制
+
+部分一致のため、意図しないマッチが起きることがあります。
+
+```
+"ImportCategory" → "go" にマッチ（"cate_go_ry" の中に "go" が含まれる）
+```
+
+`name_allow` に部分文字列を登録すると、チェック前にその文字列が除去されます:
+
+```toml
+name_deny  = ["go", "aws"]
+name_allow = ["category", "algorithm", "cargo"]
+```
+
+この設定では `ImportCategory` をチェックする際、まず `"category"` が除去されて `"import"` になり、
+`"go"` にはマッチしなくなります。
+
+<Aside type="caution">
+`name_allow` は除去した結果にまだキーワードが残っていれば違反を報告します。
+例えば `GoCategory` → `"category"` を除去 → `"go"` が残る → 違反。
+</Aside>
+
+## `name_targets` — チェック対象の絞り込み
+
+デフォルトでは 4 種類すべてをチェックしますが、特定のターゲットに絞ることもできます:
+
+```toml
+# シンボル名とファイル名だけチェック（コメントや変数名は許容）
+name_targets = ["file", "symbol"]
+```
+
+| ターゲット | 対象 |
+|---|---|
+| `file` | ファイル名（拡張子を除く basename） |
+| `symbol` | 関数、クラス、構造体、enum、trait、interface、type alias の名前 |
+| `variable` | 変数、const、let、static 宣言の名前 |
+| `comment` | インラインコメントの内容 |
+
+## `name_deny_ignore` — 特定ファイルの除外
+
+テストファイルなど、ネーミング規則を適用したくないファイルをグロブパターンで指定できます:
+
+```toml
+name_deny        = ["aws", "gcp"]
+name_deny_ignore = ["**/test_*.rs", "tests/**", "**/*_test.go"]
+```
+
+## 重大度の設定
+
+ネーミング違反のデフォルト重大度は `"error"` です。段階的に導入する場合は `"warning"` に設定できます:
+
+```toml
+[severity]
+naming_violation = "warning"
+```
+
+詳細は[重大度設定](/mille/configuration/severity/)を参照してください。
+
+## 対応言語
+
+| 言語 | シンボル | 変数 | コメント | ファイル名 |
+|---|:---:|:---:|:---:|:---:|
+| Rust | ✅ | ✅ | ✅ | ✅ |
+| TypeScript / JavaScript | ✅ | ✅ | ✅ | ✅ |
+| Python | ✅ | ✅ | ✅ | ✅ |
+| Go | ✅ | ✅ | ✅ | ✅ |
+| Java | ✅ | ✅ | ✅ | ✅ |
+| Kotlin | ✅ | ✅ | ✅ | ✅ |
+
+## 修正方法
+
+ネーミング違反が検出された場合、単にリネームするのではなく、アーキテクチャを見直すことが推奨されます:
+
+1. **抽象化**: domain に `MessageQueue` trait を定義し、infrastructure で `RedisQueue` を実装
+2. **DI**: main レイヤーで具体実装をワイヤリング
+3. **infrastructure への移動**: 技術固有のロジックを infrastructure レイヤーに移動
+
+```rust
+// ❌ domain に技術名が漏洩
+struct RedisUserRepository { ... }
+
+// ✅ domain は抽象的なインターフェースのみ
+trait UserRepository { ... }
+// infrastructure で実装
+struct RedisUserRepository { ... }
+```
