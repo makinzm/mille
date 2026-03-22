@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::{NameKind, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Kotlin source files.
@@ -14,6 +15,100 @@ impl Parser for KotlinParser {
 
     fn parse_call_exprs(&self, _source: &str, _file_path: &str) -> Vec<RawCallExpr> {
         vec![]
+    }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_kotlin_names(source, file_path)
+    }
+}
+
+/// Parse Kotlin source code and extract named entities for naming convention checks.
+///
+/// Extracts:
+/// - `Symbol`: class, interface, object, function declarations
+/// - `Variable`: property declarations, local variable declarations
+/// - `Comment`: multiline_comment, line_comment
+///
+/// NOTE: tree-sitter-kotlin comment node types are `multiline_comment` and `line_comment`.
+pub fn parse_kotlin_names(source: &str, file_path: &str) -> Vec<RawName> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_kotlin::language())
+        .expect("Failed to load Kotlin grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut names = Vec::new();
+    collect_kotlin_names(root, source.as_bytes(), file_path, &mut names);
+    names
+}
+
+fn collect_kotlin_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
+    let kind = node.kind();
+    let line = node.start_position().row + 1;
+
+    match kind {
+        // Symbols: class, interface, object declarations
+        "class_declaration" | "interface_declaration" | "object_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        "function_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Variables: property declarations
+        "property_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Variable,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Comments
+        "multiline_comment" | "line_comment" => {
+            let text = node.utf8_text(source).unwrap_or("").to_string();
+            if !text.is_empty() {
+                out.push(RawName {
+                    name: text,
+                    line,
+                    kind: NameKind::Comment,
+                    file: file_path.to_string(),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_kotlin_names(child, source, file_path, out);
+        }
     }
 }
 

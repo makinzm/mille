@@ -23,6 +23,7 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 | Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## Install
 
@@ -432,6 +433,43 @@ Exit codes:
 | `external_mode` | `"opt-in"` or `"opt-out"` for external library usage |
 | `external_allow` | Allowed external packages (when `external_mode = "opt-in"`) |
 | `external_deny` | Forbidden external packages (when `external_mode = "opt-out"`) |
+| `name_deny` | Forbidden keywords for naming convention check (case-insensitive partial match) |
+| `name_allow` | Substrings to strip before `name_deny` check (e.g. `"category"` prevents `"go"` match inside it) |
+| `name_targets` | Targets to check: `"file"`, `"symbol"`, `"variable"`, `"comment"` (default: all) |
+| `name_deny_ignore` | Glob patterns for files to exclude from naming checks (e.g. `"**/test_*.rs"`) |
+
+#### Naming Convention Check (`name_deny`)
+
+Forbid infrastructure-specific keywords from appearing in a layer's names.
+
+```toml
+[[layers]]
+name = "usecase"
+paths = ["src/usecase/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
+
+# Usecase layer must not reference specific infrastructure technologies
+name_deny    = ["gcp", "aws", "azure", "mysql", "postgres"]
+name_allow   = ["category"]   # "category" contains "go" but should not be flagged
+name_targets = ["file", "symbol", "variable", "comment"]  # default: all targets
+name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from naming checks
+```
+
+**Rules:**
+- Case-insensitive (`GCP` = `gcp` = `Gcp`)
+- Partial match (`ManageGcp` also matches `gcp`)
+- `name_allow` strips listed substrings before matching (e.g. `"category"` prevents false positive on `"go"`)
+- `name_deny_ignore` excludes files matching glob patterns from naming checks entirely
+- `name_targets` restricts which entity types are checked:
+  - `"file"`: file basename (e.g. `aws_client.rs`)
+  - `"symbol"`: function, class, struct, enum, trait, interface, type alias names
+  - `"variable"`: variable, const, let, static declaration names
+  - `"comment"`: inline comment content
+- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin
+- Severity is controlled by `severity.naming_violation` (default: `"error"`)
 
 ### `[[layers.allow_call_patterns]]`
 
@@ -472,6 +510,7 @@ Control the severity level of each violation type. Violations can be `"error"`, 
 | `external_violation` | `"error"` | External library rule violated |
 | `call_pattern_violation` | `"error"` | DI entrypoint method call rule violated |
 | `unknown_import` | `"warning"` | Import that could not be classified |
+| `naming_violation` | `"error"` | Naming convention rule violated (`name_deny`) |
 
 ```toml
 [severity]
@@ -479,6 +518,7 @@ dependency_violation   = "warning"   # treat as warning for gradual adoption
 external_violation     = "error"
 call_pattern_violation = "error"
 unknown_import         = "warning"
+naming_violation       = "warning"   # treat as warning while rolling out naming rules
 ```
 
 Use `--fail-on warning` to exit 1 even for warnings when integrating into CI gradually.

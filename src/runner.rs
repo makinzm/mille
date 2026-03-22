@@ -12,7 +12,6 @@ use clap::Parser;
 
 use crate::domain::entity::import::ImportKind;
 use crate::domain::entity::violation::Severity;
-use crate::domain::repository::config_repository::ConfigRepository;
 use crate::domain::repository::parser::Parser as SourceParser;
 use crate::infrastructure::parser::DispatchingParser;
 use crate::infrastructure::repository::fs_source_file_repository::FsSourceFileRepository;
@@ -65,7 +64,7 @@ fn run_cli_inner(cli: Cli) {
                 output,
             } => {
                 let config_repo = TomlConfigRepository;
-                let app_config = match config_repo.load(&config) {
+                let (_app_config, resolve) = match config_repo.load_with_resolve(&config) {
                     Ok(c) => c,
                     Err(e) => {
                         eprintln!("Error: {}", e);
@@ -74,7 +73,7 @@ fn run_cli_inner(cli: Cli) {
                 };
 
                 let parser = DispatchingParser::new();
-                let resolver = DispatchingResolver::from_config(&app_config, &config);
+                let resolver = DispatchingResolver::from_resolve_config(resolve.as_ref(), &config);
 
                 match report_external::report_external(
                     &config,
@@ -124,7 +123,7 @@ fn run_cli_inner(cli: Cli) {
             output,
         } => {
             let config_repo = TomlConfigRepository;
-            let app_config = match config_repo.load(&config) {
+            let (_app_config, resolve) = match config_repo.load_with_resolve(&config) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -133,7 +132,7 @@ fn run_cli_inner(cli: Cli) {
             };
 
             let parser = DispatchingParser::new();
-            let resolver = DispatchingResolver::from_config(&app_config, &config);
+            let resolver = DispatchingResolver::from_resolve_config(resolve.as_ref(), &config);
 
             match analyze::analyze(
                 &config,
@@ -261,14 +260,13 @@ fn run_cli_inner(cli: Cli) {
                 }
             }
 
-            let toml_content = init::generate_toml(
-                &project_name,
-                ".",
-                &languages,
-                &layers,
-                go_module_name.as_deref(),
-                java_module_name.as_deref(),
-            );
+            let resolve_generator =
+                crate::infrastructure::resolve_config_generator::DefaultResolveConfigGenerator {
+                    module_path_name: go_module_name,
+                    package_prefix_name: java_module_name,
+                };
+            let toml_content =
+                init::generate_toml(&project_name, ".", &languages, &layers, &resolve_generator);
 
             match std::fs::write(output_path, &toml_content) {
                 Ok(_) => println!("\nGenerated '{}'", output),
@@ -286,7 +284,7 @@ fn run_cli_inner(cli: Cli) {
             // Pre-load config to build the resolver, then pass path to check().
             // NOTE: Double-load is acceptable for a CLI tool.
             let config_repo = TomlConfigRepository;
-            let app_config = match config_repo.load(&config) {
+            let (_app_config, resolve) = match config_repo.load_with_resolve(&config) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -295,7 +293,7 @@ fn run_cli_inner(cli: Cli) {
             };
 
             let parser = DispatchingParser::new();
-            let resolver = DispatchingResolver::from_config(&app_config, &config);
+            let resolver = DispatchingResolver::from_resolve_config(resolve.as_ref(), &config);
 
             match check_architecture::check(
                 &config,

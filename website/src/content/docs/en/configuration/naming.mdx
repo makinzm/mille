@@ -1,0 +1,130 @@
+---
+title: Naming Rules
+description: "Enforce naming conventions with name_deny / name_allow / name_targets / name_deny_ignore"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+In Clean Architecture, domain and usecase layers should not contain technology-specific implementation names.
+For example, symbols like `AwsClient` or `RedisQueue` inside a usecase violate layer responsibilities.
+
+mille's **naming convention check** lets you define forbidden keywords per layer, scanning file names, symbol names, variable names, and comments.
+
+## `[[layers]]` Naming Options
+
+| Key | Default | Description |
+|---|---|---|
+| `name_deny` | `[]` | Forbidden keywords (case-insensitive, partial match) |
+| `name_allow` | `[]` | Substrings stripped before `name_deny` check (suppresses false positives) |
+| `name_targets` | `["file", "symbol", "variable", "comment"]` | Which targets to check. Defaults to all |
+| `name_deny_ignore` | `[]` | Glob patterns for files excluded from naming checks |
+
+## Basic Example
+
+```toml
+[[layers]]
+name            = "domain"
+paths           = ["src/domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+external_mode   = "opt-in"
+external_allow  = ["serde"]
+
+# Flag infrastructure-specific technology names in the domain layer
+name_deny = ["aws", "gcp", "azure", "redis", "kafka", "mysql", "postgres"]
+```
+
+### Matching Rules
+
+- **Case-insensitive**: `AWS` = `aws` = `Aws`
+- **Partial match**: `ManageGcpResource` matches `gcp`
+- **First match only**: one violation reported per name per layer
+
+## `name_allow` — Suppressing False Positives
+
+Partial matching can cause unintended matches:
+
+```
+"ImportCategory" → matches "go" (because "cate_go_ry" contains "go")
+```
+
+Register substrings in `name_allow` to strip them before checking:
+
+```toml
+name_deny  = ["go", "aws"]
+name_allow = ["category", "algorithm", "cargo"]
+```
+
+When checking `ImportCategory`, `"category"` is stripped first → `"import"` remains → no match for `"go"`.
+
+<Aside type="caution">
+`name_allow` still reports a violation if a keyword remains after stripping.
+For example, `GoCategory` → strip `"category"` → `"go"` remains → violation.
+</Aside>
+
+## `name_targets` — Narrowing Check Scope
+
+By default, all 4 target types are checked. You can narrow the scope:
+
+```toml
+# Only check symbol and file names (allow comments and variables)
+name_targets = ["file", "symbol"]
+```
+
+| Target | What is checked |
+|---|---|
+| `file` | File basename (without extension) |
+| `symbol` | Function, class, struct, enum, trait, interface, type alias names |
+| `variable` | Variable, const, let, static declaration names |
+| `comment` | Inline comment content |
+
+## `name_deny_ignore` — Excluding Specific Files
+
+Exclude files from naming checks using glob patterns (e.g., test files):
+
+```toml
+name_deny        = ["aws", "gcp"]
+name_deny_ignore = ["**/test_*.rs", "tests/**", "**/*_test.go"]
+```
+
+## Severity
+
+The default severity for naming violations is `"error"`. For gradual adoption, set it to `"warning"`:
+
+```toml
+[severity]
+naming_violation = "warning"
+```
+
+See [Severity](/mille/en/configuration/severity/) for details.
+
+## Supported Languages
+
+| Language | Symbols | Variables | Comments | File names |
+|---|:---:|:---:|:---:|:---:|
+| Rust | ✅ | ✅ | ✅ | ✅ |
+| TypeScript / JavaScript | ✅ | ✅ | ✅ | ✅ |
+| Python | ✅ | ✅ | ✅ | ✅ |
+| Go | ✅ | ✅ | ✅ | ✅ |
+| Java | ✅ | ✅ | ✅ | ✅ |
+| Kotlin | ✅ | ✅ | ✅ | ✅ |
+
+## How to Fix Violations
+
+When a naming violation is detected, the recommended fix is architectural — not just renaming:
+
+1. **Abstraction**: Define a `MessageQueue` trait in domain, implement `RedisQueue` in infrastructure
+2. **Dependency Injection**: Wire concrete implementations in the main layer
+3. **Move to infrastructure**: Relocate technology-specific logic to the infrastructure layer
+
+```rust
+// ❌ Technology name leaks into domain
+struct RedisUserRepository { ... }
+
+// ✅ Domain only defines abstract interfaces
+trait UserRepository { ... }
+// Infrastructure provides the implementation
+struct RedisUserRepository { ... }
+```

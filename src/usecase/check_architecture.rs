@@ -1,3 +1,4 @@
+use crate::domain::entity::name::{NameKind, RawName};
 use crate::domain::entity::violation::Violation;
 use crate::domain::repository::config_repository::ConfigRepository;
 use crate::domain::repository::parser::Parser;
@@ -59,11 +60,35 @@ pub fn check(
         .map(|i| i.test_patterns.as_slice())
         .unwrap_or(&[]);
 
+    let mut all_raw_names: Vec<RawName> = Vec::new();
+
     for (idx, layer) in config.layers.iter().enumerate() {
         let mut files = file_repo.collect(&layer.paths);
         files.retain(|f| !matches_any_glob(f, ignore_paths));
         layer_stats[idx].file_count = files.len();
         for file_path in &files {
+            // File-level naming check: add a RawName for the file basename
+            if !layer.name_deny.is_empty()
+                && layer
+                    .name_targets
+                    .iter()
+                    .any(|t| t.as_name_kind() == NameKind::File)
+            {
+                let basename = std::path::Path::new(file_path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !basename.is_empty() {
+                    all_raw_names.push(RawName {
+                        name: basename,
+                        line: 0,
+                        kind: NameKind::File,
+                        file: file_path.clone(),
+                    });
+                }
+            }
+
             let source = std::fs::read_to_string(file_path)
                 .map_err(|e| format!("failed to read {}: {}", file_path, e))?;
             let raw = parser.parse_imports(&source, file_path);
@@ -74,6 +99,10 @@ pub fn check(
                 );
                 all_call_exprs.extend(parser.parse_call_exprs(&source, file_path));
             }
+            // Naming check: parse names if the layer has name_deny rules
+            if !layer.name_deny.is_empty() {
+                all_raw_names.extend(parser.parse_names(&source, file_path));
+            }
         }
     }
 
@@ -82,6 +111,7 @@ pub fn check(
     violations.extend(detector.detect_external(&all_resolved));
     violations.extend(detector.detect_call_patterns(&all_call_exprs, &all_resolved));
     violations.extend(detector.detect_unknown(&all_resolved));
+    violations.extend(detector.detect_naming(&all_raw_names));
 
     for stat in &mut layer_stats {
         stat.violation_count = violations
@@ -102,7 +132,7 @@ mod tests {
     use crate::domain::entity::call_expr::RawCallExpr;
     use crate::domain::entity::config::MilleConfig;
     use crate::domain::entity::import::RawImport;
-    use crate::domain::entity::layer::{DependencyMode, LayerConfig};
+    use crate::domain::entity::layer::{DependencyMode, LayerConfig, NameTarget};
     use crate::domain::entity::resolved_import::ResolvedImport;
 
     // ------------------------------------------------------------------
@@ -129,6 +159,9 @@ mod tests {
             vec![]
         }
         fn parse_call_exprs(&self, _: &str, _: &str) -> Vec<RawCallExpr> {
+            vec![]
+        }
+        fn parse_names(&self, _: &str, _: &str) -> Vec<crate::domain::entity::name::RawName> {
             vec![]
         }
     }
@@ -165,15 +198,13 @@ mod tests {
                 external_allow: vec![],
                 external_deny: vec![],
                 allow_call_patterns: vec![],
+                name_deny: vec![],
+                name_allow: vec![],
+                name_targets: NameTarget::all(),
+                name_deny_ignore: vec![],
             }],
             ignore: None,
-            resolve: None,
-            severity: crate::domain::entity::config::SeverityConfig {
-                dependency_violation: "error".to_string(),
-                external_violation: "error".to_string(),
-                call_pattern_violation: "error".to_string(),
-                unknown_import: "warning".to_string(),
-            },
+            severity: crate::domain::entity::config::SeverityConfig::default(),
         }
     }
 
@@ -201,13 +232,7 @@ mod tests {
             project: test_project(),
             layers: vec![],
             ignore: None,
-            resolve: None,
-            severity: crate::domain::entity::config::SeverityConfig {
-                dependency_violation: "error".to_string(),
-                external_violation: "error".to_string(),
-                call_pattern_violation: "error".to_string(),
-                unknown_import: "warning".to_string(),
-            },
+            severity: crate::domain::entity::config::SeverityConfig::default(),
         };
         let result = check(
             "any.toml",
@@ -269,6 +294,10 @@ mod tests {
                     external_allow: vec![],
                     external_deny: vec![],
                     allow_call_patterns: vec![],
+                    name_deny: vec![],
+                    name_allow: vec![],
+                    name_targets: NameTarget::all(),
+                    name_deny_ignore: vec![],
                 },
                 LayerConfig {
                     name: "infra".to_string(),
@@ -280,16 +309,14 @@ mod tests {
                     external_allow: vec![],
                     external_deny: vec![],
                     allow_call_patterns: vec![],
+                    name_deny: vec![],
+                    name_allow: vec![],
+                    name_targets: NameTarget::all(),
+                    name_deny_ignore: vec![],
                 },
             ],
             ignore: None,
-            resolve: None,
-            severity: crate::domain::entity::config::SeverityConfig {
-                dependency_violation: "error".to_string(),
-                external_violation: "error".to_string(),
-                call_pattern_violation: "error".to_string(),
-                unknown_import: "warning".to_string(),
-            },
+            severity: crate::domain::entity::config::SeverityConfig::default(),
         };
 
         let result = check(
@@ -362,15 +389,13 @@ mod tests {
                 external_allow: vec![],
                 external_deny: vec![],
                 allow_call_patterns: vec![],
+                name_deny: vec![],
+                name_allow: vec![],
+                name_targets: NameTarget::all(),
+                name_deny_ignore: vec![],
             }],
             ignore: None,
-            resolve: None,
-            severity: crate::domain::entity::config::SeverityConfig {
-                dependency_violation: "error".to_string(),
-                external_violation: "error".to_string(),
-                call_pattern_violation: "error".to_string(),
-                unknown_import: "warning".to_string(),
-            },
+            severity: crate::domain::entity::config::SeverityConfig::default(),
         };
         let result = check(
             "any.toml",

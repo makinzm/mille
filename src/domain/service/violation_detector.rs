@@ -2,6 +2,7 @@ use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::config::SeverityConfig;
 use crate::domain::entity::import::ImportKind;
 use crate::domain::entity::layer::{DependencyMode, LayerConfig};
+use crate::domain::entity::name::RawName;
 use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
 use crate::domain::entity::violation::{Severity, Violation, ViolationKind};
 
@@ -82,7 +83,7 @@ impl<'a> ViolationDetector<'a> {
                 continue;
             };
             let crate_name: &str = if import.raw.file.ends_with(".py") {
-                // Python: "matplotlib.pyplot" → "matplotlib"
+                // Dot-separated imports: "matplotlib.pyplot" -> "matplotlib"
                 import
                     .raw
                     .path
@@ -94,11 +95,11 @@ impl<'a> ViolationDetector<'a> {
                 || import.raw.file.ends_with(".js")
                 || import.raw.file.ends_with(".jsx")
             {
-                // TypeScript/JS: "vitest/config" → "vitest", "@scope/pkg/sub" → "@scope/pkg"
+                // Slash-separated imports: "vitest/config" -> "vitest", "@scope/pkg/sub" -> "@scope/pkg"
                 extract_ts_package_name(&import.raw.path)
             } else {
-                // Rust: "serde::Deserialize" → "serde"
-                // Go: full path used as-is (no "::" separator)
+                // Colon-separated imports: "serde::Deserialize" -> "serde"
+                // Full-path imports: full path used as-is (no "::" separator)
                 import
                     .raw
                     .path
@@ -170,11 +171,11 @@ impl<'a> ViolationDetector<'a> {
                             .map(|l| l.name == pattern.callee_layer)
                             .unwrap_or(false)
                         && (
-                            // Rust / Go: type name embedded in import path
+                            // Colon-separated / slash-separated: type name embedded in import path
                             type_name_from_import(&imp.raw.path)
                                 .map(|n| n == receiver_type.as_str())
                                 .unwrap_or(false)
-                            // Python / TypeScript: named imports tracked explicitly
+                            // Dot-separated / slash-separated: named imports tracked explicitly
                             || imp.raw.named_imports.iter().any(|n| n == receiver_type.as_str())
                         )
                 });
@@ -227,6 +228,80 @@ impl<'a> ViolationDetector<'a> {
         violations
     }
 
+    /// Check naming convention rules: for each name, match `name_deny` keywords against
+    /// the name value (case-insensitive partial match).
+    ///
+    /// `raw_names` contains all names extracted from source files (symbols, variables, comments).
+    /// File-level checks (NameKind::File) should be pre-computed by the caller and passed as RawName.
+    pub fn detect_naming(&self, raw_names: &[RawName]) -> Vec<Violation> {
+        let sev = parse_severity(&self.severity.naming_violation);
+        let mut violations = Vec::new();
+
+        for raw_name in raw_names {
+            let Some(layer) = self.find_layer_for_file(&raw_name.file) else {
+                continue;
+            };
+            if layer.name_deny.is_empty() {
+                continue;
+            }
+
+            // Skip files matching name_deny_ignore glob patterns
+            if !layer.name_deny_ignore.is_empty()
+                && layer.name_deny_ignore.iter().any(|pat| {
+                    glob::Pattern::new(pat)
+                        .map(|p| p.matches(&raw_name.file))
+                        .unwrap_or(false)
+                })
+            {
+                continue;
+            }
+
+            // Check if this name's kind is in the layer's name_targets
+            let target_kind = raw_name.kind;
+            let is_targeted = layer
+                .name_targets
+                .iter()
+                .any(|t| t.as_name_kind() == target_kind);
+            if !is_targeted {
+                continue;
+            }
+
+            // Case-insensitive partial match against each denied keyword.
+            // Strip name_allow substrings first so composite words like "category"
+            // don't cause false positives when a denied keyword appears inside them.
+            let name_lower = raw_name.name.to_lowercase();
+            let name_stripped = layer
+                .name_allow
+                .iter()
+                .fold(name_lower.clone(), |acc, allow| {
+                    acc.replace(&allow.to_lowercase() as &str, "")
+                });
+            for keyword in &layer.name_deny {
+                if name_stripped.contains(keyword.to_lowercase().as_str()) {
+                    let target_str = match raw_name.kind {
+                        crate::domain::entity::name::NameKind::File => "file",
+                        crate::domain::entity::name::NameKind::Symbol => "symbol",
+                        crate::domain::entity::name::NameKind::Variable => "variable",
+                        crate::domain::entity::name::NameKind::Comment => "comment",
+                    };
+                    violations.push(Violation {
+                        file: raw_name.file.clone(),
+                        line: raw_name.line,
+                        from_layer: layer.name.clone(),
+                        to_layer: target_str.to_string(),
+                        import_path: keyword.clone(),
+                        kind: ViolationKind::NamingViolation,
+                        severity: sev.clone(),
+                    });
+                    // Report once per name per layer (first matching keyword)
+                    break;
+                }
+            }
+        }
+
+        violations
+    }
+
     /// Check whether the dependency `from → to` is permitted.
     /// Returns `Some(Violation)` if it is not.
     fn check_violation(
@@ -275,10 +350,10 @@ fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
     pattern == crate_name
 }
 
-/// Extract the npm package name from a TypeScript/JavaScript import path.
+/// Extract the npm package name from a slash-separated import path.
 ///
-/// - Non-scoped: `"vitest/config"` → `"vitest"`, `"react"` → `"react"`
-/// - Scoped: `"@vueuse/core/utilities"` → `"@vueuse/core"`, `"@scope/pkg"` → `"@scope/pkg"`
+/// - Non-scoped: `"vitest/config"` -> `"vitest"`, `"react"` -> `"react"`
+/// - Scoped: `"@vueuse/core/utilities"` -> `"@vueuse/core"`, `"@scope/pkg"` -> `"@scope/pkg"`
 fn extract_ts_package_name(path: &str) -> &str {
     if let Some(rest) = path.strip_prefix('@') {
         // Scoped package: @scope/name[/subpath] → @scope/name
@@ -298,13 +373,13 @@ fn extract_ts_package_name(path: &str) -> &str {
 
 /// Extract the type/package name brought into scope by an import path.
 ///
-/// - Rust:  `"crate::infrastructure::Repo"` → `Some("Repo")`  (split by `::`)
-/// - Go:    `"github.com/example/gosample/domain"` → `Some("domain")`  (split by `/`)
-/// - Returns `None` for wildcards (`*`) and grouped imports (`{…}`).
+/// - Colon-separated: `"crate::infrastructure::Repo"` -> `Some("Repo")`
+/// - Slash-separated: `"github.com/example/sample/domain"` -> `Some("domain")`
+/// - Returns `None` for wildcards (`*`) and grouped imports (`{...}`).
 ///
-/// Python and TypeScript named imports are checked via `named_imports` field directly.
+/// Dot-separated and slash-separated named imports are checked via `named_imports` field directly.
 fn type_name_from_import(path: &str) -> Option<&str> {
-    // Rust-style paths use "::" separator.
+    // Colon-separated paths use "::" separator.
     if path.contains("::") {
         let last = path.split("::").last()?;
         if last.starts_with('{') || last == "*" {
@@ -313,13 +388,13 @@ fn type_name_from_import(path: &str) -> Option<&str> {
         return Some(last);
     }
 
-    // Go-style paths use "/" separator (e.g. "github.com/foo/bar/domain").
+    // Slash-separated paths use "/" separator (e.g. "github.com/foo/bar/domain").
     // The last segment is the package name used as the call receiver.
     if path.contains('/') {
         return path.split('/').last().filter(|s| !s.is_empty());
     }
 
-    // Plain single-segment paths (e.g. "fmt", "os" in Go stdlib).
+    // Plain single-segment paths (e.g. "fmt", "os" in stdlib).
     if path.starts_with('{') || path == "*" {
         return None;
     }
@@ -340,6 +415,7 @@ mod tests {
         allow: &[&str],
         deny: &[&str],
     ) -> LayerConfig {
+        use crate::domain::entity::layer::NameTarget;
         LayerConfig {
             name: name.to_string(),
             paths: paths.iter().map(|s| s.to_string()).collect(),
@@ -350,6 +426,10 @@ mod tests {
             external_allow: vec![],
             external_deny: vec![],
             allow_call_patterns: vec![],
+            name_deny: vec![],
+            name_allow: vec![],
+            name_targets: NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 
@@ -743,6 +823,10 @@ mod tests {
             external_allow: external_allow.iter().map(|s| s.to_string()).collect(),
             external_deny: external_deny.iter().map(|s| s.to_string()).collect(),
             allow_call_patterns: vec![],
+            name_deny: vec![],
+            name_allow: vec![],
+            name_targets: crate::domain::entity::layer::NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 
@@ -959,7 +1043,7 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_python_submodule_allowed() {
+    fn test_detect_external_dotted_import_allowed() {
         // "matplotlib.pyplot" import with external_allow=["matplotlib"] → no violation
         let layers = vec![make_layer_with_external(
             "domain",
@@ -987,7 +1071,7 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_python_submodule_violation() {
+    fn test_detect_external_dotted_import_violation() {
         // "unknown.submodule" not in external_allow → violation
         let layers = vec![make_layer_with_external(
             "domain",
@@ -1018,8 +1102,8 @@ mod tests {
 
     #[test]
     fn test_detect_external_ts_subpath_allowed_by_package_name() {
-        // TypeScript: "vitest/config" should match external_allow = ["vitest"]
-        // crate_name extraction uses first npm segment for TS files
+        // Slash-separated: "vitest/config" should match external_allow = ["vitest"]
+        // crate_name extraction uses first npm segment for .ts files
         let layers = vec![make_layer_with_external(
             "domain",
             &["src/domain/**"],
@@ -1047,7 +1131,7 @@ mod tests {
 
     #[test]
     fn test_detect_external_ts_scoped_package_allowed() {
-        // TypeScript: "@vueuse/core/utilities" should match external_allow = ["@vueuse/core"]
+        // Slash-separated (scoped): "@vueuse/core/utilities" should match external_allow = ["@vueuse/core"]
         let layers = vec![make_layer_with_external(
             "domain",
             &["src/domain/**"],
@@ -1074,8 +1158,8 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_go_full_path_allowed() {
-        // Go: full module path used as crate_name — exact match required
+    fn test_detect_external_full_path_allowed() {
+        // Full module path used as crate_name -- exact match required
         let layers = vec![make_layer_with_external(
             "infra",
             &["go/infra/**"],
@@ -1102,8 +1186,8 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_go_stdlib_allowed() {
-        // Go: stdlib packages ("fmt", "net/http") appear in external_allow with full path
+    fn test_detect_external_stdlib_allowed() {
+        // Stdlib packages ("fmt", "net/http") appear in external_allow with full path
         let layers = vec![make_layer_with_external(
             "domain",
             &["go/domain/**"],
@@ -1143,8 +1227,8 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_rust_colon_still_works() {
-        // Regression: Rust "::" splitting still works after Python fix
+    fn test_detect_external_colon_separator() {
+        // Regression: "::" splitting still works after dotted-import fix
         let layers = vec![make_layer_with_external(
             "infra",
             &["src/infra/**"],
@@ -1156,7 +1240,7 @@ mod tests {
         let imports = vec![make_external("src/infra/repo.rs", 1, "serde::Deserialize")];
         assert!(
             detector.detect_external(&imports).is_empty(),
-            "serde::Deserialize should be allowed for Rust files"
+            "serde::Deserialize should be allowed for .rs files"
         );
     }
 
@@ -1184,6 +1268,10 @@ mod tests {
                 callee_layer: callee_layer.to_string(),
                 allow_methods: allow_methods.iter().map(|s| s.to_string()).collect(),
             }],
+            name_deny: vec![],
+            name_allow: vec![],
+            name_targets: crate::domain::entity::layer::NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 
@@ -1538,7 +1626,7 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_unknown_skips_non_unknown_categories() {
+    fn test_detect_unknown_skips_non_unknown_types() {
         let layers = vec![make_layer(
             "domain",
             &["src/domain/**"],
@@ -1594,6 +1682,376 @@ mod tests {
             violations[0].severity,
             Severity::Error,
             "default severity must be Error"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // detect_naming
+    // ------------------------------------------------------------------
+
+    use crate::domain::entity::layer::NameTarget;
+    use crate::domain::entity::name::NameKind;
+
+    fn make_layer_with_name_deny(
+        name: &str,
+        paths: &[&str],
+        name_deny: &[&str],
+        name_targets: Vec<NameTarget>,
+    ) -> LayerConfig {
+        LayerConfig {
+            name: name.to_string(),
+            paths: paths.iter().map(|s| s.to_string()).collect(),
+            dependency_mode: DependencyMode::OptOut,
+            allow: vec![],
+            deny: vec![],
+            external_mode: DependencyMode::OptOut,
+            external_allow: vec![],
+            external_deny: vec![],
+            allow_call_patterns: vec![],
+            name_deny: name_deny.iter().map(|s| s.to_string()).collect(),
+            name_allow: vec![],
+            name_targets,
+            name_deny_ignore: vec![],
+        }
+    }
+
+    fn make_raw_name(name: &str, kind: NameKind, line: usize, file: &str) -> RawName {
+        RawName {
+            name: name.to_string(),
+            kind,
+            line,
+            file: file.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_detect_naming_symbol_violation() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            10,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "AwsClient should violate name_deny=[\"aws\"]"
+        );
+        assert_eq!(violations[0].from_layer, "usecase");
+        assert_eq!(violations[0].kind, ViolationKind::NamingViolation);
+        // import_path holds the matched keyword
+        assert_eq!(violations[0].import_path, "aws");
+        // to_layer holds the target kind
+        assert_eq!(violations[0].to_layer, "symbol");
+    }
+
+    #[test]
+    fn test_detect_naming_case_insensitive() {
+        // name_deny = ["AWS"] should match "aws_handler" (case-insensitive)
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["AWS"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "aws_handler",
+            NameKind::Symbol,
+            5,
+            "src/usecase/handler.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "aws_handler should match AWS (case-insensitive)"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_partial_match() {
+        // "ManageAws" should match name_deny = ["aws"] (partial match)
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "ManageAws",
+            NameKind::Symbol,
+            3,
+            "src/usecase/manage.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "ManageAws should match aws (partial match)"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_target_filter_symbol_only() {
+        // name_targets = [Symbol] のとき Variable は対象外
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            vec![NameTarget::Symbol],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "aws_url",
+            NameKind::Variable,
+            2,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "Variable should be ignored when name_targets=[Symbol]"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_no_violation_when_keyword_absent() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "UserService",
+            NameKind::Symbol,
+            1,
+            "src/usecase/user_service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "UserService should not violate name_deny=[\"aws\"]"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_no_violation_when_name_deny_is_empty() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &[], // empty name_deny
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            1,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "empty name_deny should produce no violations"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_file_not_in_any_layer_is_ignored() {
+        // File not matching any layer's paths should be ignored
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            1,
+            "src/domain/entity.rs", // not in usecase layer
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "files not in any layer should be ignored"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_severity_from_config() {
+        use crate::domain::entity::config::SeverityConfig;
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let severity = SeverityConfig {
+            naming_violation: "warning".to_string(),
+            ..SeverityConfig::default()
+        };
+        let detector = ViolationDetector::with_severity(&layers, severity);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            1,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn test_detect_naming_name_allow_suppresses_false_positive() {
+        // "category" contains a denied keyword but name_allow = ["category"] should suppress it
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+        layer.name_allow = vec!["category".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "ImportCategory",
+            NameKind::Symbol,
+            14,
+            "src/domain/entity/resolved_import.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "ImportCategory should not be flagged: denied keyword inside 'category' is allowed"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_name_allow_does_not_suppress_standalone_keyword() {
+        // name_allow = ["category"] must NOT suppress names without "category" substring
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+        layer.name_allow = vec!["category".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "GoConfig",
+            NameKind::Symbol,
+            10,
+            "src/domain/entity/config.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 1, "GoConfig must still be flagged");
+    }
+
+    #[test]
+    fn test_detect_naming_name_allow_partial_coverage_still_violations() {
+        // Name still contains the denied keyword after stripping "category" -- still a violation
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+        layer.name_allow = vec!["category".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "GoCategory",
+            NameKind::Symbol,
+            5,
+            "src/domain/entity/config.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "GoCategory must still be flagged (standalone 'Go' remains after stripping 'category')"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_ignore_skips_symbols_in_matching_file() {
+        // Files matching name_deny_ignore should not produce violations
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["aws"], NameTarget::all());
+        layer.name_deny_ignore = vec!["**/test_*.rs".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            10,
+            "src/domain/test_helpers.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "test_helpers.rs matches **/test_*.rs so it should be ignored"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_ignore_does_not_affect_non_matching_files() {
+        // Files NOT matching name_deny_ignore are still checked
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["aws"], NameTarget::all());
+        layer.name_deny_ignore = vec!["**/test_*.rs".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            10,
+            "src/domain/entity/client.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "client.rs does not match the ignore pattern — should still be flagged"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_ignore_empty_by_default_checks_all_files() {
+        // Without name_deny_ignore, all files in the layer are checked (regression)
+        let layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["aws"], NameTarget::all());
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![
+            make_raw_name(
+                "AwsClient",
+                NameKind::Symbol,
+                10,
+                "src/domain/entity/foo.rs",
+            ),
+            make_raw_name(
+                "AwsHelper",
+                NameKind::Symbol,
+                20,
+                "src/domain/test_helper.rs",
+            ),
+        ];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            2,
+            "both files should be checked when ignore is empty"
         );
     }
 }

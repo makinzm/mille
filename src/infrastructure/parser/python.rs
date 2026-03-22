@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::{NameKind, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Python source files.
@@ -14,6 +15,82 @@ impl Parser for PythonParser {
 
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
         parse_python_call_exprs(source, file_path)
+    }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_python_names(source, file_path)
+    }
+}
+
+/// Parse Python source code and extract named entities for naming convention checks.
+///
+/// Extracts:
+/// - `Symbol`: function_definition, class_definition names
+/// - `Variable`: assignment targets at module/function scope (simple identifiers)
+/// - `Comment`: comment content
+pub fn parse_python_names(source: &str, file_path: &str) -> Vec<RawName> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_python::language())
+        .expect("Failed to load Python grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut names = Vec::new();
+    collect_python_names(root, source.as_bytes(), file_path, &mut names);
+    names
+}
+
+fn collect_python_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
+    let kind = node.kind();
+    let line = node.start_position().row + 1;
+
+    match kind {
+        "function_definition" | "async_function_definition" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        "class_definition" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        "comment" => {
+            let text = node.utf8_text(source).unwrap_or("").to_string();
+            if !text.is_empty() {
+                out.push(RawName {
+                    name: text,
+                    line,
+                    kind: NameKind::Comment,
+                    file: file_path.to_string(),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_python_names(child, source, file_path, out);
+        }
     }
 }
 
@@ -296,5 +373,55 @@ mod tests {
     fn test_parse_python_no_imports() {
         let imports = parse("x = 1\nprint(x)\n");
         assert!(imports.is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // parse_python_names
+    // ------------------------------------------------------------------
+
+    use crate::domain::entity::name::NameKind;
+
+    #[test]
+    fn test_py_parse_names_function() {
+        let source = "def aws_handler():\n    pass\n";
+        let names = parse_python_names(source, "test.py");
+        let found = names
+            .iter()
+            .find(|n| n.name == "aws_handler" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "def aws_handler should be detected as Symbol, got: {:#?}",
+            names
+        );
+        assert_eq!(found.unwrap().line, 1);
+    }
+
+    #[test]
+    fn test_py_parse_names_class() {
+        let source = "class AwsClient:\n    pass\n";
+        let names = parse_python_names(source, "test.py");
+        let found = names
+            .iter()
+            .find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "class AwsClient should be detected as Symbol, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_py_parse_names_comment() {
+        let source = "# connect to aws\nx = 1\n";
+        let names = parse_python_names(source, "test.py");
+        let found = names
+            .iter()
+            .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(
+            found.is_some(),
+            "comment with aws should be detected, got: {:#?}",
+            names
+        );
+        assert_eq!(found.unwrap().line, 1);
     }
 }

@@ -11,10 +11,10 @@ pub struct RawImport {
     pub kind: ImportKind,
     /// Explicitly named symbols brought into scope by this import.
     ///
-    /// - Python `from domain.entity import User, Admin` → `["User", "Admin"]`
-    /// - TypeScript `import { User, Admin } from "../domain/user"` → `["User", "Admin"]`
-    /// - TypeScript `import User from "../domain/user"` → `["User"]`  (default import)
-    /// - Go / Rust: empty (type name is inferred from the import path itself)
+    /// - Dot-separated paths: `from domain.entity import User, Admin` -> `["User", "Admin"]`
+    /// - Slash-separated paths: `import { User, Admin } from "../domain/user"` -> `["User", "Admin"]`
+    /// - Slash-separated paths: `import User from "../domain/user"` -> `["User"]` (default import)
+    /// - Colon-separated / full module paths: empty (type name is inferred from the import path)
     pub named_imports: Vec<String>,
 }
 
@@ -24,6 +24,6 @@ pub enum ImportKind {
     Use,
     /// `mod foo;` or `pub mod foo;` — external module declaration (no inline body)
     Mod,
-    /// `import "pkg/path"` — Go import declaration
+    /// `import "pkg/path"` — full module path import declaration
     Import,
 }

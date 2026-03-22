@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::{NameKind, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Rust source files.
@@ -14,6 +15,100 @@ impl Parser for RustParser {
 
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
         parse_rust_call_exprs(source, file_path)
+    }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_rust_names(source, file_path)
+    }
+}
+
+/// Parse Rust source code and extract named entities for naming convention checks.
+///
+/// Extracts:
+/// - `Symbol`: function, struct, enum, trait, type alias, impl block names
+/// - `Variable`: let bindings, const, static declarations
+/// - `Comment`: line_comment, block_comment content
+pub fn parse_rust_names(source: &str, file_path: &str) -> Vec<RawName> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_rust::language())
+        .expect("Failed to load Rust grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut names = Vec::new();
+    collect_rust_names(root, source.as_bytes(), file_path, &mut names);
+    names
+}
+
+fn collect_rust_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
+    let kind = node.kind();
+    let line = node.start_position().row + 1;
+
+    match kind {
+        // Symbols: function, struct, enum, trait, type alias, impl
+        "function_item" | "struct_item" | "enum_item" | "trait_item" | "type_item" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Variable: const, static
+        "const_item" | "static_item" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Variable,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Variable: let declarations (pattern may be an identifier)
+        "let_declaration" => {
+            if let Some(pattern) = node.child_by_field_name("pattern") {
+                let name = pattern.utf8_text(source).unwrap_or("").to_string();
+                // Only capture simple identifier patterns, not destructured patterns
+                if !name.is_empty() && !name.starts_with('(') && !name.starts_with('{') {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Variable,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Comments
+        "line_comment" | "block_comment" => {
+            let text = node.utf8_text(source).unwrap_or("").to_string();
+            if !text.is_empty() {
+                out.push(RawName {
+                    name: text,
+                    line,
+                    kind: NameKind::Comment,
+                    file: file_path.to_string(),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_rust_names(child, source, file_path, out);
+        }
     }
 }
 
@@ -155,6 +250,7 @@ fn root_type_of_scoped_id(node: &Node, source: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::domain::entity::import::ImportKind;
+    use crate::domain::entity::name::NameKind;
 
     #[test]
     fn test_simple_use_declaration() {
@@ -405,5 +501,116 @@ mod tests {
             !calls.is_empty(),
             "main.rs should contain at least one call expression"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // parse_rust_names
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_rust_parse_names_function() {
+        let source = "fn aws_handler() {}";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names
+            .iter()
+            .find(|n| n.name == "aws_handler" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "fn aws_handler should be detected as Symbol, got: {:#?}",
+            names
+        );
+        assert_eq!(found.unwrap().line, 1);
+    }
+
+    #[test]
+    fn test_rust_parse_names_struct() {
+        let source = "struct AwsClient;";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names
+            .iter()
+            .find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "struct AwsClient should be detected as Symbol, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_rust_parse_names_enum() {
+        let source = "enum AwsRegion { Us, Eu }";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names
+            .iter()
+            .find(|n| n.name == "AwsRegion" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "enum AwsRegion should be detected as Symbol, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_rust_parse_names_let_variable() {
+        let source = "fn f() { let aws_url = \"\"; }";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names
+            .iter()
+            .find(|n| n.name == "aws_url" && n.kind == NameKind::Variable);
+        assert!(
+            found.is_some(),
+            "let aws_url should be detected as Variable, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_rust_parse_names_const() {
+        let source = r#"const AWS_KEY: &str = "";"#;
+        let names = parse_rust_names(source, "test.rs");
+        let found = names
+            .iter()
+            .find(|n| n.name == "AWS_KEY" && n.kind == NameKind::Variable);
+        assert!(
+            found.is_some(),
+            "const AWS_KEY should be detected as Variable, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_rust_parse_names_line_comment() {
+        let source = "// connect to aws\nfn f() {}";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names
+            .iter()
+            .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(
+            found.is_some(),
+            "line comment with aws should be detected, got: {:#?}",
+            names
+        );
+        assert_eq!(found.unwrap().line, 1);
+    }
+
+    #[test]
+    fn test_rust_parse_names_block_comment() {
+        let source = "/* aws integration */\nfn f() {}";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names
+            .iter()
+            .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(
+            found.is_some(),
+            "block comment with aws should be detected, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_rust_parse_names_no_names_in_empty_source() {
+        let source = "";
+        let names = parse_rust_names(source, "test.rs");
+        assert!(names.is_empty(), "empty source should produce no names");
     }
 }

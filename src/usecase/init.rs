@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use crate::domain::entity::layer::{DependencyMode, LayerConfig};
+use crate::domain::entity::layer::{DependencyMode, LayerConfig, NameTarget};
+use crate::domain::repository::resolve_config_generator::ResolveConfigGenerator;
 
 /// Per-directory import analysis, built externally by the infrastructure layer.
 /// This is a plain data type — no I/O here.
@@ -258,23 +259,15 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
                 external_allow: external_allow.into_iter().collect(),
                 external_deny: vec![],
                 allow_call_patterns: vec![],
+                name_deny: vec![],
+                name_allow: vec![],
+                name_targets: NameTarget::all(),
+                name_deny_ignore: vec![],
             });
         }
     }
 
     suggestions
-}
-
-/// Return true if the string is a valid Python identifier (used to filter package names).
-/// Python identifiers start with a letter or underscore and contain only letters, digits,
-/// and underscores. Directory names like "2026-03-01-ml-knowledge-base" are excluded.
-fn is_valid_python_identifier(s: &str) -> bool {
-    let mut chars = s.chars();
-    match chars.next() {
-        Some(c) if c.is_alphabetic() || c == '_' => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_alphanumeric() || c == '_')
 }
 
 /// Return true if a directory name should be skipped during scanning.
@@ -356,8 +349,7 @@ pub fn generate_toml(
     root: &str,
     languages: &[String],
     layers: &[LayerConfig],
-    go_module_name: Option<&str>,
-    java_module_name: Option<&str>,
+    resolve_generator: &dyn ResolveConfigGenerator,
 ) -> String {
     let mut out = String::new();
 
@@ -372,79 +364,12 @@ pub fn generate_toml(
         .join(", ");
     out.push_str(&format!("languages = [{}]\n", langs_str));
 
-    // [resolve.go] — Go プロジェクトかつ module_name が判明している場合のみ出力
-    let is_go = languages.iter().any(|l| l == "go");
-    if is_go {
-        if let Some(mn) = go_module_name.filter(|m| !m.is_empty()) {
-            out.push('\n');
-            out.push_str("[resolve.go]\n");
-            out.push_str(&format!("module_name = \"{}\"\n", mn));
-        }
-    }
+    // Delegate resolve section generation to the infrastructure layer
+    let resolve_section = resolve_generator.generate_resolve_toml(languages, layers);
+    out.push_str(&resolve_section);
 
-    // [resolve.java] — Java/Kotlin プロジェクトかつ module_name が判明している場合のみ出力
-    let is_java = languages.iter().any(|l| l == "java" || l == "kotlin");
-    if is_java {
-        if let Some(mn) = java_module_name.filter(|m| !m.is_empty()) {
-            out.push('\n');
-            out.push_str("[resolve.java]\n");
-            out.push_str(&format!("module_name = \"{}\"\n", mn));
-        }
-    }
-
-    // Derive Python package names from layer path base directories.
-    // Used for [resolve.python] and to filter internal names from external_allow.
-    let is_python = languages.iter().any(|l| l == "python");
-    let py_pkg_names: BTreeSet<String> = if is_python {
-        // Base: last path component of each layer (e.g. "domain" from "src/domain/**").
-        let base: BTreeSet<String> = layers
-            .iter()
-            .flat_map(|layer| layer.paths.iter())
-            .filter_map(|path| {
-                let p = path.trim_end_matches("/**").trim_end_matches('/');
-                p.split('/').next_back().map(|s| s.to_string())
-            })
-            .filter(|s| is_valid_python_identifier(s))
-            .collect();
-
-        // All path directory components — candidates for namespace package prefixes.
-        // NOTE: e.g. for "src/domain/**" this yields both "src" and "domain".
-        let all_components: BTreeSet<String> = layers
-            .iter()
-            .flat_map(|layer| layer.paths.iter())
-            .flat_map(|path| {
-                let p = path.trim_end_matches("/**").trim_end_matches('/');
-                p.split('/').map(|s| s.to_string()).collect::<Vec<_>>()
-            })
-            .filter(|s| is_valid_python_identifier(s))
-            .collect();
-
-        // If a path component appears in external_allow of any layer, real imports use it
-        // as a top-level prefix (e.g. `from src.domain...`). Promote it to package_names
-        // so it is classified as Internal and filtered out of external_allow below.
-        let namespace_pkgs: BTreeSet<String> = layers
-            .iter()
-            .flat_map(|layer| layer.external_allow.iter())
-            .filter(|pkg| all_components.contains(pkg.as_str()))
-            .cloned()
-            .collect();
-
-        base.into_iter().chain(namespace_pkgs).collect()
-    } else {
-        BTreeSet::new()
-    };
-
-    // [resolve.python] — Python プロジェクトの場合のみ出力
-    if is_python && !py_pkg_names.is_empty() {
-        out.push('\n');
-        out.push_str("[resolve.python]\n");
-        let names_str = py_pkg_names
-            .iter()
-            .map(|n| format!("\"{}\"", n))
-            .collect::<Vec<_>>()
-            .join(", ");
-        out.push_str(&format!("package_names = [{}]\n", names_str));
-    }
+    // Compute internal package names to filter from external_allow
+    let internal_pkgs = resolve_generator.internal_package_names(languages, layers);
 
     // [[layers]] sections
     for layer in layers {
@@ -484,11 +409,11 @@ pub fn generate_toml(
             mode_str(layer.external_mode)
         ));
 
-        // Python の場合、package_names に含まれる名前は内部パッケージなので external_allow から除外
+        // Filter out internal package names from external_allow
         let filtered_external: Vec<&String> = layer
             .external_allow
             .iter()
-            .filter(|e| !py_pkg_names.contains(*e))
+            .filter(|e| !internal_pkgs.contains(*e))
             .collect();
         if !filtered_external.is_empty() {
             let ext_str = filtered_external
@@ -514,6 +439,121 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::PathBuf;
+
+    /// Test stub that generates no resolve sections and reports no internal packages.
+    struct NoResolveGen;
+    impl ResolveConfigGenerator for NoResolveGen {
+        fn generate_resolve_toml(&self, _: &[String], _: &[LayerConfig]) -> String {
+            String::new()
+        }
+        fn internal_package_names(&self, _: &[String], _: &[LayerConfig]) -> BTreeSet<String> {
+            BTreeSet::new()
+        }
+    }
+
+    /// Test stub that generates resolve sections for specific languages.
+    struct StubResolveGen {
+        module_path_name: Option<String>,
+        package_prefix_name: Option<String>,
+    }
+    impl ResolveConfigGenerator for StubResolveGen {
+        fn generate_resolve_toml(&self, languages: &[String], layers: &[LayerConfig]) -> String {
+            let mut out = String::new();
+            if languages.iter().any(|l| l == "go") {
+                if let Some(mn) = self.module_path_name.as_deref().filter(|m| !m.is_empty()) {
+                    out.push('\n');
+                    out.push_str("[resolve.go]\n");
+                    out.push_str(&format!("module_name = \"{}\"\n", mn));
+                }
+            }
+            if languages.iter().any(|l| l == "java" || l == "kotlin") {
+                if let Some(mn) = self
+                    .package_prefix_name
+                    .as_deref()
+                    .filter(|m| !m.is_empty())
+                {
+                    out.push('\n');
+                    out.push_str("[resolve.java]\n");
+                    out.push_str(&format!("module_name = \"{}\"\n", mn));
+                }
+            }
+            if languages.iter().any(|l| l == "python") {
+                let pkg_names = self.internal_package_names(languages, layers);
+                if !pkg_names.is_empty() {
+                    out.push('\n');
+                    out.push_str("[resolve.python]\n");
+                    let names_str = pkg_names
+                        .iter()
+                        .map(|n| format!("\"{}\"", n))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    out.push_str(&format!("package_names = [{}]\n", names_str));
+                }
+            }
+            out
+        }
+        fn internal_package_names(
+            &self,
+            languages: &[String],
+            layers: &[LayerConfig],
+        ) -> BTreeSet<String> {
+            if !languages.iter().any(|l| l == "python") {
+                return BTreeSet::new();
+            }
+            let base: BTreeSet<String> = layers
+                .iter()
+                .flat_map(|layer| layer.paths.iter())
+                .filter_map(|path| {
+                    let p = path.trim_end_matches("/**").trim_end_matches('/');
+                    p.split('/').next_back().map(|s| s.to_string())
+                })
+                .filter(|s| {
+                    let mut chars = s.chars();
+                    match chars.next() {
+                        Some(c) if c.is_alphabetic() || c == '_' => {
+                            chars.all(|c| c.is_alphanumeric() || c == '_')
+                        }
+                        _ => false,
+                    }
+                })
+                .collect();
+            let all_components: BTreeSet<String> = layers
+                .iter()
+                .flat_map(|layer| layer.paths.iter())
+                .flat_map(|path| {
+                    let p = path.trim_end_matches("/**").trim_end_matches('/');
+                    p.split('/').map(|s| s.to_string()).collect::<Vec<_>>()
+                })
+                .filter(|s| {
+                    let mut chars = s.chars();
+                    match chars.next() {
+                        Some(c) if c.is_alphabetic() || c == '_' => {
+                            chars.all(|c| c.is_alphanumeric() || c == '_')
+                        }
+                        _ => false,
+                    }
+                })
+                .collect();
+            let namespace_pkgs: BTreeSet<String> = layers
+                .iter()
+                .flat_map(|layer| layer.external_allow.iter())
+                .filter(|pkg| all_components.contains(pkg.as_str()))
+                .cloned()
+                .collect();
+            base.into_iter().chain(namespace_pkgs).collect()
+        }
+    }
+
+    fn no_resolve_gen() -> NoResolveGen {
+        NoResolveGen
+    }
+
+    fn stub_resolve_gen() -> StubResolveGen {
+        StubResolveGen {
+            module_path_name: None,
+            package_prefix_name: None,
+        }
+    }
 
     // ------------------------------------------------------------------
     // Stdlib-only RAII temp dir (avoids tempfile external dep in usecase)
@@ -874,27 +914,49 @@ mod tests {
             external_allow: vec![],
             external_deny: vec![],
             allow_call_patterns: vec![],
+            name_deny: vec![],
+            name_allow: vec![],
+            name_targets: NameTarget::all(),
+            name_deny_ignore: vec![],
         }
     }
 
     #[test]
     fn test_generate_toml_contains_project_section() {
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None, None);
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["rust".to_string()],
+            &layers,
+            &no_resolve_gen(),
+        );
         assert!(toml.contains("[project]"), "must contain [project]");
     }
 
     #[test]
     fn test_generate_toml_contains_layer_sections() {
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None, None);
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["rust".to_string()],
+            &layers,
+            &no_resolve_gen(),
+        );
         assert!(toml.contains("[[layers]]"), "must contain [[layers]]");
     }
 
     #[test]
     fn test_generate_toml_includes_external_mode() {
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None, None);
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["rust".to_string()],
+            &layers,
+            &no_resolve_gen(),
+        );
         assert!(
             toml.contains("external_mode = \"opt-in\""),
             "must contain external_mode\n{}",
@@ -911,8 +973,7 @@ mod tests {
             ".",
             &["rust".to_string()],
             &[layer],
-            None,
-            None,
+            &no_resolve_gen(),
         );
         assert!(
             toml.contains("external_allow"),
@@ -928,7 +989,13 @@ mod tests {
             "domain",
             vec!["apps/crawler/src/domain/**", "apps/server/src/domain/**"],
         )];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None, None);
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["rust".to_string()],
+            &layers,
+            &no_resolve_gen(),
+        );
         assert!(
             toml.contains("apps/crawler/src/domain/**"),
             "first path missing"
@@ -940,12 +1007,12 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // generate_toml — resolve.python
+    // generate_toml -- import-path resolve section
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_generate_toml_python_adds_resolve_section() {
-        // Python プロジェクトでは [resolve.python] package_names が出力されるべき
+    fn test_generate_toml_import_path_adds_resolve_section() {
+        // Dot-separated import path projects should output import-path resolve section
         let layers = vec![
             make_layer("domain", vec!["src/domain/**"]),
             make_layer("usecase", vec!["src/usecase/**"]),
@@ -956,8 +1023,7 @@ mod tests {
             ".",
             &["python".to_string()],
             &layers,
-            None,
-            None,
+            &stub_resolve_gen(),
         );
         assert!(
             toml.contains("[resolve.python]"),
@@ -987,10 +1053,16 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_toml_rust_no_resolve_section() {
-        // Rust プロジェクトでは [resolve.python] は出力されない
+    fn test_generate_toml_no_resolve_section() {
+        // Colon-separated path projects should not output import-path resolve section
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, None, None);
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["rust".to_string()],
+            &layers,
+            &no_resolve_gen(),
+        );
         assert!(
             !toml.contains("[resolve.python]"),
             "Rust プロジェクトに [resolve.python] は不要\n{}",
@@ -999,7 +1071,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_toml_python_monorepo_package_names_deduplicated() {
+    fn test_generate_toml_import_path_monorepo_package_names_deduplicated() {
         // 複数サブプロジェクトで同じ base name が重複しても一度だけ出力
         let layers = vec![
             make_layer("crawler_domain", vec!["crawler/src/domain/**"]),
@@ -1011,8 +1083,7 @@ mod tests {
             ".",
             &["python".to_string()],
             &layers,
-            None,
-            None,
+            &stub_resolve_gen(),
         );
         // "domain" は1回だけ
         let domain_count = toml.matches("\"domain\"").count();
@@ -1020,7 +1091,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_toml_python_filters_package_names_from_external_allow() {
+    fn test_generate_toml_import_path_filters_package_names_from_external_allow() {
         // external_allow に package_names と同じ名前が混入しないべき
         // (mille init スキャン時に "domain.entity" が External 扱いされて domain が混入するケース)
         let mut domain_layer = make_layer("domain", vec!["src/domain/**"]);
@@ -1035,8 +1106,7 @@ mod tests {
             ".",
             &["python".to_string()],
             &layers,
-            None,
-            None,
+            &stub_resolve_gen(),
         );
         // "domain" は package_names に含まれるので external_allow から除外されるべき
         // abc, dataclasses は残るべき
@@ -1060,7 +1130,7 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // generate_toml — Python namespace package (src/ layout)
+    // generate_toml -- namespace package (src/ layout)
     // ------------------------------------------------------------------
 
     #[test]
@@ -1078,8 +1148,7 @@ mod tests {
             ".",
             &["python".to_string()],
             &layers,
-            None,
-            None,
+            &stub_resolve_gen(),
         );
         // "src" が package_names に含まれるべき
         let has_src_in_pkg_names = toml
@@ -1123,8 +1192,7 @@ mod tests {
             ".",
             &["python".to_string()],
             &layers,
-            None,
-            None,
+            &stub_resolve_gen(),
         );
         assert!(
             toml.contains("\"domain\""),
@@ -1157,8 +1225,7 @@ mod tests {
             ".",
             &["python".to_string()],
             &layers,
-            None,
-            None,
+            &stub_resolve_gen(),
         );
         // "src" は package_names に昇格されるべき
         let has_src_in_pkg_names = toml
@@ -1190,21 +1257,18 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // generate_toml — resolve.go
+    // generate_toml -- module-path resolve section
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_generate_toml_go_adds_resolve_section() {
-        // Go プロジェクトで module_name が渡された場合 [resolve.go] が出力される
+    fn test_generate_toml_module_path_adds_resolve_section() {
+        // Full-module-path project: when module_name is provided, module-path resolve section should be output
         let layers = vec![make_layer("domain", vec!["go/domain/**"])];
-        let toml = generate_toml(
-            "myproject",
-            ".",
-            &["go".to_string()],
-            &layers,
-            Some("github.com/example/myproject"),
-            None,
-        );
+        let gen = StubResolveGen {
+            module_path_name: Some("github.com/example/myproject".to_string()),
+            package_prefix_name: None,
+        };
+        let toml = generate_toml("myproject", ".", &["go".to_string()], &layers, &gen);
         assert!(
             toml.contains("[resolve.go]"),
             "Go プロジェクトは [resolve.go] を含むべき\n{}",
@@ -1218,10 +1282,16 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_toml_go_no_resolve_without_module_name() {
-        // Go プロジェクトでも module_name が None なら [resolve.go] は出力しない
+    fn test_generate_toml_module_path_no_resolve_without_module_name() {
+        // Full-module-path project: when module_name is None, module-path resolve section should not be output
         let layers = vec![make_layer("domain", vec!["go/domain/**"])];
-        let toml = generate_toml("myproject", ".", &["go".to_string()], &layers, None, None);
+        let toml = generate_toml(
+            "myproject",
+            ".",
+            &["go".to_string()],
+            &layers,
+            &stub_resolve_gen(),
+        );
         assert!(
             !toml.contains("[resolve.go]"),
             "module_name なしは [resolve.go] を出力しない\n{}",
@@ -1230,17 +1300,14 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_toml_rust_no_resolve_go_section() {
-        // Rust プロジェクトでは go_module_name を渡しても [resolve.go] は出力しない
+    fn test_generate_toml_no_resolve_module_path_section() {
+        // Colon-separated path project: even with module_path_name, module-path resolve section should not be output
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml(
-            "myproject",
-            ".",
-            &["rust".to_string()],
-            &layers,
-            Some("github.com/example/ignored"),
-            None,
-        );
+        let gen = StubResolveGen {
+            module_path_name: Some("github.com/example/ignored".to_string()),
+            package_prefix_name: None,
+        };
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, &gen);
         assert!(
             !toml.contains("[resolve.go]"),
             "Rust プロジェクトに [resolve.go] は不要\n{}",
@@ -1249,24 +1316,21 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // generate_toml — resolve.java
+    // generate_toml -- package-prefix resolve section
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_generate_toml_java_with_module_name() {
-        // Java プロジェクトで module_name が渡された場合 [resolve.java] が出力される
+    fn test_generate_toml_package_prefix_with_module_name() {
+        // Dot-separated package project: when module_name is provided, package-prefix resolve section should be output
         let layers = vec![
             make_layer("domain", vec!["**/domain/**"]),
             make_layer("usecase", vec!["**/usecase/**"]),
         ];
-        let toml = generate_toml(
-            "myapp",
-            ".",
-            &["java".to_string()],
-            &layers,
-            None,
-            Some("com.example.myapp"),
-        );
+        let gen = StubResolveGen {
+            module_path_name: None,
+            package_prefix_name: Some("com.example.myapp".to_string()),
+        };
+        let toml = generate_toml("myapp", ".", &["java".to_string()], &layers, &gen);
         assert!(
             toml.contains("[resolve.java]"),
             "Java プロジェクトは [resolve.java] を含むべき\n{}",
@@ -1280,10 +1344,16 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_toml_java_without_module_name() {
-        // Java プロジェクトでも module_name が None なら [resolve.java] は出力しない
+    fn test_generate_toml_package_prefix_without_module_name() {
+        // Dot-separated package project: when module_name is None, package-prefix resolve section should not be output
         let layers = vec![make_layer("domain", vec!["**/domain/**"])];
-        let toml = generate_toml("myapp", ".", &["java".to_string()], &layers, None, None);
+        let toml = generate_toml(
+            "myapp",
+            ".",
+            &["java".to_string()],
+            &layers,
+            &stub_resolve_gen(),
+        );
         assert!(
             !toml.contains("[resolve.java]"),
             "module_name なしは [resolve.java] を出力しない\n{}",
@@ -1292,17 +1362,14 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_toml_rust_no_resolve_java_section() {
-        // Rust プロジェクトでは java_module_name を渡しても [resolve.java] は出力しない
+    fn test_generate_toml_no_resolve_package_prefix_section() {
+        // Colon-separated path project: even with package_prefix_name, package-prefix resolve section should not be output
         let layers = vec![make_layer("domain", vec!["src/domain/**"])];
-        let toml = generate_toml(
-            "myproject",
-            ".",
-            &["rust".to_string()],
-            &layers,
-            None,
-            Some("com.example.ignored"),
-        );
+        let gen = StubResolveGen {
+            module_path_name: None,
+            package_prefix_name: Some("com.example.ignored".to_string()),
+        };
+        let toml = generate_toml("myproject", ".", &["rust".to_string()], &layers, &gen);
         assert!(
             !toml.contains("[resolve.java]"),
             "Rust プロジェクトに [resolve.java] は不要\n{}",
@@ -1315,7 +1382,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_detect_languages_rust() {
+    fn test_detect_languages_from_extensions() {
         let tmp = TempDir::new("lang_rust");
         make_file(tmp.path(), "src/main.rs");
         let langs = detect_languages(tmp.path().to_str().unwrap());

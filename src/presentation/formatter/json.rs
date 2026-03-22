@@ -24,6 +24,7 @@ impl<'a> JsonViolation<'a> {
             ViolationKind::ExternalViolation => "external",
             ViolationKind::CallPatternViolation => "call_pattern",
             ViolationKind::UnknownImport => "unknown_import",
+            ViolationKind::NamingViolation => "naming",
         };
         Self {
             severity,
