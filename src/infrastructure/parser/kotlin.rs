@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::RawName;
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Kotlin source files.
@@ -15,6 +16,15 @@ impl Parser for KotlinParser {
     fn parse_call_exprs(&self, _source: &str, _file_path: &str) -> Vec<RawCallExpr> {
         vec![]
     }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_kotlin_names(source, file_path)
+    }
+}
+
+/// Parse Kotlin source code and extract named entities for naming convention checks.
+pub fn parse_kotlin_names(_source: &str, _file_path: &str) -> Vec<RawName> {
+    todo!("parse_kotlin_names: RED phase stub")
 }
 
 /// Parse Kotlin source code and extract all `import` declarations.

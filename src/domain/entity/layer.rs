@@ -1,5 +1,41 @@
 use serde::Deserialize;
 
+use crate::domain::entity::name::NameKind;
+
+/// Which `name_targets` to check for naming violations.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum NameTarget {
+    File,
+    Symbol,
+    Variable,
+    Comment,
+}
+
+impl NameTarget {
+    pub fn all() -> Vec<NameTarget> {
+        vec![
+            NameTarget::File,
+            NameTarget::Symbol,
+            NameTarget::Variable,
+            NameTarget::Comment,
+        ]
+    }
+
+    pub fn as_name_kind(self) -> NameKind {
+        match self {
+            NameTarget::File => NameKind::File,
+            NameTarget::Symbol => NameKind::Symbol,
+            NameTarget::Variable => NameKind::Variable,
+            NameTarget::Comment => NameKind::Comment,
+        }
+    }
+}
+
+fn default_name_targets() -> Vec<NameTarget> {
+    NameTarget::all()
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct LayerConfig {
     pub name: String,
@@ -16,6 +52,12 @@ pub struct LayerConfig {
     pub external_deny: Vec<String>,
     #[serde(default)]
     pub allow_call_patterns: Vec<CallPattern>,
+    /// Forbidden keywords for naming convention check (case-insensitive partial match).
+    #[serde(default)]
+    pub name_deny: Vec<String>,
+    /// Which targets to check. Defaults to all targets when omitted.
+    #[serde(default = "default_name_targets")]
+    pub name_targets: Vec<NameTarget>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]

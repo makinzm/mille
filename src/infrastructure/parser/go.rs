@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::RawName;
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Go source files.
@@ -15,6 +16,15 @@ impl Parser for GoParser {
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
         parse_go_call_exprs(source, file_path)
     }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_go_names(source, file_path)
+    }
+}
+
+/// Parse Go source code and extract named entities for naming convention checks.
+pub fn parse_go_names(_source: &str, _file_path: &str) -> Vec<RawName> {
+    todo!("parse_go_names: RED phase stub")
 }
 
 /// Parse Go source code and extract all `import` declarations.
@@ -215,5 +225,36 @@ mod tests {
         let source = "package main\n\nfunc main() {}\n";
         let imports = parse_go_imports(source, "main.go");
         assert!(imports.is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // parse_go_names
+    // ------------------------------------------------------------------
+
+    use crate::domain::entity::name::NameKind;
+
+    #[test]
+    fn test_go_parse_names_function() {
+        let source = "package main\n\nfunc AwsHandler() {}\n";
+        let names = parse_go_names(source, "test.go");
+        let found = names.iter().find(|n| n.name == "AwsHandler" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "func AwsHandler should be detected as Symbol, got: {:#?}", names);
+        assert_eq!(found.unwrap().line, 3);
+    }
+
+    #[test]
+    fn test_go_parse_names_var() {
+        let source = "package main\n\nvar awsUrl string\n";
+        let names = parse_go_names(source, "test.go");
+        let found = names.iter().find(|n| n.name == "awsUrl" && n.kind == NameKind::Variable);
+        assert!(found.is_some(), "var awsUrl should be detected as Variable, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_go_parse_names_line_comment() {
+        let source = "package main\n\n// connect to aws\nfunc f() {}\n";
+        let names = parse_go_names(source, "test.go");
+        let found = names.iter().find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(found.is_some(), "line comment with aws should be detected, got: {:#?}", names);
     }
 }

@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::RawName;
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Java source files.
@@ -17,6 +18,15 @@ impl Parser for JavaParser {
         // Return an empty Vec consistent with the Go parser approach.
         vec![]
     }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_java_names(source, file_path)
+    }
+}
+
+/// Parse Java source code and extract named entities for naming convention checks.
+pub fn parse_java_names(_source: &str, _file_path: &str) -> Vec<RawName> {
+    todo!("parse_java_names: RED phase stub")
 }
 
 /// Parse Java source code and extract all `import` declarations.

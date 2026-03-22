@@ -27,6 +27,9 @@ pub enum ViolationKind {
     CallPatternViolation,
     /// Import could not be classified (Unknown category). `import_path` holds the raw import string.
     UnknownImport,
+    /// `name_deny` rule was broken: a forbidden keyword was found in a name.
+    /// `import_path` holds the matched keyword; `to_layer` holds the target kind (file/symbol/variable/comment).
+    NamingViolation,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

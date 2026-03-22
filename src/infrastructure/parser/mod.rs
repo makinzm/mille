@@ -13,6 +13,7 @@ use self::rust::RustParser;
 use self::typescript::TypeScriptParser;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::RawImport;
+use crate::domain::entity::name::RawName;
 use crate::domain::repository::parser::Parser;
 
 /// Dispatches to the appropriate parser based on file extension.
@@ -81,6 +82,22 @@ impl Parser for DispatchingParser {
             self.kotlin.parse_call_exprs(source, file_path)
         } else {
             self.rust.parse_call_exprs(source, file_path)
+        }
+    }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        if file_path.ends_with(".go") {
+            self.go.parse_names(source, file_path)
+        } else if file_path.ends_with(".py") {
+            self.python.parse_names(source, file_path)
+        } else if is_ts_js(file_path) {
+            self.typescript.parse_names(source, file_path)
+        } else if file_path.ends_with(".java") {
+            self.java.parse_names(source, file_path)
+        } else if file_path.ends_with(".kt") {
+            self.kotlin.parse_names(source, file_path)
+        } else {
+            self.rust.parse_names(source, file_path)
         }
     }
 }

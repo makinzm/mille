@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::RawName;
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Python source files.
@@ -15,6 +16,15 @@ impl Parser for PythonParser {
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
         parse_python_call_exprs(source, file_path)
     }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_python_names(source, file_path)
+    }
+}
+
+/// Parse Python source code and extract named entities for naming convention checks.
+pub fn parse_python_names(_source: &str, _file_path: &str) -> Vec<RawName> {
+    todo!("parse_python_names: RED phase stub")
 }
 
 /// Parse Python source code and extract all `import` and `from ... import` statements.
@@ -296,5 +306,37 @@ mod tests {
     fn test_parse_python_no_imports() {
         let imports = parse("x = 1\nprint(x)\n");
         assert!(imports.is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // parse_python_names
+    // ------------------------------------------------------------------
+
+    use crate::domain::entity::name::NameKind;
+
+    #[test]
+    fn test_py_parse_names_function() {
+        let source = "def aws_handler():\n    pass\n";
+        let names = parse_python_names(source, "test.py");
+        let found = names.iter().find(|n| n.name == "aws_handler" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "def aws_handler should be detected as Symbol, got: {:#?}", names);
+        assert_eq!(found.unwrap().line, 1);
+    }
+
+    #[test]
+    fn test_py_parse_names_class() {
+        let source = "class AwsClient:\n    pass\n";
+        let names = parse_python_names(source, "test.py");
+        let found = names.iter().find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "class AwsClient should be detected as Symbol, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_py_parse_names_comment() {
+        let source = "# connect to aws\nx = 1\n";
+        let names = parse_python_names(source, "test.py");
+        let found = names.iter().find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(found.is_some(), "comment with aws should be detected, got: {:#?}", names);
+        assert_eq!(found.unwrap().line, 1);
     }
 }

@@ -2,6 +2,7 @@ use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::config::SeverityConfig;
 use crate::domain::entity::import::ImportKind;
 use crate::domain::entity::layer::{DependencyMode, LayerConfig};
+use crate::domain::entity::name::RawName;
 use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
 use crate::domain::entity::violation::{Severity, Violation, ViolationKind};
 
@@ -227,6 +228,15 @@ impl<'a> ViolationDetector<'a> {
         violations
     }
 
+    /// Check naming convention rules: for each file, match `name_deny` keywords against
+    /// parsed names (symbols, variables, comments) and the file basename.
+    ///
+    /// `raw_names` contains all names extracted from source files. File-level checks
+    /// use `file_path` directly (no tree-sitter extraction needed).
+    pub fn detect_naming(&self, raw_names: &[RawName]) -> Vec<Violation> {
+        todo!("detect_naming: RED phase stub")
+    }
+
     /// Check whether the dependency `from → to` is permitted.
     /// Returns `Some(Violation)` if it is not.
     fn check_violation(
@@ -340,6 +350,7 @@ mod tests {
         allow: &[&str],
         deny: &[&str],
     ) -> LayerConfig {
+        use crate::domain::entity::layer::NameTarget;
         LayerConfig {
             name: name.to_string(),
             paths: paths.iter().map(|s| s.to_string()).collect(),
@@ -350,6 +361,8 @@ mod tests {
             external_allow: vec![],
             external_deny: vec![],
             allow_call_patterns: vec![],
+            name_deny: vec![],
+            name_targets: NameTarget::all(),
         }
     }
 
@@ -1595,5 +1608,210 @@ mod tests {
             Severity::Error,
             "default severity must be Error"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // detect_naming
+    // ------------------------------------------------------------------
+
+    use crate::domain::entity::layer::NameTarget;
+    use crate::domain::entity::name::NameKind;
+
+    fn make_layer_with_name_deny(
+        name: &str,
+        paths: &[&str],
+        name_deny: &[&str],
+        name_targets: Vec<NameTarget>,
+    ) -> LayerConfig {
+        LayerConfig {
+            name: name.to_string(),
+            paths: paths.iter().map(|s| s.to_string()).collect(),
+            dependency_mode: DependencyMode::OptOut,
+            allow: vec![],
+            deny: vec![],
+            external_mode: DependencyMode::OptOut,
+            external_allow: vec![],
+            external_deny: vec![],
+            allow_call_patterns: vec![],
+            name_deny: name_deny.iter().map(|s| s.to_string()).collect(),
+            name_targets,
+        }
+    }
+
+    fn make_raw_name(name: &str, kind: NameKind, line: usize, file: &str) -> RawName {
+        RawName {
+            name: name.to_string(),
+            kind,
+            line,
+            file: file.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_detect_naming_symbol_violation() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            10,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 1, "AwsClient should violate name_deny=[\"aws\"]");
+        assert_eq!(violations[0].from_layer, "usecase");
+        assert_eq!(violations[0].kind, ViolationKind::NamingViolation);
+        // import_path holds the matched keyword
+        assert_eq!(violations[0].import_path, "aws");
+        // to_layer holds the target kind
+        assert_eq!(violations[0].to_layer, "symbol");
+    }
+
+    #[test]
+    fn test_detect_naming_case_insensitive() {
+        // name_deny = ["AWS"] should match "aws_handler" (case-insensitive)
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["AWS"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "aws_handler",
+            NameKind::Symbol,
+            5,
+            "src/usecase/handler.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 1, "aws_handler should match AWS (case-insensitive)");
+    }
+
+    #[test]
+    fn test_detect_naming_partial_match() {
+        // "ManageAws" should match name_deny = ["aws"] (partial match)
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "ManageAws",
+            NameKind::Symbol,
+            3,
+            "src/usecase/manage.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 1, "ManageAws should match aws (partial match)");
+    }
+
+    #[test]
+    fn test_detect_naming_target_filter_symbol_only() {
+        // name_targets = [Symbol] のとき Variable は対象外
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            vec![NameTarget::Symbol],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "aws_url",
+            NameKind::Variable,
+            2,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 0, "Variable should be ignored when name_targets=[Symbol]");
+    }
+
+    #[test]
+    fn test_detect_naming_no_violation_when_keyword_absent() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "UserService",
+            NameKind::Symbol,
+            1,
+            "src/usecase/user_service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 0, "UserService should not violate name_deny=[\"aws\"]");
+    }
+
+    #[test]
+    fn test_detect_naming_no_violation_when_name_deny_is_empty() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &[],  // empty name_deny
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            1,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 0, "empty name_deny should produce no violations");
+    }
+
+    #[test]
+    fn test_detect_naming_file_not_in_any_layer_is_ignored() {
+        // File not matching any layer's paths should be ignored
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            1,
+            "src/domain/entity.rs",  // not in usecase layer
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 0, "files not in any layer should be ignored");
+    }
+
+    #[test]
+    fn test_detect_naming_severity_from_config() {
+        use crate::domain::entity::config::SeverityConfig;
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let severity = SeverityConfig {
+            naming_violation: "warning".to_string(),
+            ..SeverityConfig::default()
+        };
+        let detector = ViolationDetector::with_severity(&layers, severity);
+        let names = vec![make_raw_name(
+            "AwsClient",
+            NameKind::Symbol,
+            1,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].severity, Severity::Warning);
     }
 }

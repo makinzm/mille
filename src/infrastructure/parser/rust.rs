@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::RawName;
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Rust source files.
@@ -15,6 +16,15 @@ impl Parser for RustParser {
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
         parse_rust_call_exprs(source, file_path)
     }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_rust_names(source, file_path)
+    }
+}
+
+/// Parse Rust source code and extract named entities for naming convention checks.
+pub fn parse_rust_names(_source: &str, _file_path: &str) -> Vec<RawName> {
+    todo!("parse_rust_names: RED phase stub")
 }
 
 /// Parse Rust source code and extract all `use` and external `mod` declarations.
@@ -155,6 +165,7 @@ fn root_type_of_scoped_id(node: &Node, source: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::domain::entity::import::ImportKind;
+    use crate::domain::entity::name::NameKind;
 
     #[test]
     fn test_simple_use_declaration() {
@@ -405,5 +416,74 @@ mod tests {
             !calls.is_empty(),
             "main.rs should contain at least one call expression"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // parse_rust_names
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_rust_parse_names_function() {
+        let source = "fn aws_handler() {}";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names.iter().find(|n| n.name == "aws_handler" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "fn aws_handler should be detected as Symbol, got: {:#?}", names);
+        assert_eq!(found.unwrap().line, 1);
+    }
+
+    #[test]
+    fn test_rust_parse_names_struct() {
+        let source = "struct AwsClient;";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names.iter().find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "struct AwsClient should be detected as Symbol, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_rust_parse_names_enum() {
+        let source = "enum AwsRegion { Us, Eu }";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names.iter().find(|n| n.name == "AwsRegion" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "enum AwsRegion should be detected as Symbol, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_rust_parse_names_let_variable() {
+        let source = "fn f() { let aws_url = \"\"; }";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names.iter().find(|n| n.name == "aws_url" && n.kind == NameKind::Variable);
+        assert!(found.is_some(), "let aws_url should be detected as Variable, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_rust_parse_names_const() {
+        let source = r#"const AWS_KEY: &str = "";"#;
+        let names = parse_rust_names(source, "test.rs");
+        let found = names.iter().find(|n| n.name == "AWS_KEY" && n.kind == NameKind::Variable);
+        assert!(found.is_some(), "const AWS_KEY should be detected as Variable, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_rust_parse_names_line_comment() {
+        let source = "// connect to aws\nfn f() {}";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names.iter().find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(found.is_some(), "line comment with aws should be detected, got: {:#?}", names);
+        assert_eq!(found.unwrap().line, 1);
+    }
+
+    #[test]
+    fn test_rust_parse_names_block_comment() {
+        let source = "/* aws integration */\nfn f() {}";
+        let names = parse_rust_names(source, "test.rs");
+        let found = names.iter().find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(found.is_some(), "block comment with aws should be detected, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_rust_parse_names_no_names_in_empty_source() {
+        let source = "";
+        let names = parse_rust_names(source, "test.rs");
+        assert!(names.is_empty(), "empty source should produce no names");
     }
 }

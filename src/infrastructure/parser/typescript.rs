@@ -2,6 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
+use crate::domain::entity::name::RawName;
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for TypeScript and JavaScript source files.
@@ -16,6 +17,15 @@ impl Parser for TypeScriptParser {
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
         parse_ts_call_exprs(source, file_path)
     }
+
+    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+        parse_ts_names(source, file_path)
+    }
+}
+
+/// Parse TypeScript/JavaScript source code and extract named entities for naming convention checks.
+pub fn parse_ts_names(_source: &str, _file_path: &str) -> Vec<RawName> {
+    todo!("parse_ts_names: RED phase stub")
 }
 
 /// Parse TypeScript/JavaScript source code and extract member-expression call expressions.
@@ -324,5 +334,51 @@ mod tests {
         assert_eq!(imports.len(), 2);
         assert_eq!(imports[0].path, "react");
         assert_eq!(imports[1].path, "../domain/user");
+    }
+
+    // ------------------------------------------------------------------
+    // parse_ts_names
+    // ------------------------------------------------------------------
+
+    use crate::domain::entity::name::NameKind;
+
+    #[test]
+    fn test_ts_parse_names_function() {
+        let source = "function awsHandler() {}";
+        let names = parse_ts_names(source, "test.ts");
+        let found = names.iter().find(|n| n.name == "awsHandler" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "function awsHandler should be detected as Symbol, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_ts_parse_names_class() {
+        let source = "class AwsClient {}";
+        let names = parse_ts_names(source, "test.ts");
+        let found = names.iter().find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "class AwsClient should be detected as Symbol, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_ts_parse_names_interface() {
+        let source = "interface AwsConfig {}";
+        let names = parse_ts_names(source, "test.ts");
+        let found = names.iter().find(|n| n.name == "AwsConfig" && n.kind == NameKind::Symbol);
+        assert!(found.is_some(), "interface AwsConfig should be detected as Symbol, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_ts_parse_names_const_variable() {
+        let source = "const awsUrl = \"https://aws.example.com\";";
+        let names = parse_ts_names(source, "test.ts");
+        let found = names.iter().find(|n| n.name == "awsUrl" && n.kind == NameKind::Variable);
+        assert!(found.is_some(), "const awsUrl should be detected as Variable, got: {:#?}", names);
+    }
+
+    #[test]
+    fn test_ts_parse_names_line_comment() {
+        let source = "// connect to aws\nconst x = 1;";
+        let names = parse_ts_names(source, "test.ts");
+        let found = names.iter().find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(found.is_some(), "line comment with aws should be detected, got: {:#?}", names);
     }
 }
