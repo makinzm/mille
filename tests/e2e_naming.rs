@@ -256,7 +256,7 @@ fn test_naming_no_violation_when_clean() {
     // files are scanned, we use a keyword that none of the files contain.
     let cfg = TempConfig::new(
         "e2e_naming_clean.toml",
-        &naming_config(&["gcp"], None),  // "gcp" appears nowhere in fixtures
+        &naming_config(&["gcp"], None), // "gcp" appears nowhere in fixtures
     );
     let out = mille(&["check", "--config", cfg.file_name()]);
     assert_eq!(

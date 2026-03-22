@@ -25,6 +25,10 @@ pub fn format_violation(v: &Violation) -> String {
             "{} Unknown import\n   {}:{}\n   import: {}\n   could not be classified\n\n",
             marker, v.file, v.line, v.import_path
         ),
+        ViolationKind::NamingViolation => format!(
+            "{} Naming violation\n   {}:{}\n   keyword: {}\n   target: {}\n   '{}' is not allowed in '{}'\n\n",
+            marker, v.file, v.line, v.import_path, v.to_layer, v.import_path, v.from_layer
+        ),
     }
 }
 

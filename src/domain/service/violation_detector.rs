@@ -228,13 +228,59 @@ impl<'a> ViolationDetector<'a> {
         violations
     }
 
-    /// Check naming convention rules: for each file, match `name_deny` keywords against
-    /// parsed names (symbols, variables, comments) and the file basename.
+    /// Check naming convention rules: for each name, match `name_deny` keywords against
+    /// the name value (case-insensitive partial match).
     ///
-    /// `raw_names` contains all names extracted from source files. File-level checks
-    /// use `file_path` directly (no tree-sitter extraction needed).
+    /// `raw_names` contains all names extracted from source files (symbols, variables, comments).
+    /// File-level checks (NameKind::File) should be pre-computed by the caller and passed as RawName.
     pub fn detect_naming(&self, raw_names: &[RawName]) -> Vec<Violation> {
-        todo!("detect_naming: RED phase stub")
+        let sev = parse_severity(&self.severity.naming_violation);
+        let mut violations = Vec::new();
+
+        for raw_name in raw_names {
+            let Some(layer) = self.find_layer_for_file(&raw_name.file) else {
+                continue;
+            };
+            if layer.name_deny.is_empty() {
+                continue;
+            }
+
+            // Check if this name's kind is in the layer's name_targets
+            let target_kind = raw_name.kind;
+            let is_targeted = layer
+                .name_targets
+                .iter()
+                .any(|t| t.as_name_kind() == target_kind);
+            if !is_targeted {
+                continue;
+            }
+
+            // Case-insensitive partial match against each denied keyword
+            let name_lower = raw_name.name.to_lowercase();
+            for keyword in &layer.name_deny {
+                if name_lower.contains(keyword.to_lowercase().as_str()) {
+                    let target_str = match raw_name.kind {
+                        crate::domain::entity::name::NameKind::File => "file",
+                        crate::domain::entity::name::NameKind::Symbol => "symbol",
+                        crate::domain::entity::name::NameKind::Variable => "variable",
+                        crate::domain::entity::name::NameKind::Comment => "comment",
+                    };
+                    violations.push(Violation {
+                        file: raw_name.file.clone(),
+                        line: raw_name.line,
+                        from_layer: layer.name.clone(),
+                        to_layer: target_str.to_string(),
+                        import_path: keyword.clone(),
+                        kind: ViolationKind::NamingViolation,
+                        severity: sev.clone(),
+                    });
+                    // Report once per name per layer (first matching keyword)
+                    break;
+                }
+            }
+        }
+
+        violations
     }
 
     /// Check whether the dependency `from → to` is permitted.
@@ -756,6 +802,8 @@ mod tests {
             external_allow: external_allow.iter().map(|s| s.to_string()).collect(),
             external_deny: external_deny.iter().map(|s| s.to_string()).collect(),
             allow_call_patterns: vec![],
+            name_deny: vec![],
+            name_targets: crate::domain::entity::layer::NameTarget::all(),
         }
     }
 
@@ -1197,6 +1245,8 @@ mod tests {
                 callee_layer: callee_layer.to_string(),
                 allow_methods: allow_methods.iter().map(|s| s.to_string()).collect(),
             }],
+            name_deny: vec![],
+            name_targets: crate::domain::entity::layer::NameTarget::all(),
         }
     }
 
@@ -1663,7 +1713,11 @@ mod tests {
             "src/usecase/service.rs",
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 1, "AwsClient should violate name_deny=[\"aws\"]");
+        assert_eq!(
+            violations.len(),
+            1,
+            "AwsClient should violate name_deny=[\"aws\"]"
+        );
         assert_eq!(violations[0].from_layer, "usecase");
         assert_eq!(violations[0].kind, ViolationKind::NamingViolation);
         // import_path holds the matched keyword
@@ -1689,7 +1743,11 @@ mod tests {
             "src/usecase/handler.rs",
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 1, "aws_handler should match AWS (case-insensitive)");
+        assert_eq!(
+            violations.len(),
+            1,
+            "aws_handler should match AWS (case-insensitive)"
+        );
     }
 
     #[test]
@@ -1709,7 +1767,11 @@ mod tests {
             "src/usecase/manage.rs",
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 1, "ManageAws should match aws (partial match)");
+        assert_eq!(
+            violations.len(),
+            1,
+            "ManageAws should match aws (partial match)"
+        );
     }
 
     #[test]
@@ -1729,7 +1791,11 @@ mod tests {
             "src/usecase/service.rs",
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 0, "Variable should be ignored when name_targets=[Symbol]");
+        assert_eq!(
+            violations.len(),
+            0,
+            "Variable should be ignored when name_targets=[Symbol]"
+        );
     }
 
     #[test]
@@ -1748,7 +1814,11 @@ mod tests {
             "src/usecase/user_service.rs",
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 0, "UserService should not violate name_deny=[\"aws\"]");
+        assert_eq!(
+            violations.len(),
+            0,
+            "UserService should not violate name_deny=[\"aws\"]"
+        );
     }
 
     #[test]
@@ -1756,7 +1826,7 @@ mod tests {
         let layers = vec![make_layer_with_name_deny(
             "usecase",
             &["src/usecase/**"],
-            &[],  // empty name_deny
+            &[], // empty name_deny
             NameTarget::all(),
         )];
         let detector = ViolationDetector::new(&layers);
@@ -1767,7 +1837,11 @@ mod tests {
             "src/usecase/service.rs",
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 0, "empty name_deny should produce no violations");
+        assert_eq!(
+            violations.len(),
+            0,
+            "empty name_deny should produce no violations"
+        );
     }
 
     #[test]
@@ -1784,10 +1858,14 @@ mod tests {
             "AwsClient",
             NameKind::Symbol,
             1,
-            "src/domain/entity.rs",  // not in usecase layer
+            "src/domain/entity.rs", // not in usecase layer
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 0, "files not in any layer should be ignored");
+        assert_eq!(
+            violations.len(),
+            0,
+            "files not in any layer should be ignored"
+        );
     }
 
     #[test]

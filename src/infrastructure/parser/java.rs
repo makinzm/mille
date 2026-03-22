@@ -2,7 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::RawName;
+use crate::domain::entity::name::{NameKind, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Java source files.
@@ -25,8 +25,104 @@ impl Parser for JavaParser {
 }
 
 /// Parse Java source code and extract named entities for naming convention checks.
-pub fn parse_java_names(_source: &str, _file_path: &str) -> Vec<RawName> {
-    todo!("parse_java_names: RED phase stub")
+///
+/// Extracts:
+/// - `Symbol`: class, interface, enum, method declarations
+/// - `Variable`: field declarations, local variable declarations
+/// - `Comment`: line_comment, block_comment
+///
+/// NOTE: tree-sitter-java comment node types are `line_comment` and `block_comment`.
+pub fn parse_java_names(source: &str, file_path: &str) -> Vec<RawName> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_java::language())
+        .expect("Failed to load Java grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut names = Vec::new();
+    collect_java_names(root, source.as_bytes(), file_path, &mut names);
+    names
+}
+
+fn collect_java_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
+    let kind = node.kind();
+    let line = node.start_position().row + 1;
+
+    match kind {
+        // Symbols: class, interface, enum, annotation declarations
+        "class_declaration"
+        | "interface_declaration"
+        | "enum_declaration"
+        | "annotation_type_declaration"
+        | "record_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        "method_declaration" | "constructor_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Variables: field declarations, local variable declarations
+        "field_declaration" | "local_variable_declaration" => {
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.kind() == "variable_declarator" {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                            let var_line = child.start_position().row + 1;
+                            if !name.is_empty() {
+                                out.push(RawName {
+                                    name,
+                                    line: var_line,
+                                    kind: NameKind::Variable,
+                                    file: file_path.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Comments
+        "line_comment" | "block_comment" => {
+            let text = node.utf8_text(source).unwrap_or("").to_string();
+            if !text.is_empty() {
+                out.push(RawName {
+                    name: text,
+                    line,
+                    kind: NameKind::Comment,
+                    file: file_path.to_string(),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_java_names(child, source, file_path, out);
+        }
+    }
 }
 
 /// Parse Java source code and extract all `import` declarations.

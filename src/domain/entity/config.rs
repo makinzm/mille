@@ -202,7 +202,11 @@ external_mode = "opt-out"
 name_deny = ["aws", "gcp"]
 "#;
         let result = toml::from_str::<MilleConfig>(toml);
-        assert!(result.is_ok(), "name_deny で parse できるべき: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "name_deny で parse できるべき: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
         assert_eq!(config.layers[0].name_deny, vec!["aws", "gcp"]);
     }
@@ -226,7 +230,11 @@ name_deny = ["aws"]
 name_targets = ["file", "symbol"]
 "#;
         let result = toml::from_str::<MilleConfig>(toml);
-        assert!(result.is_ok(), "name_targets で parse できるべき: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "name_targets で parse できるべき: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
         assert_eq!(
             config.layers[0].name_targets,
@@ -252,7 +260,11 @@ external_mode = "opt-out"
 name_deny = ["aws"]
 "#;
         let result = toml::from_str::<MilleConfig>(toml);
-        assert!(result.is_ok(), "name_targets 省略で parse できるべき: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "name_targets 省略で parse できるべき: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
         assert_eq!(config.layers[0].name_targets, NameTarget::all());
     }
@@ -276,7 +288,11 @@ external_mode = "opt-out"
 naming_violation = "error"
 "#;
         let result = toml::from_str::<MilleConfig>(toml);
-        assert!(result.is_ok(), "naming_violation で parse できるべき: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "naming_violation で parse できるべき: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
         assert_eq!(config.severity.naming_violation, "error");
     }

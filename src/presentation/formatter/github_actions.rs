@@ -26,6 +26,10 @@ pub fn format_violation_ga(v: &Violation) -> String {
             "Unknown import: '{}' could not be classified",
             v.import_path
         ),
+        ViolationKind::NamingViolation => format!(
+            "Naming violation: forbidden keyword '{}' found in {} (layer: '{}')",
+            v.import_path, v.to_layer, v.from_layer
+        ),
     };
     format!("::{} file={},line={}::{}\n", level, v.file, v.line, message)
 }

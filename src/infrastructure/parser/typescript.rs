@@ -2,7 +2,7 @@ use tree_sitter::Node;
 
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::RawName;
+use crate::domain::entity::name::{NameKind, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for TypeScript and JavaScript source files.
@@ -24,8 +24,121 @@ impl Parser for TypeScriptParser {
 }
 
 /// Parse TypeScript/JavaScript source code and extract named entities for naming convention checks.
-pub fn parse_ts_names(_source: &str, _file_path: &str) -> Vec<RawName> {
-    todo!("parse_ts_names: RED phase stub")
+///
+/// Extracts:
+/// - `Symbol`: function, class, interface, type alias, method definitions
+/// - `Variable`: variable declarators (const, let, var)
+/// - `Comment`: line and block comment content
+pub fn parse_ts_names(source: &str, file_path: &str) -> Vec<RawName> {
+    let mut parser = tree_sitter::Parser::new();
+    let language = select_language(file_path);
+    parser
+        .set_language(&language)
+        .expect("Failed to load TypeScript/JavaScript grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut names = Vec::new();
+    collect_ts_names(root, source.as_bytes(), file_path, &mut names);
+    names
+}
+
+fn collect_ts_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
+    let kind = node.kind();
+    let line = node.start_position().row + 1;
+
+    match kind {
+        // Symbols: function and class declarations
+        "function_declaration" | "generator_function_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        "class_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // TypeScript-specific symbols
+        "interface_declaration" | "type_alias_declaration" | "abstract_class_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Method definitions in classes
+        "method_definition" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Variable declarators: const x = ..., let x = ..., var x = ...
+        "variable_declarator" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                // Only simple identifier bindings (not destructuring)
+                if !name.is_empty() && !name.starts_with('{') && !name.starts_with('[') {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Variable,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Comments
+        "comment" => {
+            let text = node.utf8_text(source).unwrap_or("").to_string();
+            if !text.is_empty() {
+                out.push(RawName {
+                    name: text,
+                    line,
+                    kind: NameKind::Comment,
+                    file: file_path.to_string(),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_ts_names(child, source, file_path, out);
+        }
+    }
 }
 
 /// Parse TypeScript/JavaScript source code and extract member-expression call expressions.
@@ -346,39 +459,69 @@ mod tests {
     fn test_ts_parse_names_function() {
         let source = "function awsHandler() {}";
         let names = parse_ts_names(source, "test.ts");
-        let found = names.iter().find(|n| n.name == "awsHandler" && n.kind == NameKind::Symbol);
-        assert!(found.is_some(), "function awsHandler should be detected as Symbol, got: {:#?}", names);
+        let found = names
+            .iter()
+            .find(|n| n.name == "awsHandler" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "function awsHandler should be detected as Symbol, got: {:#?}",
+            names
+        );
     }
 
     #[test]
     fn test_ts_parse_names_class() {
         let source = "class AwsClient {}";
         let names = parse_ts_names(source, "test.ts");
-        let found = names.iter().find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
-        assert!(found.is_some(), "class AwsClient should be detected as Symbol, got: {:#?}", names);
+        let found = names
+            .iter()
+            .find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "class AwsClient should be detected as Symbol, got: {:#?}",
+            names
+        );
     }
 
     #[test]
     fn test_ts_parse_names_interface() {
         let source = "interface AwsConfig {}";
         let names = parse_ts_names(source, "test.ts");
-        let found = names.iter().find(|n| n.name == "AwsConfig" && n.kind == NameKind::Symbol);
-        assert!(found.is_some(), "interface AwsConfig should be detected as Symbol, got: {:#?}", names);
+        let found = names
+            .iter()
+            .find(|n| n.name == "AwsConfig" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "interface AwsConfig should be detected as Symbol, got: {:#?}",
+            names
+        );
     }
 
     #[test]
     fn test_ts_parse_names_const_variable() {
         let source = "const awsUrl = \"https://aws.example.com\";";
         let names = parse_ts_names(source, "test.ts");
-        let found = names.iter().find(|n| n.name == "awsUrl" && n.kind == NameKind::Variable);
-        assert!(found.is_some(), "const awsUrl should be detected as Variable, got: {:#?}", names);
+        let found = names
+            .iter()
+            .find(|n| n.name == "awsUrl" && n.kind == NameKind::Variable);
+        assert!(
+            found.is_some(),
+            "const awsUrl should be detected as Variable, got: {:#?}",
+            names
+        );
     }
 
     #[test]
     fn test_ts_parse_names_line_comment() {
         let source = "// connect to aws\nconst x = 1;";
         let names = parse_ts_names(source, "test.ts");
-        let found = names.iter().find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
-        assert!(found.is_some(), "line comment with aws should be detected, got: {:#?}", names);
+        let found = names
+            .iter()
+            .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(
+            found.is_some(),
+            "line comment with aws should be detected, got: {:#?}",
+            names
+        );
     }
 }

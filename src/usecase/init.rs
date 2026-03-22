@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use crate::domain::entity::layer::{DependencyMode, LayerConfig};
+use crate::domain::entity::layer::{DependencyMode, LayerConfig, NameTarget};
 
 /// Per-directory import analysis, built externally by the infrastructure layer.
 /// This is a plain data type — no I/O here.
@@ -258,6 +258,8 @@ pub fn infer_layers(analyses: &BTreeMap<String, DirAnalysis>) -> Vec<LayerConfig
                 external_allow: external_allow.into_iter().collect(),
                 external_deny: vec![],
                 allow_call_patterns: vec![],
+                name_deny: vec![],
+                name_targets: NameTarget::all(),
             });
         }
     }
@@ -874,6 +876,8 @@ mod tests {
             external_allow: vec![],
             external_deny: vec![],
             allow_call_patterns: vec![],
+            name_deny: vec![],
+            name_targets: NameTarget::all(),
         }
     }
 

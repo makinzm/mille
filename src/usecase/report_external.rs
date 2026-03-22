@@ -109,7 +109,7 @@ fn extract_package_name(path: &str) -> &str {
 mod tests {
     use super::*;
     use crate::domain::entity::import::{ImportKind, RawImport};
-    use crate::domain::entity::layer::{DependencyMode, LayerConfig};
+    use crate::domain::entity::layer::{DependencyMode, LayerConfig, NameTarget};
     use crate::domain::entity::resolved_import::{ImportCategory, ResolvedImport};
 
     fn make_layer(name: &str, paths: &[&str]) -> LayerConfig {
@@ -123,6 +123,8 @@ mod tests {
             external_allow: vec![],
             external_deny: vec![],
             allow_call_patterns: vec![],
+            name_deny: vec![],
+            name_targets: NameTarget::all(),
         }
     }
 
