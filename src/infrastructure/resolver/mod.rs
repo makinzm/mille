@@ -1,5 +1,6 @@
 pub mod go;
 pub mod java;
+pub mod php;
 pub mod python;
 pub mod rust;
 pub mod typescript;
@@ -8,6 +9,7 @@ use std::collections::HashMap;
 
 use self::go::GoResolver;
 use self::java::JavaResolver;
+use self::php::PhpResolver;
 use self::python::PythonResolver;
 use self::rust::RustResolver;
 use self::typescript::TypeScriptResolver;
@@ -22,6 +24,7 @@ pub struct DispatchingResolver {
     python: PythonResolver,
     typescript: TypeScriptResolver,
     java: JavaResolver,
+    php: PhpResolver,
 }
 
 impl DispatchingResolver {
@@ -32,14 +35,11 @@ impl DispatchingResolver {
             python,
             typescript,
             java: JavaResolver::new(String::new()),
+            php: PhpResolver::new(String::new()),
         }
     }
 
     /// Build a `DispatchingResolver` from a raw resolve config value and config file path.
-    ///
-    /// Language-specific config extraction lives here so callers only need to
-    /// call this one method -- adding a new language only requires changing this
-    /// file.
     pub fn from_resolve_config(resolve: Option<&toml::Value>, config_path: &str) -> Self {
         let go_module = resolve
             .and_then(|r| r.get("go"))
@@ -63,7 +63,6 @@ impl DispatchingResolver {
 
         let java_value = resolve.and_then(|r| r.get("java"));
 
-        // Resolve config_dir so relative pom.xml / build.gradle paths work.
         let config_dir = std::path::Path::new(config_path)
             .parent()
             .unwrap_or(std::path::Path::new("."));
@@ -82,10 +81,21 @@ impl DispatchingResolver {
                 manual_name,
                 pom_path.as_deref(),
                 gradle_path.as_deref(),
-                None, // settings.gradle auto-discovered relative to build.gradle
+                None,
             )
         } else {
             JavaResolver::new(String::new())
+        };
+
+        let php_resolver = if let Some(pcfg) = resolve.and_then(|r| r.get("php")) {
+            let manual_ns = pcfg.get("namespace").and_then(|v| v.as_str());
+            let composer_path = pcfg
+                .get("composer_json")
+                .and_then(|v| v.as_str())
+                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+            PhpResolver::from_config(manual_ns, composer_path.as_deref())
+        } else {
+            PhpResolver::new(String::new())
         };
 
         DispatchingResolver {
@@ -94,15 +104,11 @@ impl DispatchingResolver {
             python: PythonResolver::new(python_packages),
             typescript: TypeScriptResolver::with_aliases(ts_aliases),
             java: java_resolver,
+            php: php_resolver,
         }
     }
 }
 
-/// Load TypeScript path aliases from the tsconfig.json referenced in mille.toml.
-///
-/// Reads `resolve.typescript.tsconfig`, parses `compilerOptions.paths`, and
-/// returns a flat map of pattern to first target. Returns an empty map if the
-/// field is absent, the file is missing, or it has no paths entries.
 fn load_ts_aliases(config_path: &str, resolve: Option<&toml::Value>) -> HashMap<String, String> {
     let tsconfig_rel = match resolve
         .and_then(|r| r.get("typescript"))
@@ -113,7 +119,6 @@ fn load_ts_aliases(config_path: &str, resolve: Option<&toml::Value>) -> HashMap<
         None => return HashMap::new(),
     };
 
-    // Resolve tsconfig path relative to the directory of mille.toml.
     let config_dir = std::path::Path::new(config_path)
         .parent()
         .unwrap_or(std::path::Path::new("."));
@@ -124,9 +129,6 @@ fn load_ts_aliases(config_path: &str, resolve: Option<&toml::Value>) -> HashMap<
         Err(_) => return HashMap::new(),
     };
 
-    // NOTE: serde_json cannot parse tsconfig files that contain comments (//),
-    //       but the tsconfig.json produced by tsc --init includes comments.
-    //       We strip single-line comments before parsing as a best-effort.
     let stripped = strip_json_line_comments(&content);
 
     let value: serde_json::Value = match serde_json::from_str(&stripped) {
@@ -154,12 +156,9 @@ fn load_ts_aliases(config_path: &str, resolve: Option<&toml::Value>) -> HashMap<
     aliases
 }
 
-/// Strip `//` single-line comments from a JSON string (best-effort for tsconfig files).
 fn strip_json_line_comments(s: &str) -> String {
     s.lines()
         .map(|line| {
-            // Only strip if `//` appears outside a string value.
-            // Simple heuristic: find the first `//` not inside a quoted segment.
             let mut in_string = false;
             let mut escaped = false;
             let bytes = line.as_bytes();
@@ -204,6 +203,8 @@ impl Resolver for DispatchingResolver {
             self.typescript.resolve(import)
         } else if import.file.ends_with(".java") || import.file.ends_with(".kt") {
             self.java.resolve(import)
+        } else if import.file.ends_with(".php") {
+            self.php.resolve(import)
         } else {
             self.rust.resolve(import)
         }
@@ -218,6 +219,8 @@ impl Resolver for DispatchingResolver {
             self.typescript.resolve_for_project(import, own_crate)
         } else if import.file.ends_with(".java") || import.file.ends_with(".kt") {
             self.java.resolve_for_project(import, own_crate)
+        } else if import.file.ends_with(".php") {
+            self.php.resolve_for_project(import, own_crate)
         } else {
             self.rust.resolve_for_project(import, own_crate)
         }
