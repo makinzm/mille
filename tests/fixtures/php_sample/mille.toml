@@ -1,0 +1,40 @@
+[project]
+name = "php-sample"
+root = "."
+languages = ["php"]
+
+[resolve.php]
+namespace = "App"
+composer_json = "composer.json"
+
+[[layers]]
+name = "domain"
+paths = ["src/Domain/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["src/UseCase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["src/Infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "main"
+paths = ["src/Main/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-out"
+external_deny = []

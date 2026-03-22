@@ -13,9 +13,8 @@ impl Parser for PhpParser {
         parse_php_imports(source, file_path)
     }
 
-    fn parse_call_exprs(&self, _source: &str, _file_path: &str) -> Vec<RawCallExpr> {
-        // PHP call expression analysis is not yet implemented.
-        vec![]
+    fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
+        parse_php_call_exprs(source, file_path)
     }
 
     fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
@@ -73,9 +72,7 @@ fn extract_namespace_use_declaration(
     line: usize,
     out: &mut Vec<RawImport>,
 ) {
-    // Check if this is a group use: look for namespace_use_group child
     let mut prefix: Option<String> = None;
-    let mut has_group = false;
 
     for i in 0..node.child_count() {
         let Some(child) = node.child(i) else { continue };
@@ -85,12 +82,10 @@ fn extract_namespace_use_declaration(
                 prefix = extract_text(&child, source);
             }
             "namespace_use_group" => {
-                has_group = true;
                 let base = prefix.as_deref().unwrap_or("");
                 extract_group_use(&child, source, file_path, line, base, out);
             }
             "namespace_use_clause" => {
-                // Simple / aliased / function / const use
                 if let Some(path) = extract_use_clause_path(&child, source) {
                     out.push(RawImport {
                         path,
@@ -104,8 +99,6 @@ fn extract_namespace_use_declaration(
             _ => {}
         }
     }
-
-    let _ = has_group; // suppress unused warning
 }
 
 /// Extract the import path from a `namespace_use_clause` node.
@@ -178,24 +171,13 @@ fn extract_namespace_name_as_prefix(node: &Node, source: &[u8]) -> Option<String
 }
 
 /// Reconstruct a `namespace_name` node's text as a backslash-separated string.
-///
-/// The grammar represents `App\Models` as:
-///   namespace_name
-///     name "App"
-///     \ "\\"
-///     name "Models"
-///
-/// Walking children and joining non-`\` tokens produces the clean path.
 fn extract_namespace_name(node: &Node, source: &[u8]) -> Option<String> {
-    // The text of the node itself is the most reliable source.
     extract_text(node, source)
 }
 
 /// Expand a `namespace_use_group` node into individual imports.
 ///
 /// `use App\Services\{Auth, Logger}` → `App\Services\Auth`, `App\Services\Logger`
-///
-/// Each `namespace_use_group_clause` contains a `namespace_name` child.
 fn extract_group_use(
     node: &Node,
     source: &[u8],
@@ -226,8 +208,6 @@ fn extract_group_use(
 }
 
 /// Extract the name from a `namespace_use_group_clause` node.
-///
-/// Clause contains optional `function`/`const` keyword, then a `namespace_name`.
 fn extract_group_clause_name(node: &Node, source: &[u8]) -> Option<String> {
     for i in 0..node.child_count() {
         let Some(child) = node.child(i) else { continue };
@@ -311,6 +291,70 @@ fn collect_php_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<R
     for i in 0..node.child_count() {
         if let Some(child) = node.child(i) {
             collect_php_names(child, source, file_path, out);
+        }
+    }
+}
+
+/// Parse PHP source code and extract static method call expressions.
+///
+/// Extracts calls of the form `ClassName::method(...)`:
+/// - `receiver_type = Some("ClassName")`
+/// - `method = "method"`
+///
+/// Only static calls (`::`) are captured. Dynamic calls (`$obj->method()`) are
+/// not captured because static type inference is not available for variables.
+pub fn parse_php_call_exprs(source: &str, file_path: &str) -> Vec<RawCallExpr> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_php::language_php())
+        .expect("Failed to load PHP grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut calls = Vec::new();
+    collect_php_call_exprs(root, source.as_bytes(), file_path, &mut calls);
+    calls
+}
+
+fn collect_php_call_exprs(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawCallExpr>) {
+    // `scoped_call_expression`: ClassName::method(...)
+    // Structure: name "::" name arguments
+    if node.kind() == "scoped_call_expression" {
+        let line = node.start_position().row + 1;
+        let mut receiver: Option<String> = None;
+        let mut method = String::new();
+        let mut child_names: Vec<(String, String)> = Vec::new();
+
+        for i in 0..node.child_count() {
+            let Some(child) = node.child(i) else { continue };
+            if child.kind() == "name" {
+                let text = child.utf8_text(source).unwrap_or("").to_string();
+                child_names.push((child.kind().to_string(), text));
+            }
+        }
+
+        // First `name` child is the class, second is the method
+        if child_names.len() >= 2 {
+            receiver = Some(child_names[0].1.clone());
+            method = child_names[1].1.clone();
+        } else if child_names.len() == 1 {
+            // Only method name found (e.g. `self::method()`) — skip
+        }
+
+        if let (Some(recv), true) = (receiver, !method.is_empty()) {
+            out.push(RawCallExpr {
+                file: file_path.to_string(),
+                line,
+                receiver_type: Some(recv),
+                method,
+            });
+        }
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_php_call_exprs(child, source, file_path, out);
         }
     }
 }
@@ -444,5 +488,26 @@ mod tests {
             names
         );
         assert_eq!(found.unwrap().line, 2);
+    }
+
+    // ------------------------------------------------------------------
+    // parse_php_call_exprs
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_php_static_call() {
+        let source = "<?php\n$user = User::create('Alice');\n";
+        let calls = parse_php_call_exprs(source, "test.php");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].receiver_type, Some("User".to_string()));
+        assert_eq!(calls[0].method, "create");
+        assert_eq!(calls[0].line, 2);
+    }
+
+    #[test]
+    fn test_parse_php_no_static_calls() {
+        let source = "<?php\nclass Foo {}\n";
+        let calls = parse_php_call_exprs(source, "test.php");
+        assert!(calls.is_empty());
     }
 }

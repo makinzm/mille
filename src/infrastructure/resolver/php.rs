@@ -67,11 +67,16 @@ static PHP_STDLIB: &[&str] = &[
 /// or auto-detected from `composer.json` `autoload.psr-4`.
 pub struct PhpResolver {
     base_namespace: String,
+    /// PSR-4 source directory (e.g. "src/") — used to map namespace to filesystem path.
+    src_dir: String,
 }
 
 impl PhpResolver {
     pub fn new(base_namespace: String) -> Self {
-        PhpResolver { base_namespace }
+        PhpResolver {
+            base_namespace,
+            src_dir: String::new(),
+        }
     }
 
     /// Build a `PhpResolver` from optional config values.
@@ -81,32 +86,51 @@ impl PhpResolver {
     /// 2. `composer_json_path` — auto-detect from `composer.json` `autoload.psr-4`
     /// 3. Empty string (no Internal classification possible)
     pub fn from_config(manual_namespace: Option<&str>, composer_json_path: Option<&str>) -> Self {
-        let base_namespace = if let Some(ns) = manual_namespace {
-            ns.to_string()
+        let (base_namespace, src_dir) = if let Some(ns) = manual_namespace {
+            let dir = composer_json_path
+                .and_then(|p| read_psr4_from_composer(p, ns))
+                .unwrap_or_default();
+            (ns.to_string(), dir)
         } else if let Some(path) = composer_json_path {
-            read_namespace_from_composer(path).unwrap_or_default()
+            let (ns, dir) = read_namespace_and_dir_from_composer(path);
+            (ns, dir)
         } else {
-            String::new()
+            (String::new(), String::new())
         };
-        PhpResolver { base_namespace }
+        PhpResolver {
+            base_namespace,
+            src_dir,
+        }
     }
 }
 
 impl Resolver for PhpResolver {
     fn resolve(&self, import: &RawImport) -> ResolvedImport {
-        resolve_php_impl(import, &self.base_namespace)
+        resolve_php_impl(import, &self.base_namespace, &self.src_dir)
     }
 
     fn resolve_for_project(&self, import: &RawImport, _own_crate: &str) -> ResolvedImport {
-        resolve_php_impl(import, &self.base_namespace)
+        resolve_php_impl(import, &self.base_namespace, &self.src_dir)
     }
 }
 
-fn resolve_php_impl(import: &RawImport, base_namespace: &str) -> ResolvedImport {
+fn resolve_php_impl(import: &RawImport, base_namespace: &str, src_dir: &str) -> ResolvedImport {
     let category = classify_php(&import.path, base_namespace);
     let resolved_path = if category == ImportCategory::Internal && !base_namespace.is_empty() {
-        let slash_path = import.path.replace('\\', "/");
-        Some(format!("{}.php", slash_path))
+        // Strip base namespace prefix from the import path, then prepend src_dir.
+        // e.g. "App\Domain\User" with base="App" src_dir="src/"
+        //   → strip "App\" → "Domain\User" → "src/Domain/User.php"
+        let stripped = import
+            .path
+            .strip_prefix(&format!("{}\\", base_namespace))
+            .unwrap_or(&import.path);
+        let slash_path = stripped.replace('\\', "/");
+        if src_dir.is_empty() {
+            Some(format!("{}.php", slash_path))
+        } else {
+            let dir = src_dir.trim_end_matches('/');
+            Some(format!("{}/{}.php", dir, slash_path))
+        }
     } else {
         None
     };
@@ -154,18 +178,60 @@ pub fn read_namespace_from_composer(path: &str) -> Option<String> {
     read_namespace_from_composer_content(&content)
 }
 
-/// Parse base namespace from `composer.json` content string.
-pub fn read_namespace_from_composer_content(content: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(content).ok()?;
+/// Read both namespace and directory from a `composer.json` file path.
+fn read_namespace_and_dir_from_composer(path: &str) -> (String, String) {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return (String::new(), String::new()),
+    };
+    let (ns, dir) = read_namespace_and_dir_from_content(&content);
+    (ns.unwrap_or_default(), dir.unwrap_or_default())
+}
+
+/// Read the PSR-4 directory for a given namespace from `composer.json`.
+fn read_psr4_from_composer(path: &str, namespace: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&content).ok()?;
     let psr4 = value
         .get("autoload")
         .and_then(|a| a.get("psr-4"))
         .and_then(|p| p.as_object())?;
 
-    // Take the first PSR-4 key, strip the trailing `\`
-    psr4.keys()
-        .next()
-        .map(|k| k.trim_end_matches('\\').to_string())
+    // Look for the namespace key (with trailing backslash)
+    let key = format!("{}\\", namespace);
+    psr4.get(&key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+/// Parse base namespace from `composer.json` content string.
+pub fn read_namespace_from_composer_content(content: &str) -> Option<String> {
+    read_namespace_and_dir_from_content(content).0
+}
+
+/// Parse both namespace and directory from `composer.json` content string.
+fn read_namespace_and_dir_from_content(content: &str) -> (Option<String>, Option<String>) {
+    let value: serde_json::Value = match serde_json::from_str(content) {
+        Ok(v) => v,
+        Err(_) => return (None, None),
+    };
+    let psr4 = match value
+        .get("autoload")
+        .and_then(|a| a.get("psr-4"))
+        .and_then(|p| p.as_object())
+    {
+        Some(p) => p,
+        None => return (None, None),
+    };
+
+    // Take the first PSR-4 entry
+    if let Some((key, val)) = psr4.iter().next() {
+        let ns = key.trim_end_matches('\\').to_string();
+        let dir = val.as_str().map(|s| s.to_string());
+        (Some(ns), dir)
+    } else {
+        (None, None)
+    }
 }
 
 #[cfg(test)]
@@ -262,9 +328,22 @@ mod tests {
         let import = raw_php("App\\Models\\User");
         let resolved = resolver.resolve(&import);
         assert_eq!(resolved.category, ImportCategory::Internal);
+        // Without src_dir, resolved_path strips namespace prefix only
+        assert_eq!(resolved.resolved_path, Some("Models/User.php".to_string()));
+    }
+
+    #[test]
+    fn test_php_resolver_internal_resolved_path_with_src_dir() {
+        let resolver = PhpResolver {
+            base_namespace: BASE_NS.to_string(),
+            src_dir: "src/".to_string(),
+        };
+        let import = raw_php("App\\Models\\User");
+        let resolved = resolver.resolve(&import);
+        assert_eq!(resolved.category, ImportCategory::Internal);
         assert_eq!(
             resolved.resolved_path,
-            Some("App/Models/User.php".to_string())
+            Some("src/Models/User.php".to_string())
         );
     }
 
