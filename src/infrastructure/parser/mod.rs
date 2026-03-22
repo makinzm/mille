@@ -1,6 +1,7 @@
 pub mod go;
 pub mod java;
 pub mod kotlin;
+pub mod php;
 pub mod python;
 pub mod rust;
 pub mod typescript;
@@ -8,6 +9,7 @@ pub mod typescript;
 use self::go::GoParser;
 use self::java::JavaParser;
 use self::kotlin::KotlinParser;
+use self::php::PhpParser;
 use self::python::PythonParser;
 use self::rust::RustParser;
 use self::typescript::TypeScriptParser;
@@ -24,6 +26,7 @@ pub struct DispatchingParser {
     typescript: TypeScriptParser,
     java: JavaParser,
     kotlin: KotlinParser,
+    php: PhpParser,
 }
 
 impl DispatchingParser {
@@ -35,6 +38,7 @@ impl DispatchingParser {
             typescript: TypeScriptParser,
             java: JavaParser,
             kotlin: KotlinParser,
+            php: PhpParser,
         }
     }
 }
@@ -64,6 +68,8 @@ impl Parser for DispatchingParser {
             self.java.parse_imports(source, file_path)
         } else if file_path.ends_with(".kt") {
             self.kotlin.parse_imports(source, file_path)
+        } else if file_path.ends_with(".php") {
+            self.php.parse_imports(source, file_path)
         } else {
             self.rust.parse_imports(source, file_path)
         }
@@ -80,6 +86,8 @@ impl Parser for DispatchingParser {
             self.java.parse_call_exprs(source, file_path)
         } else if file_path.ends_with(".kt") {
             self.kotlin.parse_call_exprs(source, file_path)
+        } else if file_path.ends_with(".php") {
+            self.php.parse_call_exprs(source, file_path)
         } else {
             self.rust.parse_call_exprs(source, file_path)
         }
@@ -96,6 +104,8 @@ impl Parser for DispatchingParser {
             self.java.parse_names(source, file_path)
         } else if file_path.ends_with(".kt") {
             self.kotlin.parse_names(source, file_path)
+        } else if file_path.ends_with(".php") {
+            self.php.parse_names(source, file_path)
         } else {
             self.rust.parse_names(source, file_path)
         }

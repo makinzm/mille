@@ -11,7 +11,7 @@
 - ✅ 内部レイヤー依存チェック (`dependency_mode`)
 - ✅ 外部ライブラリ依存チェック (`external_mode`)
 - ✅ DIエントリーポイントのメソッド呼び出しチェック (`allow_call_patterns`)
-- ✅ Rust / Go / TypeScript / JavaScript / Python サポート
+- ✅ Rust / Go / TypeScript / JavaScript / Python / Java / Kotlin / PHP サポート
 - ✅ `[resolve.typescript]` tsconfig.json paths エイリアス解決
 - ✅ cargo / npm(WASM) / go install / pip パッケージ配布
 - ✅ リリース後のバージョン自動同期（`update-version` ジョブ）— `mille --version` がリリースタグと一致
@@ -29,6 +29,7 @@
 - ✅ `mille init` Python namespace パッケージ修正 — `src/` レイアウトで `from src.domain...` を使うプロジェクトで `src` が `package_names` に自動追加されるよう修正（PR #62）
 - ✅ `mille init` Python namespace インポートスキャン修正 — `from src.domain.entity import X` がレイヤー内部依存として正しく検出されるよう修正（`classify_py_import` フルパス返し + `resolve_to_known_dir` プレフィックス照合）、`src/main.py` 等の浅い階層ファイルがスキップされずレイヤーとして登録されるよう修正（PR #62）
 - ✅ ネーミング規則チェック (`name_deny` / `name_targets` / `name_allow` / `name_deny_ignore`) — レイヤーごとに禁止キーワードを設定し、ファイル名・シンボル名・変数名・コメントに禁止キーワードが含まれる場合に `NamingViolation` を報告（大文字小文字区別なし・部分一致）。`name_allow` で false positive を抑制、`name_deny_ignore` でグロブパターンにマッチするファイルを除外可能。対応言語: Rust/TypeScript/Python/Go/Java/Kotlin。`severity.naming_violation` で重大度設定可（PR #65）
+- ✅ PHP 言語サポート — `.php` ファイルの `use` 文パース（simple/aliased/grouped/function/const）・Internal/External/Stdlib 分類、`[resolve.php] namespace` 設定、`composer.json` `autoload.psr-4` 自動検出、PHP stdlib クラス（DateTime/PDO/Exception 等）の Stdlib 自動分類
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 （現在なし）
@@ -101,6 +102,14 @@
 - [x] Java E2E テスト追加（flat/Maven/Gradle レイアウト、main レイヤー）
 - [x] `mille init` Java/Kotlin 対応（パッケージ宣言ベース、depth 不問）
 - [x] Kotlin サポート（別 PR）— `infrastructure::parser::kotlin` 実装 (tree-sitter-kotlin)、flat/Gradle レイアウト、E2E テスト
+
+### PHP サポート ✅ 完了
+
+- [x] `infrastructure::parser::php` 実装 (tree-sitter-php 0.22) — use 文 (simple/aliased/grouped/function/const)・class/function 名・コメントのパース
+- [x] `infrastructure::resolver::php` 実装 — Internal/External/Stdlib 分類、`composer.json` PSR-4 自動検出
+- [x] `[resolve.php]` 設定セクション (`namespace` / `composer_json`) の追加
+- [x] `ext_to_language` に `.php` 追加（`mille init` で PHP プロジェクト自動検出）
+- [x] README.md 更新（言語サポート表・`[resolve.php]` リファレンス・Laravel 設定例）
 
 ---
 

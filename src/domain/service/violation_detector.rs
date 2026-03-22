@@ -97,6 +97,14 @@ impl<'a> ViolationDetector<'a> {
             {
                 // Slash-separated imports: "vitest/config" -> "vitest", "@scope/pkg/sub" -> "@scope/pkg"
                 extract_ts_package_name(&import.raw.path)
+            } else if import.raw.file.ends_with(".php") {
+                // Backslash-separated imports: "Illuminate\Http\Request" -> "Illuminate"
+                import
+                    .raw
+                    .path
+                    .split('\\')
+                    .next()
+                    .unwrap_or(&import.raw.path)
             } else {
                 // Colon-separated imports: "serde::Deserialize" -> "serde"
                 // Full-path imports: full path used as-is (no "::" separator)
@@ -386,6 +394,12 @@ fn type_name_from_import(path: &str) -> Option<&str> {
             return None;
         }
         return Some(last);
+    }
+
+    // Backslash-separated paths use "\" separator (e.g. "App\Domain\User").
+    // The last segment is the class name used as the call receiver.
+    if path.contains('\\') {
+        return path.split('\\').last().filter(|s| !s.is_empty());
     }
 
     // Slash-separated paths use "/" separator (e.g. "github.com/foo/bar/domain").

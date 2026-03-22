@@ -72,6 +72,7 @@ export default defineConfig({
                 { slug: 'guides/languages/python', label: 'Python' },
                 { slug: 'guides/languages/java', label: 'Java' },
                 { slug: 'guides/languages/kotlin', label: 'Kotlin' },
+                { slug: 'guides/languages/php', label: 'PHP' },
               ],
             },
           ],
