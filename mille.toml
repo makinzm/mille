@@ -11,6 +11,7 @@ allow = []
 deny = ["infrastructure", "usecase", "presentation"]
 external_mode = "opt-in"
 external_allow = ["serde"]
+name_deny = ["python", "go", "java", "kotlin", "javascript", "typescript", "ruby", "php", "csharp", "cpp", "rust"]
 
 [[layers]]
 name = "infrastructure"
@@ -27,6 +28,7 @@ dependency_mode = "opt-in"
 allow = ["domain"]
 external_mode = "opt-in"
 external_allow = []
+name_deny = ["python", "go", "java", "kotlin", "javascript", "typescript", "ruby", "php", "csharp", "cpp", "rust"]
 
 [[layers]]
 name = "presentation"
