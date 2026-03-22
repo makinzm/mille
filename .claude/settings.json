@@ -4,7 +4,20 @@
       "Bash(grep *)",
       "Bash(tail *)",
       "Bash(cargo *)",
-      "Bash(git add *)"
+      "Bash(git *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(mkdir *)",
+      "Bash(cd *)",
+      "Bash(cargo test *)",
+      "Bash(cargo build *)",
+      "Bash(lefthook *)",
+      "Bash(gh *)",
+      "Bash(sed *)",
+      "Bash(echo *)",
+      "Bash(mkdir *)",
+      "Bash(/home/hope/workspace/mille/target/release/mille *)"
     ]
   }
 }

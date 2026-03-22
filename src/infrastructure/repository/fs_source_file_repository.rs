@@ -5,7 +5,9 @@ use crate::domain::repository::source_file_repository::SourceFileRepository;
 /// Supported extensions: `.rs`, `.go`, `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.java`, `.kt`
 pub struct FsSourceFileRepository;
 
-const SOURCE_EXTENSIONS: &[&str] = &["rs", "go", "py", "ts", "tsx", "js", "jsx", "java", "kt"];
+const SOURCE_EXTENSIONS: &[&str] = &[
+    "rs", "go", "py", "ts", "tsx", "js", "jsx", "java", "kt", "php",
+];
 
 fn is_source_file(path: &str) -> bool {
     SOURCE_EXTENSIONS
