@@ -124,6 +124,7 @@ mod tests {
             external_deny: vec![],
             allow_call_patterns: vec![],
             name_deny: vec![],
+            name_allow: vec![],
             name_targets: NameTarget::all(),
         }
     }

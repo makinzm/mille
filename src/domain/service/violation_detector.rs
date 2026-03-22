@@ -255,10 +255,18 @@ impl<'a> ViolationDetector<'a> {
                 continue;
             }
 
-            // Case-insensitive partial match against each denied keyword
+            // Case-insensitive partial match against each denied keyword.
+            // Strip name_allow substrings first so composite words like "category"
+            // don't cause false positives when a keyword (e.g. "go") appears inside them.
             let name_lower = raw_name.name.to_lowercase();
+            let name_stripped = layer
+                .name_allow
+                .iter()
+                .fold(name_lower.clone(), |acc, allow| {
+                    acc.replace(&allow.to_lowercase() as &str, "")
+                });
             for keyword in &layer.name_deny {
-                if name_lower.contains(keyword.to_lowercase().as_str()) {
+                if name_stripped.contains(keyword.to_lowercase().as_str()) {
                     let target_str = match raw_name.kind {
                         crate::domain::entity::name::NameKind::File => "file",
                         crate::domain::entity::name::NameKind::Symbol => "symbol",
@@ -408,6 +416,7 @@ mod tests {
             external_deny: vec![],
             allow_call_patterns: vec![],
             name_deny: vec![],
+            name_allow: vec![],
             name_targets: NameTarget::all(),
         }
     }
@@ -803,6 +812,7 @@ mod tests {
             external_deny: external_deny.iter().map(|s| s.to_string()).collect(),
             allow_call_patterns: vec![],
             name_deny: vec![],
+            name_allow: vec![],
             name_targets: crate::domain::entity::layer::NameTarget::all(),
         }
     }
@@ -1246,6 +1256,7 @@ mod tests {
                 allow_methods: allow_methods.iter().map(|s| s.to_string()).collect(),
             }],
             name_deny: vec![],
+            name_allow: vec![],
             name_targets: crate::domain::entity::layer::NameTarget::all(),
         }
     }
@@ -1684,6 +1695,7 @@ mod tests {
             external_deny: vec![],
             allow_call_patterns: vec![],
             name_deny: name_deny.iter().map(|s| s.to_string()).collect(),
+            name_allow: vec![],
             name_targets,
         }
     }
@@ -1891,5 +1903,67 @@ mod tests {
         let violations = detector.detect_naming(&names);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn test_detect_naming_name_allow_suppresses_false_positive() {
+        // "category" contains "go" but name_allow = ["category"] should suppress it
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+        layer.name_allow = vec!["category".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "ImportCategory",
+            NameKind::Symbol,
+            14,
+            "src/domain/entity/resolved_import.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "ImportCategory should not be flagged: 'go' inside 'category' is allowed"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_name_allow_does_not_suppress_standalone_keyword() {
+        // name_allow = ["category"] must NOT suppress "GoConfig" (no "category" in it)
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+        layer.name_allow = vec!["category".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "GoConfig",
+            NameKind::Symbol,
+            10,
+            "src/domain/entity/config.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(violations.len(), 1, "GoConfig must still be flagged");
+    }
+
+    #[test]
+    fn test_detect_naming_name_allow_partial_coverage_still_violations() {
+        // "GoCategory" has standalone "Go" even after stripping "category" → still a violation
+        let mut layer =
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+        layer.name_allow = vec!["category".to_string()];
+        let layers = vec![layer];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "GoCategory",
+            NameKind::Symbol,
+            5,
+            "src/domain/entity/config.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "GoCategory must still be flagged (standalone 'Go' remains after stripping 'category')"
+        );
     }
 }

@@ -55,6 +55,12 @@ pub struct LayerConfig {
     /// Forbidden keywords for naming convention check (case-insensitive partial match).
     #[serde(default)]
     pub name_deny: Vec<String>,
+    /// Substrings that are explicitly allowed even if they contain a denied keyword.
+    /// Before checking `name_deny`, each allowed string is stripped from the identifier.
+    /// Example: `name_allow = ["category"]` prevents "ImportCategory" from being flagged
+    /// for keyword matching (because "category" is stripped first, leaving no match).
+    #[serde(default)]
+    pub name_allow: Vec<String>,
     /// Which targets to check. Defaults to all targets when omitted.
     #[serde(default = "default_name_targets")]
     pub name_targets: Vec<NameTarget>,
