@@ -34,3 +34,29 @@ error: could not compile `mille` due to 17 errors
 ```
 
 → 期待通りの RED 状態。`--no-verify` でコミット後 GREEN フェーズへ。
+
+---
+
+## GREEN フェーズ
+
+### 実装内容
+- `parse_rust_names()`: function_item / struct_item / enum_item / trait_item / type_item / const_item / static_item / let_declaration / line_comment / block_comment
+- `parse_ts_names()`: function_declaration / class_declaration / interface_declaration / type_alias_declaration / method_definition / variable_declarator / comment
+- `parse_python_names()`: function_definition / class_definition / comment
+- `parse_go_names()`: function_declaration / method_declaration / type_declaration (via type_spec) / var_declaration / const_declaration / short_var_declaration / comment
+- `parse_java_names()`: class_declaration / interface_declaration / enum_declaration / method_declaration / constructor_declaration / field_declaration / local_variable_declaration / line_comment / block_comment
+- `parse_kotlin_names()`: class_declaration / interface_declaration / object_declaration / function_declaration / property_declaration / multiline_comment / line_comment
+- `detect_naming()`: 大文字小文字区別なし部分一致、name_targets フィルタリング、severity 設定対応
+- `check_architecture::check()`: ファイルレベルチェック (basename 抽出) + parse_names() 呼び出し + detect_naming() 呼び出し
+
+### テスト結果 (GREEN)
+- ライブラリテスト: 308 passed
+- E2E テスト (e2e_naming): 10 passed
+- 全テストスイート: 全件パス
+
+---
+
+## REFACTOR フェーズ
+- docs/TODO.md に PR65 完了チェックを追加
+- README.md に `name_deny` / `name_targets` / `naming_violation` の Configuration Reference を追加
+- feature matrix に Naming convention rules 行を追加
