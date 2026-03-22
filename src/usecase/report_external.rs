@@ -96,11 +96,10 @@ fn find_layer_idx_for_file(
 /// Extract the top-level package name from a raw import path.
 ///
 /// Uses the same strategy as `ViolationDetector::detect_external`:
-/// split on `::` and take the first segment. This works for all languages:
-/// - Rust: `serde::Deserialize` → `serde`
-/// - Go: `database/sql` → `database/sql` (no `::`, whole string returned)
-/// - TypeScript: `lodash` → `lodash`
-/// - Python: `sqlalchemy` → `sqlalchemy`
+/// split on `::` and take the first segment. This works for all import styles:
+/// - Colon-separated: `serde::Deserialize` -> `serde`
+/// - Slash-separated: `database/sql` -> `database/sql` (no `::`, whole string returned)
+/// - Plain: `lodash` -> `lodash`, `sqlalchemy` -> `sqlalchemy`
 fn extract_package_name(path: &str) -> &str {
     path.split("::").next().unwrap_or(path)
 }
@@ -149,12 +148,12 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_extract_package_name_rust_path() {
+    fn test_extract_package_name_colon_separated() {
         assert_eq!(extract_package_name("serde::Deserialize"), "serde");
     }
 
     #[test]
-    fn test_extract_package_name_go_path() {
+    fn test_extract_package_name_full_path() {
         assert_eq!(extract_package_name("database/sql"), "database/sql");
     }
 

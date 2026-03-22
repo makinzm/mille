@@ -204,7 +204,6 @@ mod tests {
                 name_deny_ignore: vec![],
             }],
             ignore: None,
-            resolve: None,
             severity: crate::domain::entity::config::SeverityConfig::default(),
         }
     }
@@ -233,7 +232,6 @@ mod tests {
             project: test_project(),
             layers: vec![],
             ignore: None,
-            resolve: None,
             severity: crate::domain::entity::config::SeverityConfig::default(),
         };
         let result = check(
@@ -318,7 +316,6 @@ mod tests {
                 },
             ],
             ignore: None,
-            resolve: None,
             severity: crate::domain::entity::config::SeverityConfig::default(),
         };
 
@@ -398,7 +395,6 @@ mod tests {
                 name_deny_ignore: vec![],
             }],
             ignore: None,
-            resolve: None,
             severity: crate::domain::entity::config::SeverityConfig::default(),
         };
         let result = check(

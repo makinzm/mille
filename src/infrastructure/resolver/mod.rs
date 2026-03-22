@@ -11,7 +11,6 @@ use self::java::JavaResolver;
 use self::python::PythonResolver;
 use self::rust::RustResolver;
 use self::typescript::TypeScriptResolver;
-use crate::domain::entity::config::MilleConfig;
 use crate::domain::entity::import::RawImport;
 use crate::domain::entity::resolved_import::ResolvedImport;
 use crate::domain::repository::resolver::Resolver;
@@ -36,44 +35,48 @@ impl DispatchingResolver {
         }
     }
 
-    /// Build a `DispatchingResolver` from a loaded `MilleConfig`.
+    /// Build a `DispatchingResolver` from a raw resolve config value and config file path.
     ///
     /// Language-specific config extraction lives here so callers only need to
-    /// call this one method — adding a new language only requires changing this
+    /// call this one method -- adding a new language only requires changing this
     /// file.
-    pub fn from_config(app_config: &MilleConfig, config_path: &str) -> Self {
-        let go_module = app_config
-            .resolve
-            .as_ref()
-            .and_then(|r| r.go.as_ref())
-            .map(|g| g.module_name.clone())
+    pub fn from_resolve_config(resolve: Option<&toml::Value>, config_path: &str) -> Self {
+        let go_module = resolve
+            .and_then(|r| r.get("go"))
+            .and_then(|g| g.get("module_name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+
+        let python_packages: Vec<String> = resolve
+            .and_then(|r| r.get("python"))
+            .and_then(|p| p.get("package_names"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
 
-        let python_packages = app_config
-            .resolve
-            .as_ref()
-            .and_then(|r| r.python.as_ref())
-            .map(|p| p.package_names.clone())
-            .unwrap_or_default();
+        let ts_aliases = load_ts_aliases(config_path, resolve);
 
-        let ts_aliases = load_ts_aliases(config_path, app_config);
-
-        let java_config = app_config.resolve.as_ref().and_then(|r| r.java.as_ref());
+        let java_value = resolve.and_then(|r| r.get("java"));
 
         // Resolve config_dir so relative pom.xml / build.gradle paths work.
         let config_dir = std::path::Path::new(config_path)
             .parent()
             .unwrap_or(std::path::Path::new("."));
 
-        let java_resolver = if let Some(jcfg) = java_config {
-            let manual_name = jcfg.module_name.as_deref();
+        let java_resolver = if let Some(jcfg) = java_value {
+            let manual_name = jcfg.get("module_name").and_then(|v| v.as_str());
             let pom_path = jcfg
-                .pom_xml
-                .as_deref()
+                .get("pom_xml")
+                .and_then(|v| v.as_str())
                 .map(|p| config_dir.join(p).to_string_lossy().into_owned());
             let gradle_path = jcfg
-                .build_gradle
-                .as_deref()
+                .get("build_gradle")
+                .and_then(|v| v.as_str())
                 .map(|p| config_dir.join(p).to_string_lossy().into_owned());
             JavaResolver::from_config(
                 manual_name,
@@ -98,14 +101,13 @@ impl DispatchingResolver {
 /// Load TypeScript path aliases from the tsconfig.json referenced in mille.toml.
 ///
 /// Reads `resolve.typescript.tsconfig`, parses `compilerOptions.paths`, and
-/// returns a flat map of pattern → first target.  Returns an empty map if the
+/// returns a flat map of pattern to first target. Returns an empty map if the
 /// field is absent, the file is missing, or it has no paths entries.
-fn load_ts_aliases(config_path: &str, app_config: &MilleConfig) -> HashMap<String, String> {
-    let tsconfig_rel = match app_config
-        .resolve
-        .as_ref()
-        .and_then(|r| r.typescript.as_ref())
-        .map(|t| t.tsconfig.as_str())
+fn load_ts_aliases(config_path: &str, resolve: Option<&toml::Value>) -> HashMap<String, String> {
+    let tsconfig_rel = match resolve
+        .and_then(|r| r.get("typescript"))
+        .and_then(|t| t.get("tsconfig"))
+        .and_then(|v| v.as_str())
     {
         Some(p) => p.to_string(),
         None => return HashMap::new(),

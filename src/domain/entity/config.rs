@@ -18,57 +18,6 @@ pub struct IgnoreConfig {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct ResolveConfig {
-    pub typescript: Option<TsResolveConfig>,
-    pub go: Option<GoResolveConfig>,
-    pub python: Option<PythonResolveConfig>,
-    pub java: Option<JavaResolveConfig>,
-    #[serde(default)]
-    pub aliases: std::collections::HashMap<String, String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct TsResolveConfig {
-    pub tsconfig: String,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct GoResolveConfig {
-    pub module_name: String,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct JavaResolveConfig {
-    /// Base package name that identifies internal imports.
-    /// e.g. "com.example.myapp" — imports starting with this prefix are Internal.
-    /// If omitted, mille auto-detects from `pom_xml` or `build_gradle`.
-    #[serde(default)]
-    pub module_name: Option<String>,
-    /// Path to pom.xml (relative to mille.toml). If set, `groupId.artifactId`
-    /// is used as the module name when `module_name` is not explicitly specified.
-    #[serde(default)]
-    pub pom_xml: Option<String>,
-    /// Path to build.gradle (relative to mille.toml). If set, `group.rootProject.name`
-    /// is used as the module name when `module_name` is not explicitly specified.
-    #[serde(default)]
-    pub build_gradle: Option<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct PythonResolveConfig {
-    /// Source root relative to project root. Optional — if omitted, mille derives it
-    /// automatically from the importing file's path and `package_names`.
-    /// NOTE: this field is currently not consumed by the resolver; the resolver always
-    /// auto-derives the source root. The field is kept for forward compatibility.
-    #[serde(default)]
-    pub src_root: String,
-    /// Top-level package names that are part of this project.
-    /// Imports starting with any of these names are classified as Internal.
-    #[serde(default)]
-    pub package_names: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct SeverityConfig {
     #[serde(default = "default_error")]
     pub dependency_violation: String,
@@ -96,7 +45,6 @@ pub struct MilleConfig {
     #[serde(rename = "layers", default)]
     pub layers: Vec<LayerConfig>,
     pub ignore: Option<IgnoreConfig>,
-    pub resolve: Option<ResolveConfig>,
     #[serde(default = "default_severity")]
     pub severity: SeverityConfig,
 }
@@ -122,16 +70,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_python_resolve_config_without_src_root_parses() {
-        // src_root なしの [resolve.python] は parse エラーにならないべき
+    fn test_config_with_resolve_section_still_parses() {
+        // [resolve] section is now handled by infrastructure's two-pass parsing,
+        // but MilleConfig should still parse when [resolve] is absent.
         let toml = r#"
 [project]
 name = "myproject"
 root = "."
-languages = ["python"]
-
-[resolve.python]
-package_names = ["domain", "usecase"]
+languages = ["rust"]
 
 [[layers]]
 name = "domain"
@@ -140,49 +86,7 @@ dependency_mode = "opt-in"
 external_mode = "opt-in"
 "#;
         let result = toml::from_str::<MilleConfig>(toml);
-        assert!(
-            result.is_ok(),
-            "src_root なしで parse できるべき: {:?}",
-            result.err()
-        );
-        let config = result.unwrap();
-        let py = config
-            .resolve
-            .unwrap()
-            .python
-            .expect("python config should exist");
-        assert_eq!(py.src_root, "");
-        assert_eq!(py.package_names, vec!["domain", "usecase"]);
-    }
-
-    #[test]
-    fn test_python_resolve_config_with_src_root_still_parses() {
-        // 既存の src_root ありの設定は引き続き parse できる (regression)
-        let toml = r#"
-[project]
-name = "myproject"
-root = "."
-languages = ["python"]
-
-[resolve.python]
-src_root = "src"
-package_names = ["domain"]
-
-[[layers]]
-name = "domain"
-paths = ["src/domain/**"]
-dependency_mode = "opt-in"
-external_mode = "opt-in"
-"#;
-        let result = toml::from_str::<MilleConfig>(toml);
-        assert!(
-            result.is_ok(),
-            "src_root ありも parse できるべき: {:?}",
-            result.err()
-        );
-        let config = result.unwrap();
-        let py = config.resolve.unwrap().python.unwrap();
-        assert_eq!(py.src_root, "src");
+        assert!(result.is_ok(), "parse should succeed: {:?}", result.err());
     }
 
     #[test]

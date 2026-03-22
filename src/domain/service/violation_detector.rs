@@ -83,7 +83,7 @@ impl<'a> ViolationDetector<'a> {
                 continue;
             };
             let crate_name: &str = if import.raw.file.ends_with(".py") {
-                // Python: "matplotlib.pyplot" → "matplotlib"
+                // Dot-separated imports: "matplotlib.pyplot" -> "matplotlib"
                 import
                     .raw
                     .path
@@ -95,11 +95,11 @@ impl<'a> ViolationDetector<'a> {
                 || import.raw.file.ends_with(".js")
                 || import.raw.file.ends_with(".jsx")
             {
-                // TypeScript/JS: "vitest/config" → "vitest", "@scope/pkg/sub" → "@scope/pkg"
+                // Slash-separated imports: "vitest/config" -> "vitest", "@scope/pkg/sub" -> "@scope/pkg"
                 extract_ts_package_name(&import.raw.path)
             } else {
-                // Rust: "serde::Deserialize" → "serde"
-                // Go: full path used as-is (no "::" separator)
+                // Colon-separated imports: "serde::Deserialize" -> "serde"
+                // Full-path imports: full path used as-is (no "::" separator)
                 import
                     .raw
                     .path
@@ -171,11 +171,11 @@ impl<'a> ViolationDetector<'a> {
                             .map(|l| l.name == pattern.callee_layer)
                             .unwrap_or(false)
                         && (
-                            // Rust / Go: type name embedded in import path
+                            // Colon-separated / slash-separated: type name embedded in import path
                             type_name_from_import(&imp.raw.path)
                                 .map(|n| n == receiver_type.as_str())
                                 .unwrap_or(false)
-                            // Python / TypeScript: named imports tracked explicitly
+                            // Dot-separated / slash-separated: named imports tracked explicitly
                             || imp.raw.named_imports.iter().any(|n| n == receiver_type.as_str())
                         )
                 });
@@ -268,7 +268,7 @@ impl<'a> ViolationDetector<'a> {
 
             // Case-insensitive partial match against each denied keyword.
             // Strip name_allow substrings first so composite words like "category"
-            // don't cause false positives when a keyword (e.g. "go") appears inside them.
+            // don't cause false positives when a denied keyword appears inside them.
             let name_lower = raw_name.name.to_lowercase();
             let name_stripped = layer
                 .name_allow
@@ -350,10 +350,10 @@ fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
     pattern == crate_name
 }
 
-/// Extract the npm package name from a TypeScript/JavaScript import path.
+/// Extract the npm package name from a slash-separated import path.
 ///
-/// - Non-scoped: `"vitest/config"` → `"vitest"`, `"react"` → `"react"`
-/// - Scoped: `"@vueuse/core/utilities"` → `"@vueuse/core"`, `"@scope/pkg"` → `"@scope/pkg"`
+/// - Non-scoped: `"vitest/config"` -> `"vitest"`, `"react"` -> `"react"`
+/// - Scoped: `"@vueuse/core/utilities"` -> `"@vueuse/core"`, `"@scope/pkg"` -> `"@scope/pkg"`
 fn extract_ts_package_name(path: &str) -> &str {
     if let Some(rest) = path.strip_prefix('@') {
         // Scoped package: @scope/name[/subpath] → @scope/name
@@ -373,13 +373,13 @@ fn extract_ts_package_name(path: &str) -> &str {
 
 /// Extract the type/package name brought into scope by an import path.
 ///
-/// - Rust:  `"crate::infrastructure::Repo"` → `Some("Repo")`  (split by `::`)
-/// - Go:    `"github.com/example/gosample/domain"` → `Some("domain")`  (split by `/`)
-/// - Returns `None` for wildcards (`*`) and grouped imports (`{…}`).
+/// - Colon-separated: `"crate::infrastructure::Repo"` -> `Some("Repo")`
+/// - Slash-separated: `"github.com/example/sample/domain"` -> `Some("domain")`
+/// - Returns `None` for wildcards (`*`) and grouped imports (`{...}`).
 ///
-/// Python and TypeScript named imports are checked via `named_imports` field directly.
+/// Dot-separated and slash-separated named imports are checked via `named_imports` field directly.
 fn type_name_from_import(path: &str) -> Option<&str> {
-    // Rust-style paths use "::" separator.
+    // Colon-separated paths use "::" separator.
     if path.contains("::") {
         let last = path.split("::").last()?;
         if last.starts_with('{') || last == "*" {
@@ -388,13 +388,13 @@ fn type_name_from_import(path: &str) -> Option<&str> {
         return Some(last);
     }
 
-    // Go-style paths use "/" separator (e.g. "github.com/foo/bar/domain").
+    // Slash-separated paths use "/" separator (e.g. "github.com/foo/bar/domain").
     // The last segment is the package name used as the call receiver.
     if path.contains('/') {
         return path.split('/').last().filter(|s| !s.is_empty());
     }
 
-    // Plain single-segment paths (e.g. "fmt", "os" in Go stdlib).
+    // Plain single-segment paths (e.g. "fmt", "os" in stdlib).
     if path.starts_with('{') || path == "*" {
         return None;
     }
@@ -1043,7 +1043,7 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_python_submodule_allowed() {
+    fn test_detect_external_dotted_import_allowed() {
         // "matplotlib.pyplot" import with external_allow=["matplotlib"] → no violation
         let layers = vec![make_layer_with_external(
             "domain",
@@ -1071,7 +1071,7 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_python_submodule_violation() {
+    fn test_detect_external_dotted_import_violation() {
         // "unknown.submodule" not in external_allow → violation
         let layers = vec![make_layer_with_external(
             "domain",
@@ -1102,8 +1102,8 @@ mod tests {
 
     #[test]
     fn test_detect_external_ts_subpath_allowed_by_package_name() {
-        // TypeScript: "vitest/config" should match external_allow = ["vitest"]
-        // crate_name extraction uses first npm segment for TS files
+        // Slash-separated: "vitest/config" should match external_allow = ["vitest"]
+        // crate_name extraction uses first npm segment for .ts files
         let layers = vec![make_layer_with_external(
             "domain",
             &["src/domain/**"],
@@ -1131,7 +1131,7 @@ mod tests {
 
     #[test]
     fn test_detect_external_ts_scoped_package_allowed() {
-        // TypeScript: "@vueuse/core/utilities" should match external_allow = ["@vueuse/core"]
+        // Slash-separated (scoped): "@vueuse/core/utilities" should match external_allow = ["@vueuse/core"]
         let layers = vec![make_layer_with_external(
             "domain",
             &["src/domain/**"],
@@ -1158,8 +1158,8 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_go_full_path_allowed() {
-        // Go: full module path used as crate_name — exact match required
+    fn test_detect_external_full_path_allowed() {
+        // Full module path used as crate_name -- exact match required
         let layers = vec![make_layer_with_external(
             "infra",
             &["go/infra/**"],
@@ -1186,8 +1186,8 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_go_stdlib_allowed() {
-        // Go: stdlib packages ("fmt", "net/http") appear in external_allow with full path
+    fn test_detect_external_stdlib_allowed() {
+        // Stdlib packages ("fmt", "net/http") appear in external_allow with full path
         let layers = vec![make_layer_with_external(
             "domain",
             &["go/domain/**"],
@@ -1227,8 +1227,8 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_external_rust_colon_still_works() {
-        // Regression: Rust "::" splitting still works after Python fix
+    fn test_detect_external_colon_separator() {
+        // Regression: "::" splitting still works after dotted-import fix
         let layers = vec![make_layer_with_external(
             "infra",
             &["src/infra/**"],
@@ -1240,7 +1240,7 @@ mod tests {
         let imports = vec![make_external("src/infra/repo.rs", 1, "serde::Deserialize")];
         assert!(
             detector.detect_external(&imports).is_empty(),
-            "serde::Deserialize should be allowed for Rust files"
+            "serde::Deserialize should be allowed for .rs files"
         );
     }
 
@@ -1626,7 +1626,7 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_unknown_skips_non_unknown_categories() {
+    fn test_detect_unknown_skips_non_unknown_types() {
         let layers = vec![make_layer(
             "domain",
             &["src/domain/**"],
@@ -1922,7 +1922,7 @@ mod tests {
 
     #[test]
     fn test_detect_naming_name_allow_suppresses_false_positive() {
-        // "category" contains "go" but name_allow = ["category"] should suppress it
+        // "category" contains a denied keyword but name_allow = ["category"] should suppress it
         let mut layer =
             make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
         layer.name_allow = vec!["category".to_string()];
@@ -1938,13 +1938,13 @@ mod tests {
         assert_eq!(
             violations.len(),
             0,
-            "ImportCategory should not be flagged: 'go' inside 'category' is allowed"
+            "ImportCategory should not be flagged: denied keyword inside 'category' is allowed"
         );
     }
 
     #[test]
     fn test_detect_naming_name_allow_does_not_suppress_standalone_keyword() {
-        // name_allow = ["category"] must NOT suppress "GoConfig" (no "category" in it)
+        // name_allow = ["category"] must NOT suppress names without "category" substring
         let mut layer =
             make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
         layer.name_allow = vec!["category".to_string()];
@@ -1962,7 +1962,7 @@ mod tests {
 
     #[test]
     fn test_detect_naming_name_allow_partial_coverage_still_violations() {
-        // "GoCategory" has standalone "Go" even after stripping "category" → still a violation
+        // Name still contains the denied keyword after stripping "category" -- still a violation
         let mut layer =
             make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
         layer.name_allow = vec!["category".to_string()];
