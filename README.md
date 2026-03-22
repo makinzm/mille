@@ -434,7 +434,9 @@ Exit codes:
 | `external_allow` | Allowed external packages (when `external_mode = "opt-in"`) |
 | `external_deny` | Forbidden external packages (when `external_mode = "opt-out"`) |
 | `name_deny` | Forbidden keywords for naming convention check (case-insensitive partial match) |
+| `name_allow` | Substrings to strip before `name_deny` check (e.g. `"category"` prevents `"go"` match inside it) |
 | `name_targets` | Targets to check: `"file"`, `"symbol"`, `"variable"`, `"comment"` (default: all) |
+| `name_deny_ignore` | Glob patterns for files to exclude from naming checks (e.g. `"**/test_*.rs"`) |
 
 #### Naming Convention Check (`name_deny`)
 
@@ -451,12 +453,16 @@ external_deny = []
 
 # Usecase layer must not reference specific infrastructure technologies
 name_deny    = ["gcp", "aws", "azure", "mysql", "postgres"]
+name_allow   = ["category"]   # "category" contains "go" but should not be flagged
 name_targets = ["file", "symbol", "variable", "comment"]  # default: all targets
+name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from naming checks
 ```
 
 **Rules:**
 - Case-insensitive (`GCP` = `gcp` = `Gcp`)
 - Partial match (`ManageGcp` also matches `gcp`)
+- `name_allow` strips listed substrings before matching (e.g. `"category"` prevents false positive on `"go"`)
+- `name_deny_ignore` excludes files matching glob patterns from naming checks entirely
 - `name_targets` restricts which entity types are checked:
   - `"file"`: file basename (e.g. `aws_client.rs`)
   - `"symbol"`: function, class, struct, enum, trait, interface, type alias names
