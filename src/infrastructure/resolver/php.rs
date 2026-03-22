@@ -80,10 +80,7 @@ impl PhpResolver {
     /// 1. `manual_namespace` — explicit value from `[resolve.php] namespace`
     /// 2. `composer_json_path` — auto-detect from `composer.json` `autoload.psr-4`
     /// 3. Empty string (no Internal classification possible)
-    pub fn from_config(
-        manual_namespace: Option<&str>,
-        composer_json_path: Option<&str>,
-    ) -> Self {
+    pub fn from_config(manual_namespace: Option<&str>, composer_json_path: Option<&str>) -> Self {
         let base_namespace = if let Some(ns) = manual_namespace {
             ns.to_string()
         } else if let Some(path) = composer_json_path {
@@ -140,8 +137,7 @@ pub fn classify_php(path: &str, base_namespace: &str) -> ImportCategory {
 
     // Check against configured base namespace
     if !base_namespace.is_empty()
-        && (path == base_namespace
-            || path.starts_with(&format!("{}\\", base_namespace)))
+        && (path == base_namespace || path.starts_with(&format!("{}\\", base_namespace)))
     {
         return ImportCategory::Internal;
     }

@@ -23,14 +23,296 @@ impl Parser for PhpParser {
     }
 }
 
-/// Parse PHP source code and extract all `use` statements.
+/// Parse PHP source code and extract all `use` declarations.
+///
+/// Handles:
+/// - Simple: `use App\Models\User;`
+/// - Aliased: `use App\Models\User as UserModel;` (alias ignored, original path returned)
+/// - Grouped: `use App\Services\{Auth, Logger};` (expands to one import per name)
+/// - Function: `use function App\Helpers\format_date;`
+/// - Constant: `use const App\Config\MAX_RETRIES;`
 pub fn parse_php_imports(source: &str, file_path: &str) -> Vec<RawImport> {
-    todo!()
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_php::language_php())
+        .expect("Failed to load PHP grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut imports = Vec::new();
+    collect_php_imports(root, source.as_bytes(), file_path, &mut imports);
+    imports
+}
+
+fn collect_php_imports(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawImport>) {
+    if node.kind() == "namespace_use_declaration" {
+        let line = node.start_position().row + 1;
+        extract_namespace_use_declaration(&node, source, file_path, line, out);
+        return;
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_php_imports(child, source, file_path, out);
+        }
+    }
+}
+
+/// Extract imports from a `namespace_use_declaration` node.
+///
+/// Two forms:
+/// 1. `use [function|const] clause1, clause2, ...;`
+///    → children include `namespace_use_clause` nodes
+/// 2. `use [function|const] Prefix\ {Name1, Name2, ...};`
+///    → children include a `namespace_name`, then `namespace_use_group`
+fn extract_namespace_use_declaration(
+    node: &Node,
+    source: &[u8],
+    file_path: &str,
+    line: usize,
+    out: &mut Vec<RawImport>,
+) {
+    // Check if this is a group use: look for namespace_use_group child
+    let mut prefix: Option<String> = None;
+    let mut has_group = false;
+
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        match child.kind() {
+            "namespace_name" => {
+                // Group use prefix: `App\Services` in `use App\Services\{Auth, Logger}`
+                prefix = extract_text(&child, source);
+            }
+            "namespace_use_group" => {
+                has_group = true;
+                let base = prefix.as_deref().unwrap_or("");
+                extract_group_use(&child, source, file_path, line, base, out);
+            }
+            "namespace_use_clause" => {
+                // Simple / aliased / function / const use
+                if let Some(path) = extract_use_clause_path(&child, source) {
+                    out.push(RawImport {
+                        path,
+                        line,
+                        file: file_path.to_string(),
+                        kind: ImportKind::Import,
+                        named_imports: vec![],
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let _ = has_group; // suppress unused warning
+}
+
+/// Extract the import path from a `namespace_use_clause` node.
+///
+/// Handles:
+/// - `qualified_name` (e.g. `App\Models\User`)
+/// - `name` (bare identifier)
+/// - Optional `namespace_aliasing_clause` is ignored (we return the original path).
+fn extract_use_clause_path(node: &Node, source: &[u8]) -> Option<String> {
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        match child.kind() {
+            "qualified_name" => return extract_qualified_name(&child, source),
+            "name" => return extract_text(&child, source),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Extract the fully-qualified path from a `qualified_name` node.
+///
+/// Structure: `namespace_name_as_prefix` + `name`
+/// where `namespace_name_as_prefix` contains a `namespace_name` child.
+///
+/// e.g. `App\Models\User`:
+///   qualified_name
+///     namespace_name_as_prefix
+///       namespace_name → "App\Models"
+///       \
+///     name → "User"
+fn extract_qualified_name(node: &Node, source: &[u8]) -> Option<String> {
+    let mut prefix = String::new();
+    let mut name = String::new();
+
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        match child.kind() {
+            "namespace_name_as_prefix" => {
+                prefix = extract_namespace_name_as_prefix(&child, source).unwrap_or_default();
+            }
+            "name" => {
+                name = extract_text(&child, source).unwrap_or_default();
+            }
+            _ => {}
+        }
+    }
+
+    if name.is_empty() {
+        return None;
+    }
+    if prefix.is_empty() {
+        Some(name)
+    } else {
+        Some(format!("{}\\{}", prefix, name))
+    }
+}
+
+/// Extract the namespace prefix from a `namespace_name_as_prefix` node.
+///
+/// The prefix is the `namespace_name` child's text (e.g. `App\Models`).
+fn extract_namespace_name_as_prefix(node: &Node, source: &[u8]) -> Option<String> {
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        if child.kind() == "namespace_name" {
+            return extract_namespace_name(&child, source);
+        }
+    }
+    None
+}
+
+/// Reconstruct a `namespace_name` node's text as a backslash-separated string.
+///
+/// The grammar represents `App\Models` as:
+///   namespace_name
+///     name "App"
+///     \ "\\"
+///     name "Models"
+///
+/// Walking children and joining non-`\` tokens produces the clean path.
+fn extract_namespace_name(node: &Node, source: &[u8]) -> Option<String> {
+    // The text of the node itself is the most reliable source.
+    extract_text(node, source)
+}
+
+/// Expand a `namespace_use_group` node into individual imports.
+///
+/// `use App\Services\{Auth, Logger}` → `App\Services\Auth`, `App\Services\Logger`
+///
+/// Each `namespace_use_group_clause` contains a `namespace_name` child.
+fn extract_group_use(
+    node: &Node,
+    source: &[u8],
+    file_path: &str,
+    line: usize,
+    base_prefix: &str,
+    out: &mut Vec<RawImport>,
+) {
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        if child.kind() == "namespace_use_group_clause" {
+            if let Some(suffix) = extract_group_clause_name(&child, source) {
+                let path = if base_prefix.is_empty() {
+                    suffix
+                } else {
+                    format!("{}\\{}", base_prefix, suffix)
+                };
+                out.push(RawImport {
+                    path,
+                    line,
+                    file: file_path.to_string(),
+                    kind: ImportKind::Import,
+                    named_imports: vec![],
+                });
+            }
+        }
+    }
+}
+
+/// Extract the name from a `namespace_use_group_clause` node.
+///
+/// Clause contains optional `function`/`const` keyword, then a `namespace_name`.
+fn extract_group_clause_name(node: &Node, source: &[u8]) -> Option<String> {
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else { continue };
+        if child.kind() == "namespace_name" {
+            return extract_namespace_name(&child, source);
+        }
+    }
+    None
 }
 
 /// Parse PHP source code and extract named entities for naming convention checks.
+///
+/// Extracts:
+/// - `Symbol`: class, interface, trait, enum declarations; function declarations
+/// - `Comment`: `comment` nodes (both `//` and `/* */` styles)
 pub fn parse_php_names(source: &str, file_path: &str) -> Vec<RawName> {
-    todo!()
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_php::language_php())
+        .expect("Failed to load PHP grammar");
+
+    let tree = parser.parse(source, None).expect("Failed to parse source");
+    let root = tree.root_node();
+
+    let mut names = Vec::new();
+    collect_php_names(root, source.as_bytes(), file_path, &mut names);
+    names
+}
+
+fn collect_php_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
+    let kind = node.kind();
+    let line = node.start_position().row + 1;
+
+    match kind {
+        // Symbols: class, interface, trait, enum declarations
+        "class_declaration"
+        | "interface_declaration"
+        | "trait_declaration"
+        | "enum_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Symbols: top-level and method function declarations
+        "function_definition" | "method_declaration" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line,
+                        kind: NameKind::Symbol,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+        }
+        // Comments
+        "comment" => {
+            let text = node.utf8_text(source).unwrap_or("").to_string();
+            if !text.is_empty() {
+                out.push(RawName {
+                    name: text,
+                    line,
+                    kind: NameKind::Comment,
+                    file: file_path.to_string(),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_php_names(child, source, file_path, out);
+        }
+    }
 }
 
 fn extract_text(node: &Node, source: &[u8]) -> Option<String> {
