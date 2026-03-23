@@ -31,6 +31,7 @@
 - ✅ ネーミング規則チェック (`name_deny` / `name_targets` / `name_allow` / `name_deny_ignore`) — レイヤーごとに禁止キーワードを設定し、ファイル名・シンボル名・変数名・コメントに禁止キーワードが含まれる場合に `NamingViolation` を報告（大文字小文字区別なし・部分一致）。`name_allow` で false positive を抑制、`name_deny_ignore` でグロブパターンにマッチするファイルを除外可能。対応言語: Rust/TypeScript/Python/Go/Java/Kotlin/PHP。`severity.naming_violation` で重大度設定可（PR #65）
 - ✅ `ParsedNames` 構造体によるコンパイルタイムガード — `Parser::parse_names` の戻り値を `ParsedNames` に変更し、新しい `NameKind` 追加時に全パーサーでコンパイルエラーが発生するよう保証。PHP/Python に Variable 抽出を追加（PR #68）
 - ✅ C 言語サポート — `.c`/`.h` ファイルの `#include` パース、`"..."` → Internal / `<stdlib>` → Stdlib / `<other>` → External 分類、Symbol/Variable/Comment naming 抽出、E2E テスト追加（PR #69）
+- ✅ `name_deny` 文字列リテラルチェック — `NameKind::StringLiteral` / `NameTarget::StringLiteral` 追加、全8言語パーサーで文字列リテラル抽出、`name_targets` で `"string_literal"` のオプトアウト可能（PR #71）
 - ✅ PHP 言語サポート — `.php` ファイルの `use` 文パース（simple/aliased/grouped/function/const）・Internal/External/Stdlib 分類、`[resolve.php] namespace` 設定、`composer.json` `autoload.psr-4` 自動検出、PHP stdlib クラス（DateTime/PDO/Exception 等）の Stdlib 自動分類
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：

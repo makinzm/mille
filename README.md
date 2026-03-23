@@ -435,7 +435,7 @@ Exit codes:
 | `external_deny` | Forbidden external packages (when `external_mode = "opt-out"`) |
 | `name_deny` | Forbidden keywords for naming convention check (case-insensitive partial match) |
 | `name_allow` | Substrings to strip before `name_deny` check (e.g. `"category"` prevents `"go"` match inside it) |
-| `name_targets` | Targets to check: `"file"`, `"symbol"`, `"variable"`, `"comment"` (default: all) |
+| `name_targets` | Targets to check: `"file"`, `"symbol"`, `"variable"`, `"comment"`, `"string_literal"` (default: all) |
 | `name_deny_ignore` | Glob patterns for files to exclude from naming checks (e.g. `"**/test_*.rs"`) |
 
 #### Naming Convention Check (`name_deny`)
@@ -454,7 +454,7 @@ external_deny = []
 # Usecase layer must not reference specific infrastructure technologies
 name_deny    = ["gcp", "aws", "azure", "mysql", "postgres"]
 name_allow   = ["category"]   # "category" contains "go" but should not be flagged
-name_targets = ["file", "symbol", "variable", "comment"]  # default: all targets
+name_targets = ["file", "symbol", "variable", "comment", "string_literal"]  # default: all targets
 name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from naming checks
 ```
 
@@ -468,7 +468,8 @@ name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from namin
   - `"symbol"`: function, class, struct, enum, trait, interface, type alias names
   - `"variable"`: variable, const, let, static declaration names
   - `"comment"`: inline comment content
-- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP
+  - `"string_literal"`: string literal content
+- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP, C
 - Severity is controlled by `severity.naming_violation` (default: `"error"`)
 
 ### `[[layers.allow_call_patterns]]`
