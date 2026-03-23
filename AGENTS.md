@@ -22,6 +22,17 @@
 - `external_allow=[]` を安易に使うと serde 等で他レイヤーが誤検知する
 - 設定項目の追加・変更時は `docs/e2e_checklist.md` を確認し、**意図的に壊したとき失敗する**テストが揃っているか検証する（正常系のみは無価値）
 
+## 言語追加チェックリスト
+
+新しい言語サポートを追加するとき、以下を **すべて** 完了する。parser/resolver だけでは未完成。
+
+1. **CI dogfooding**: `.github/workflows/ci.yml` の `dogfood-rust` ジョブに新 fixture の `mille check` ステップ追加 ← **最初にやる**
+2. **E2E fixture テスト**: `tests/fixtures/<lang>_sample/` + `tests/e2e_<lang>.rs` — `docs/e2e_checklist.md` の全項目をカバー
+3. **Website ドキュメント**: `website/src/content/docs/guides/languages/<lang>.md`（ja + en）、`index.mdx` のサポート表更新、`astro.config.mjs` のサイドバー追加
+4. **README.md**: フィーチャーマトリックスに言語列追加
+
+TODO.md を書く段階でこの 4 点を明示的にタスクとして含める。
+
 ## PR 作成前チェックリスト（順序厳守）
 
 1. `docs/TODO.md` 更新（完了チェック・実装状況サマリー）

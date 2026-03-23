@@ -1,3 +1,4 @@
+pub mod c;
 pub mod go;
 pub mod java;
 pub mod kotlin;
@@ -6,6 +7,7 @@ pub mod python;
 pub mod rust;
 pub mod typescript;
 
+use self::c::CParser;
 use self::go::GoParser;
 use self::java::JavaParser;
 use self::kotlin::KotlinParser;
@@ -42,6 +44,7 @@ pub(crate) fn partition_names(names: Vec<RawName>) -> ParsedNames {
 
 /// Dispatches to the appropriate parser based on file extension.
 pub struct DispatchingParser {
+    c: CParser,
     rust: RustParser,
     go: GoParser,
     python: PythonParser,
@@ -54,6 +57,7 @@ pub struct DispatchingParser {
 impl DispatchingParser {
     pub fn new() -> Self {
         DispatchingParser {
+            c: CParser,
             rust: RustParser,
             go: GoParser,
             python: PythonParser,
@@ -71,6 +75,10 @@ impl Default for DispatchingParser {
     }
 }
 
+fn is_c(file_path: &str) -> bool {
+    file_path.ends_with(".c") || file_path.ends_with(".h")
+}
+
 fn is_ts_js(file_path: &str) -> bool {
     file_path.ends_with(".ts")
         || file_path.ends_with(".tsx")
@@ -80,7 +88,9 @@ fn is_ts_js(file_path: &str) -> bool {
 
 impl Parser for DispatchingParser {
     fn parse_imports(&self, source: &str, file_path: &str) -> Vec<RawImport> {
-        if file_path.ends_with(".go") {
+        if is_c(file_path) {
+            self.c.parse_imports(source, file_path)
+        } else if file_path.ends_with(".go") {
             self.go.parse_imports(source, file_path)
         } else if file_path.ends_with(".py") {
             self.python.parse_imports(source, file_path)
@@ -98,7 +108,9 @@ impl Parser for DispatchingParser {
     }
 
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
-        if file_path.ends_with(".go") {
+        if is_c(file_path) {
+            self.c.parse_call_exprs(source, file_path)
+        } else if file_path.ends_with(".go") {
             self.go.parse_call_exprs(source, file_path)
         } else if file_path.ends_with(".py") {
             self.python.parse_call_exprs(source, file_path)
@@ -116,7 +128,9 @@ impl Parser for DispatchingParser {
     }
 
     fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
-        if file_path.ends_with(".go") {
+        if is_c(file_path) {
+            self.c.parse_names(source, file_path)
+        } else if file_path.ends_with(".go") {
             self.go.parse_names(source, file_path)
         } else if file_path.ends_with(".py") {
             self.python.parse_names(source, file_path)

@@ -18,12 +18,12 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 
 ## What it checks
 
-| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin | PHP |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin | PHP | C |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## Install
 
@@ -419,7 +419,7 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"`, `"php"` |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"`, `"php"`, `"c"` |
 
 ### `[[layers]]`
 
@@ -624,6 +624,35 @@ allow = ["domain", "application"]
 
 [resolve.php]
 composer_json = "composer.json"   # auto-detects "App\\" from autoload.psr-4
+```
+
+### C
+
+> `#include "..."` is classified as Internal (project header). `#include <...>` is classified as Stdlib (standard/POSIX headers) or External (third-party libraries).
+
+**Example `mille.toml` for a C project:**
+
+```toml
+[project]
+name    = "my-c-app"
+root    = "."
+languages = ["c"]
+
+[[layers]]
+name  = "domain"
+paths = ["src/domain/**"]
+
+[[layers]]
+name  = "usecase"
+paths = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+
+[[layers]]
+name  = "infrastructure"
+paths = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
 ```
 
 ## How it Works

@@ -333,6 +333,7 @@ fn ext_to_language(ext: &str) -> Option<&'static str> {
         "java" => Some("java"),
         "kt" => Some("kotlin"),
         "php" => Some("php"),
+        "c" | "h" => Some("c"),
         _ => None,
     }
 }

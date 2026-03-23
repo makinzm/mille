@@ -97,6 +97,14 @@ impl<'a> ViolationDetector<'a> {
             {
                 // Slash-separated imports: "vitest/config" -> "vitest", "@scope/pkg/sub" -> "@scope/pkg"
                 extract_ts_package_name(&import.raw.path)
+            } else if import.raw.file.ends_with(".c") || import.raw.file.ends_with(".h") {
+                // Slash-separated includes: "curl/curl.h" -> "curl", "sqlite3.h" -> "sqlite3.h"
+                import
+                    .raw
+                    .path
+                    .split('/')
+                    .next()
+                    .unwrap_or(&import.raw.path)
             } else if import.raw.file.ends_with(".php") {
                 // Backslash-separated imports: "Illuminate\Http\Request" -> "Illuminate"
                 import
