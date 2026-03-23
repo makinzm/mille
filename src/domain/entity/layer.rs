@@ -10,6 +10,7 @@ pub enum NameTarget {
     Symbol,
     Variable,
     Comment,
+    StringLiteral,
 }
 
 impl NameTarget {
@@ -19,6 +20,7 @@ impl NameTarget {
             NameTarget::Symbol,
             NameTarget::Variable,
             NameTarget::Comment,
+            NameTarget::StringLiteral,
         ]
     }
 
@@ -28,6 +30,7 @@ impl NameTarget {
             NameTarget::Symbol => NameKind::Symbol,
             NameTarget::Variable => NameKind::Variable,
             NameTarget::Comment => NameKind::Comment,
+            NameTarget::StringLiteral => NameKind::StringLiteral,
         }
     }
 }

@@ -299,6 +299,7 @@ impl<'a> ViolationDetector<'a> {
                         crate::domain::entity::name::NameKind::Symbol => "symbol",
                         crate::domain::entity::name::NameKind::Variable => "variable",
                         crate::domain::entity::name::NameKind::Comment => "comment",
+                        crate::domain::entity::name::NameKind::StringLiteral => "string_literal",
                     };
                     violations.push(Violation {
                         file: raw_name.file.clone(),

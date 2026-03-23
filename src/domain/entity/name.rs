@@ -22,6 +22,8 @@ pub enum NameKind {
     Variable,
     /// Inline comment content.
     Comment,
+    /// String literal content.
+    StringLiteral,
 }
 
 /// Parsed names grouped by kind.
@@ -36,16 +38,23 @@ pub struct ParsedNames {
     pub variables: Vec<RawName>,
     /// Inline comment contents.
     pub comments: Vec<RawName>,
+    /// String literal contents.
+    pub string_literals: Vec<RawName>,
 }
 
 impl ParsedNames {
     /// Flatten all parsed names into a single `Vec<RawName>`.
     pub fn into_all(self) -> Vec<RawName> {
-        let mut out =
-            Vec::with_capacity(self.symbols.len() + self.variables.len() + self.comments.len());
+        let mut out = Vec::with_capacity(
+            self.symbols.len()
+                + self.variables.len()
+                + self.comments.len()
+                + self.string_literals.len(),
+        );
         out.extend(self.symbols);
         out.extend(self.variables);
         out.extend(self.comments);
+        out.extend(self.string_literals);
         out
     }
 }
