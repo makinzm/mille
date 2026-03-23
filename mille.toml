@@ -31,7 +31,6 @@ external_mode = "opt-in"
 external_allow = []
 name_deny = ["python", "go", "java", "kotlin", "javascript", "typescript", "ruby", "php", "csharp", "cpp", "rust"]
 name_allow = ["algorithm", "cargo", "ergonomic"]
-name_deny_ignore = ["src/usecase/init.rs"]
 
 [[layers]]
 name = "presentation"
