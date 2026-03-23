@@ -162,6 +162,20 @@ fn collect_c_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Raw
                 });
             }
         }
+        // String literals
+        "string_literal" => {
+            let text = node.utf8_text(source).unwrap_or("");
+            let content = super::strip_string_delimiters(text);
+            if !content.is_empty() {
+                out.push(RawName {
+                    name: content,
+                    line,
+                    kind: NameKind::StringLiteral,
+                    file: file_path.to_string(),
+                });
+            }
+            return;
+        }
         _ => {}
     }
 
