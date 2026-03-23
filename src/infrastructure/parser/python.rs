@@ -455,4 +455,40 @@ mod tests {
         );
         assert_eq!(found.unwrap().line, 1);
     }
+
+    #[test]
+    fn test_py_parse_names_attribute_identifier() {
+        let source = "bucket_base = str(cfg.gcp.staging_bucket).rstrip(\"/\")\n";
+        let names = parse_python_names(source, "test.py").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "attribute access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let staging = names
+            .iter()
+            .find(|n| n.name == "staging_bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            staging.is_some(),
+            "attribute access 'staging_bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_py_parse_names_docstring_string_literal() {
+        let source = "def train():\n    \"\"\"cfg.gcp.project: GCP プロジェクト ID\"\"\"\n    pass\n";
+        let names = parse_python_names(source, "test.py").into_all();
+        let found = names
+            .iter()
+            .find(|n| n.kind == NameKind::StringLiteral && n.name.contains("gcp"));
+        assert!(
+            found.is_some(),
+            "docstring containing 'gcp' should be detected as StringLiteral, got: {:#?}",
+            names
+        );
+    }
 }
