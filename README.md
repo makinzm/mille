@@ -23,7 +23,7 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 | Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## Install
 
