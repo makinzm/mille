@@ -105,10 +105,23 @@ impl Resolver for CResolver {
             None
         };
 
+        let package_name = if category == ImportCategory::External {
+            Some(
+                import
+                    .path
+                    .split('/')
+                    .next()
+                    .unwrap_or(&import.path)
+                    .to_string(),
+            )
+        } else {
+            None
+        };
         ResolvedImport {
             raw: import.clone(),
             category,
             resolved_path,
+            package_name,
         }
     }
 }

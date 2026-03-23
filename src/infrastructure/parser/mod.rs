@@ -25,12 +25,14 @@ pub(crate) fn partition_names(names: Vec<RawName>) -> ParsedNames {
     let mut symbols = Vec::new();
     let mut variables = Vec::new();
     let mut comments = Vec::new();
+    let mut string_literals = Vec::new();
 
     for name in names {
         match name.kind {
             NameKind::Symbol => symbols.push(name),
             NameKind::Variable => variables.push(name),
             NameKind::Comment => comments.push(name),
+            NameKind::StringLiteral => string_literals.push(name),
             NameKind::File => {} // File-level checks are handled by the caller
         }
     }
@@ -39,6 +41,69 @@ pub(crate) fn partition_names(names: Vec<RawName>) -> ParsedNames {
         symbols,
         variables,
         comments,
+        string_literals,
+    }
+}
+
+/// Strip surrounding quotes/delimiters from a string literal node text.
+///
+/// Handles `"..."`, `'...'`, `r#"..."#`, `` `...` ``, `"""..."""`, etc.
+pub(crate) fn strip_string_delimiters(text: &str) -> String {
+    let t = text.trim();
+    // Rust raw string: r#"..."# or r##"..."##
+    if t.starts_with('r') && t.contains('"') {
+        if let Some(start) = t.find('"') {
+            let after_open = start + 1;
+            if let Some(end) = t.rfind('"') {
+                if end > after_open {
+                    return t[after_open..end].to_string();
+                }
+            }
+        }
+        return t.to_string();
+    }
+    // Triple-quoted strings (Python, Kotlin)
+    if t.starts_with("\"\"\"") && t.ends_with("\"\"\"") && t.len() >= 6 {
+        return t[3..t.len() - 3].to_string();
+    }
+    if t.starts_with("'''") && t.ends_with("'''") && t.len() >= 6 {
+        return t[3..t.len() - 3].to_string();
+    }
+    // Single/double quoted
+    if ((t.starts_with('"') && t.ends_with('"')) || (t.starts_with('\'') && t.ends_with('\'')))
+        && t.len() >= 2
+    {
+        return t[1..t.len() - 1].to_string();
+    }
+    // Backtick (Go raw strings, JS template literals)
+    if t.starts_with('`') && t.ends_with('`') && t.len() >= 2 {
+        return t[1..t.len() - 1].to_string();
+    }
+    t.to_string()
+}
+
+/// Concrete implementation of `LanguageDetector` using file extensions.
+pub struct ExtensionLanguageDetector;
+
+impl crate::domain::repository::language_detector::LanguageDetector for ExtensionLanguageDetector {
+    fn detect_from_extension(&self, ext: &str) -> Option<String> {
+        ext_to_language(ext).map(|s| s.to_string())
+    }
+}
+
+/// Map a file extension to the language name used in `mille.toml`.
+pub fn ext_to_language(ext: &str) -> Option<&'static str> {
+    match ext {
+        "rs" => Some("rust"),
+        "ts" | "tsx" => Some("typescript"),
+        "js" | "jsx" | "mjs" | "cjs" => Some("javascript"),
+        "go" => Some("go"),
+        "py" => Some("python"),
+        "java" => Some("java"),
+        "kt" => Some("kotlin"),
+        "php" => Some("php"),
+        "c" | "h" => Some("c"),
+        _ => None,
     }
 }
 

@@ -21,25 +21,18 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-```
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  presentation
-  · · · · · · · · · · · · · · · · · ·  (deps only flow inward)
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  infrastructure
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  usecase
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  domain
-```
-
 `mille` is a static analysis CLI that enforces **dependency rules for layered architectures** — Clean Architecture, Onion Architecture, Hexagonal Architecture, and more.
 
 ## What it checks
 
-| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin | PHP | C |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+**Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C
+
+| Check | Description |
+|---|---|
+| `dependency_mode` | Layer dependency rules — control which layers can import from which |
+| `external_mode` | External library rules — restrict third-party package usage per layer |
+| `allow_call_patterns` | DI method call rules — limit which methods may be called on injected types |
+| `name_deny` | Naming convention rules — forbid infrastructure keywords in domain/usecase |
 
 <CardGrid>
   <Card title="Install" icon="rocket">

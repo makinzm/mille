@@ -167,6 +167,7 @@ mod tests {
                 symbols: vec![],
                 variables: vec![],
                 comments: vec![],
+                string_literals: vec![],
             }
         }
     }
@@ -178,6 +179,7 @@ mod tests {
                 raw: import.clone(),
                 category: crate::domain::entity::resolved_import::ImportCategory::Unknown,
                 resolved_path: None,
+                package_name: None,
             }
         }
     }
@@ -365,7 +367,7 @@ mod tests {
     #[test]
     fn test_matches_any_glob_double_star() {
         assert!(matches_any_glob(
-            "tests/fixtures/go_sample/domain/user.go",
+            "tests/fixtures/sample_project/domain/user.txt",
             &["tests/fixtures/**".to_string()]
         ));
     }

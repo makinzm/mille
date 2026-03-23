@@ -250,6 +250,68 @@ mod tests {
     }
 
     #[test]
+    fn test_module_path_ignored_for_non_go_language() {
+        let gen = DefaultResolveConfigGenerator {
+            module_path_name: Some("github.com/example/ignored".to_string()),
+            package_prefix_name: None,
+        };
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
+        let toml = gen.generate_resolve_toml(&["rust".to_string()], &layers);
+        assert!(!toml.contains("[resolve.go]"));
+    }
+
+    #[test]
+    fn test_package_prefix_ignored_for_non_java_language() {
+        let gen = DefaultResolveConfigGenerator {
+            module_path_name: None,
+            package_prefix_name: Some("com.example.ignored".to_string()),
+        };
+        let layers = vec![make_layer("domain", vec!["src/domain/**"])];
+        let toml = gen.generate_resolve_toml(&["rust".to_string()], &layers);
+        assert!(!toml.contains("[resolve.java]"));
+    }
+
+    #[test]
+    fn test_kotlin_triggers_package_prefix_resolve() {
+        let gen = DefaultResolveConfigGenerator {
+            module_path_name: None,
+            package_prefix_name: Some("com.example.myapp".to_string()),
+        };
+        let layers = vec![make_layer("domain", vec!["**/domain/**"])];
+        let toml = gen.generate_resolve_toml(&["kotlin".to_string()], &layers);
+        assert!(toml.contains("[resolve.java]"));
+        assert!(toml.contains("module_name = \"com.example.myapp\""));
+    }
+
+    #[test]
+    fn test_monorepo_package_names_deduplicated() {
+        let gen = DefaultResolveConfigGenerator {
+            module_path_name: None,
+            package_prefix_name: None,
+        };
+        let layers = vec![
+            make_layer("crawler_domain", vec!["crawler/src/domain/**"]),
+            make_layer("server_domain", vec!["server/src/domain/**"]),
+            make_layer("crawler_usecase", vec!["crawler/src/usecase/**"]),
+        ];
+        let names = gen.internal_package_names(&["python".to_string()], &layers);
+        // "domain" appears in two layers but should be deduplicated in BTreeSet
+        assert!(names.contains("domain"));
+        assert!(names.contains("usecase"));
+    }
+
+    #[test]
+    fn test_package_prefix_without_module_name_produces_nothing() {
+        let gen = DefaultResolveConfigGenerator {
+            module_path_name: None,
+            package_prefix_name: None,
+        };
+        let layers = vec![make_layer("domain", vec!["**/domain/**"])];
+        let toml = gen.generate_resolve_toml(&["java".to_string()], &layers);
+        assert!(!toml.contains("[resolve.java]"));
+    }
+
+    #[test]
     fn test_is_valid_import_identifier() {
         assert!(is_valid_import_identifier("domain"));
         assert!(is_valid_import_identifier("_private"));

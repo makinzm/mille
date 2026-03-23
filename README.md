@@ -2,28 +2,20 @@
 
 > Like a mille crêpe — your architecture, one clean layer at a time.
 
-```
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  presentation
-  · · · · · · · · · · · · · · · · · ·  (deps only flow inward)
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  infrastructure
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  usecase
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  domain
-```
-
 `mille` is a static analysis CLI that enforces **dependency rules for layered architectures** — Clean Architecture, Onion Architecture, Hexagonal Architecture, and more.
 
 One TOML config. Rust-powered. CI-ready. Supports multiple languages from a single config file.
 
 ## What it checks
 
-| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin | PHP | C |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+**Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C
+
+| Check | Description |
+|---|---|
+| `dependency_mode` | Layer dependency rules — control which layers can import from which |
+| `external_mode` | External library rules — restrict third-party package usage per layer |
+| `allow_call_patterns` | DI method call rules — limit which methods may be called on injected types |
+| `name_deny` | Naming convention rules — forbid infrastructure keywords in domain/usecase |
 
 ## Install
 
@@ -435,7 +427,7 @@ Exit codes:
 | `external_deny` | Forbidden external packages (when `external_mode = "opt-out"`) |
 | `name_deny` | Forbidden keywords for naming convention check (case-insensitive partial match) |
 | `name_allow` | Substrings to strip before `name_deny` check (e.g. `"category"` prevents `"go"` match inside it) |
-| `name_targets` | Targets to check: `"file"`, `"symbol"`, `"variable"`, `"comment"` (default: all) |
+| `name_targets` | Targets to check: `"file"`, `"symbol"`, `"variable"`, `"comment"`, `"string_literal"` (default: all) |
 | `name_deny_ignore` | Glob patterns for files to exclude from naming checks (e.g. `"**/test_*.rs"`) |
 
 #### Naming Convention Check (`name_deny`)
@@ -454,7 +446,7 @@ external_deny = []
 # Usecase layer must not reference specific infrastructure technologies
 name_deny    = ["gcp", "aws", "azure", "mysql", "postgres"]
 name_allow   = ["category"]   # "category" contains "go" but should not be flagged
-name_targets = ["file", "symbol", "variable", "comment"]  # default: all targets
+name_targets = ["file", "symbol", "variable", "comment", "string_literal"]  # default: all targets
 name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from naming checks
 ```
 
@@ -468,7 +460,8 @@ name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from namin
   - `"symbol"`: function, class, struct, enum, trait, interface, type alias names
   - `"variable"`: variable, const, let, static declaration names
   - `"comment"`: inline comment content
-- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP
+  - `"string_literal"`: string literal content
+- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP, C
 - Severity is controlled by `severity.naming_violation` (default: `"error"`)
 
 ### `[[layers.allow_call_patterns]]`

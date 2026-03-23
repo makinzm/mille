@@ -77,7 +77,7 @@ mod tests {
 [project]
 name = "myproject"
 root = "."
-languages = ["rust"]
+languages = ["mylang"]
 
 [[layers]]
 name = "domain"
@@ -96,7 +96,7 @@ external_mode = "opt-in"
 [project]
 name = "myproject"
 root = "."
-languages = ["rust"]
+languages = ["mylang"]
 
 [[layers]]
 name = "usecase"
@@ -123,7 +123,7 @@ name_deny = ["aws", "gcp"]
 [project]
 name = "myproject"
 root = "."
-languages = ["rust"]
+languages = ["mylang"]
 
 [[layers]]
 name = "usecase"
@@ -154,7 +154,7 @@ name_targets = ["file", "symbol"]
 [project]
 name = "myproject"
 root = "."
-languages = ["rust"]
+languages = ["mylang"]
 
 [[layers]]
 name = "usecase"
@@ -180,7 +180,7 @@ name_deny = ["aws"]
 [project]
 name = "myproject"
 root = "."
-languages = ["rust"]
+languages = ["mylang"]
 
 [[layers]]
 name = "usecase"
@@ -208,7 +208,7 @@ naming_violation = "error"
 [project]
 name = "myproject"
 root = "."
-languages = ["rust"]
+languages = ["mylang"]
 
 [[layers]]
 name = "usecase"
@@ -229,7 +229,7 @@ external_mode = "opt-out"
 [project]
 name = "myproject"
 root = "."
-languages = ["rust"]
+languages = ["mylang"]
 
 [[layers]]
 name = "domain"

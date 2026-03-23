@@ -134,10 +134,23 @@ fn resolve_php_impl(import: &RawImport, base_namespace: &str, src_dir: &str) -> 
     } else {
         None
     };
+    let package_name = if category == ImportCategory::External {
+        Some(
+            import
+                .path
+                .split('\\')
+                .next()
+                .unwrap_or(&import.path)
+                .to_string(),
+        )
+    } else {
+        None
+    };
     ResolvedImport {
         raw: import.clone(),
         category,
         resolved_path,
+        package_name,
     }
 }
 

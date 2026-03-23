@@ -203,7 +203,8 @@ fn run_cli_inner(cli: Cli) {
                 .to_string_lossy()
                 .to_string();
 
-            let languages = init::detect_languages(&cwd);
+            let lang_detector = crate::infrastructure::parser::ExtensionLanguageDetector;
+            let languages = init::detect_languages(&cwd, &lang_detector);
             println!("Detected languages: {}", languages.join(", "));
 
             // Detect Go module name from go.mod (if present)

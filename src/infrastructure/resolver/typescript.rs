@@ -62,6 +62,7 @@ fn resolve_ts_impl(import: &RawImport, aliases: &HashMap<String, String>) -> Res
             raw: import.clone(),
             category: ImportCategory::Internal,
             resolved_path: Some(format!("{}/_.ts", clean)),
+            package_name: None,
         };
     }
 
@@ -71,10 +72,34 @@ fn resolve_ts_impl(import: &RawImport, aliases: &HashMap<String, String>) -> Res
     } else {
         None
     };
+    let package_name = if category == ImportCategory::External {
+        Some(extract_ts_package_name(&import.path).to_string())
+    } else {
+        None
+    };
     ResolvedImport {
         raw: import.clone(),
         category,
         resolved_path,
+        package_name,
+    }
+}
+
+/// Extract the top-level package name from a TypeScript/JavaScript import path.
+///
+/// Scoped packages: `@scope/name/sub` → `@scope/name`
+/// Non-scoped: `react/dom` → `react`
+fn extract_ts_package_name(path: &str) -> &str {
+    if let Some(rest) = path.strip_prefix('@') {
+        if let Some(first_slash) = rest.find('/') {
+            let after_scope = &rest[first_slash + 1..];
+            let name_end = after_scope.find('/').unwrap_or(after_scope.len());
+            &path[..1 + first_slash + 1 + name_end]
+        } else {
+            path
+        }
+    } else {
+        path.split('/').next().unwrap_or(path)
     }
 }
 
