@@ -1,8 +1,9 @@
 use tree_sitter::Node;
 
+use super::partition_names;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::{NameKind, RawName};
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Go source files.
@@ -17,7 +18,7 @@ impl Parser for GoParser {
         parse_go_call_exprs(source, file_path)
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         parse_go_names(source, file_path)
     }
 }
@@ -28,7 +29,7 @@ impl Parser for GoParser {
 /// - `Symbol`: function_declaration, method_declaration, type_declaration names
 /// - `Variable`: var_declaration, const_declaration, short_var_declaration identifiers
 /// - `Comment`: comment content
-pub fn parse_go_names(source: &str, file_path: &str) -> Vec<RawName> {
+pub fn parse_go_names(source: &str, file_path: &str) -> ParsedNames {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_go::language())
@@ -39,7 +40,7 @@ pub fn parse_go_names(source: &str, file_path: &str) -> Vec<RawName> {
 
     let mut names = Vec::new();
     collect_go_names(root, source.as_bytes(), file_path, &mut names);
-    names
+    partition_names(names)
 }
 
 fn collect_go_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
@@ -391,7 +392,7 @@ mod tests {
     #[test]
     fn test_go_parse_names_function() {
         let source = "package main\n\nfunc AwsHandler() {}\n";
-        let names = parse_go_names(source, "test.go");
+        let names = parse_go_names(source, "test.go").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "AwsHandler" && n.kind == NameKind::Symbol);
@@ -406,7 +407,7 @@ mod tests {
     #[test]
     fn test_go_parse_names_var() {
         let source = "package main\n\nvar awsUrl string\n";
-        let names = parse_go_names(source, "test.go");
+        let names = parse_go_names(source, "test.go").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "awsUrl" && n.kind == NameKind::Variable);
@@ -420,7 +421,7 @@ mod tests {
     #[test]
     fn test_go_parse_names_line_comment() {
         let source = "package main\n\n// connect to aws\nfunc f() {}\n";
-        let names = parse_go_names(source, "test.go");
+        let names = parse_go_names(source, "test.go").into_all();
         let found = names
             .iter()
             .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));

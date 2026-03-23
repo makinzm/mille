@@ -1,8 +1,9 @@
 use tree_sitter::Node;
 
+use super::partition_names;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::{NameKind, RawName};
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for TypeScript and JavaScript source files.
@@ -18,7 +19,7 @@ impl Parser for TypeScriptParser {
         parse_ts_call_exprs(source, file_path)
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         parse_ts_names(source, file_path)
     }
 }
@@ -29,7 +30,7 @@ impl Parser for TypeScriptParser {
 /// - `Symbol`: function, class, interface, type alias, method definitions
 /// - `Variable`: variable declarators (const, let, var)
 /// - `Comment`: line and block comment content
-pub fn parse_ts_names(source: &str, file_path: &str) -> Vec<RawName> {
+pub fn parse_ts_names(source: &str, file_path: &str) -> ParsedNames {
     let mut parser = tree_sitter::Parser::new();
     let language = select_language(file_path);
     parser
@@ -41,7 +42,7 @@ pub fn parse_ts_names(source: &str, file_path: &str) -> Vec<RawName> {
 
     let mut names = Vec::new();
     collect_ts_names(root, source.as_bytes(), file_path, &mut names);
-    names
+    partition_names(names)
 }
 
 fn collect_ts_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
@@ -458,7 +459,7 @@ mod tests {
     #[test]
     fn test_ts_parse_names_function() {
         let source = "function awsHandler() {}";
-        let names = parse_ts_names(source, "test.ts");
+        let names = parse_ts_names(source, "test.ts").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "awsHandler" && n.kind == NameKind::Symbol);
@@ -472,7 +473,7 @@ mod tests {
     #[test]
     fn test_ts_parse_names_class() {
         let source = "class AwsClient {}";
-        let names = parse_ts_names(source, "test.ts");
+        let names = parse_ts_names(source, "test.ts").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
@@ -486,7 +487,7 @@ mod tests {
     #[test]
     fn test_ts_parse_names_interface() {
         let source = "interface AwsConfig {}";
-        let names = parse_ts_names(source, "test.ts");
+        let names = parse_ts_names(source, "test.ts").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "AwsConfig" && n.kind == NameKind::Symbol);
@@ -500,7 +501,7 @@ mod tests {
     #[test]
     fn test_ts_parse_names_const_variable() {
         let source = "const awsUrl = \"https://aws.example.com\";";
-        let names = parse_ts_names(source, "test.ts");
+        let names = parse_ts_names(source, "test.ts").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "awsUrl" && n.kind == NameKind::Variable);
@@ -514,7 +515,7 @@ mod tests {
     #[test]
     fn test_ts_parse_names_line_comment() {
         let source = "// connect to aws\nconst x = 1;";
-        let names = parse_ts_names(source, "test.ts");
+        let names = parse_ts_names(source, "test.ts").into_all();
         let found = names
             .iter()
             .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));

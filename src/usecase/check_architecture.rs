@@ -101,7 +101,7 @@ pub fn check(
             }
             // Naming check: parse names if the layer has name_deny rules
             if !layer.name_deny.is_empty() {
-                all_raw_names.extend(parser.parse_names(&source, file_path));
+                all_raw_names.extend(parser.parse_names(&source, file_path).into_all());
             }
         }
     }
@@ -133,6 +133,7 @@ mod tests {
     use crate::domain::entity::config::MilleConfig;
     use crate::domain::entity::import::RawImport;
     use crate::domain::entity::layer::{DependencyMode, LayerConfig, NameTarget};
+    use crate::domain::entity::name::ParsedNames;
     use crate::domain::entity::resolved_import::ResolvedImport;
 
     // ------------------------------------------------------------------
@@ -161,8 +162,12 @@ mod tests {
         fn parse_call_exprs(&self, _: &str, _: &str) -> Vec<RawCallExpr> {
             vec![]
         }
-        fn parse_names(&self, _: &str, _: &str) -> Vec<crate::domain::entity::name::RawName> {
-            vec![]
+        fn parse_names(&self, _: &str, _: &str) -> ParsedNames {
+            ParsedNames {
+                symbols: vec![],
+                variables: vec![],
+                comments: vec![],
+            }
         }
     }
 

@@ -15,8 +15,30 @@ use self::rust::RustParser;
 use self::typescript::TypeScriptParser;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::RawImport;
-use crate::domain::entity::name::RawName;
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
+
+/// Partition a flat `Vec<RawName>` into a `ParsedNames` struct grouped by kind.
+pub(crate) fn partition_names(names: Vec<RawName>) -> ParsedNames {
+    let mut symbols = Vec::new();
+    let mut variables = Vec::new();
+    let mut comments = Vec::new();
+
+    for name in names {
+        match name.kind {
+            NameKind::Symbol => symbols.push(name),
+            NameKind::Variable => variables.push(name),
+            NameKind::Comment => comments.push(name),
+            NameKind::File => {} // File-level checks are handled by the caller
+        }
+    }
+
+    ParsedNames {
+        symbols,
+        variables,
+        comments,
+    }
+}
 
 /// Dispatches to the appropriate parser based on file extension.
 pub struct DispatchingParser {
@@ -93,7 +115,7 @@ impl Parser for DispatchingParser {
         }
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         if file_path.ends_with(".go") {
             self.go.parse_names(source, file_path)
         } else if file_path.ends_with(".py") {
