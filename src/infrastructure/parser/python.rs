@@ -101,6 +101,25 @@ fn collect_python_names(node: Node, source: &[u8], file_path: &str, out: &mut Ve
                 });
             }
         }
+        // Attribute access: extract the attribute identifier (e.g. `gcp` from `cfg.gcp`)
+        "attribute" => {
+            if let Some(attr_node) = node.child_by_field_name("attribute") {
+                let name = attr_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: attr_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into object to capture nested attributes (e.g. cfg.gcp.bucket → gcp, bucket)
+            if let Some(obj) = node.child_by_field_name("object") {
+                collect_python_names(obj, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -454,5 +473,42 @@ mod tests {
             names
         );
         assert_eq!(found.unwrap().line, 1);
+    }
+
+    #[test]
+    fn test_py_parse_names_attribute_identifier() {
+        let source = "bucket_base = str(cfg.gcp.staging_bucket).rstrip(\"/\")\n";
+        let names = parse_python_names(source, "test.py").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "attribute access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let staging = names
+            .iter()
+            .find(|n| n.name == "staging_bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            staging.is_some(),
+            "attribute access 'staging_bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_py_parse_names_docstring_string_literal() {
+        let source =
+            "def train():\n    \"\"\"cfg.gcp.project: GCP プロジェクト ID\"\"\"\n    pass\n";
+        let names = parse_python_names(source, "test.py").into_all();
+        let found = names
+            .iter()
+            .find(|n| n.kind == NameKind::StringLiteral && n.name.contains("gcp"));
+        assert!(
+            found.is_some(),
+            "docstring containing 'gcp' should be detected as StringLiteral, got: {:#?}",
+            names
+        );
     }
 }

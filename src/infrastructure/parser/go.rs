@@ -126,6 +126,25 @@ fn collect_go_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Ra
                 });
             }
         }
+        // Identifier: selector expression (e.g. `pkg.Func` → extract `Func`)
+        "selector_expression" => {
+            if let Some(field_node) = node.child_by_field_name("field") {
+                let name = field_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: field_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into operand to capture nested selectors
+            if let Some(operand) = node.child_by_field_name("operand") {
+                collect_go_names(operand, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "interpreted_string_literal" | "raw_string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -442,6 +461,28 @@ mod tests {
         assert!(
             found.is_some(),
             "line comment with aws should be detected, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_go_parse_names_selector_identifier() {
+        let source = "package main\n\nfunc f() { x := config.Gcp.Bucket }\n";
+        let names = parse_go_names(source, "test.go").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "Gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "selector 'Gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "Bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "selector 'Bucket' should be detected as Identifier, got: {:#?}",
             names
         );
     }

@@ -103,6 +103,25 @@ fn collect_rust_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
                 });
             }
         }
+        // Identifier: field access (e.g. `obj.field` → extract `field`)
+        "field_expression" => {
+            if let Some(field_node) = node.child_by_field_name("field") {
+                let name = field_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: field_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into value to capture nested field access
+            if let Some(value) = node.child_by_field_name("value") {
+                collect_rust_names(value, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string_literal" | "raw_string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -627,5 +646,27 @@ mod tests {
         let source = "";
         let names = parse_rust_names(source, "test.rs").into_all();
         assert!(names.is_empty(), "empty source should produce no names");
+    }
+
+    #[test]
+    fn test_rust_parse_names_field_identifier() {
+        let source = "fn main() { let x = config.gcp.bucket; }";
+        let names = parse_rust_names(source, "test.rs").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "field access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "field access 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
     }
 }

@@ -26,6 +26,7 @@ pub(crate) fn partition_names(names: Vec<RawName>) -> ParsedNames {
     let mut variables = Vec::new();
     let mut comments = Vec::new();
     let mut string_literals = Vec::new();
+    let mut identifiers = Vec::new();
 
     for name in names {
         match name.kind {
@@ -33,6 +34,7 @@ pub(crate) fn partition_names(names: Vec<RawName>) -> ParsedNames {
             NameKind::Variable => variables.push(name),
             NameKind::Comment => comments.push(name),
             NameKind::StringLiteral => string_literals.push(name),
+            NameKind::Identifier => identifiers.push(name),
             NameKind::File => {} // File-level checks are handled by the caller
         }
     }
@@ -42,6 +44,7 @@ pub(crate) fn partition_names(names: Vec<RawName>) -> ParsedNames {
         variables,
         comments,
         string_literals,
+        identifiers,
     }
 }
 

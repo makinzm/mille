@@ -116,6 +116,25 @@ fn collect_java_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
                 });
             }
         }
+        // Identifier: field access (e.g. `obj.field` → extract `field`)
+        "field_access" => {
+            if let Some(field_node) = node.child_by_field_name("field") {
+                let name = field_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: field_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into object to capture nested field access
+            if let Some(obj) = node.child_by_field_name("object") {
+                collect_java_names(obj, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -252,5 +271,29 @@ mod tests {
         let source = "package com.example;\n\npublic class Foo { public void bar() {} }\n";
         let calls = parser.parse_call_exprs(source, "Foo.java");
         assert!(calls.is_empty());
+    }
+
+    #[test]
+    fn test_java_parse_names_field_access_identifier() {
+        use crate::domain::entity::name::NameKind;
+        let source =
+            "package com.example;\npublic class Foo { void bar() { String x = config.gcp.bucket; } }\n";
+        let names = parse_java_names(source, "Foo.java").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "field access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "field access 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
     }
 }

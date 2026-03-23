@@ -103,6 +103,54 @@ fn collect_kotlin_names(node: Node, source: &[u8], file_path: &str, out: &mut Ve
                 });
             }
         }
+        // Identifier: navigation expression (e.g. `obj.prop` → extract `prop`)
+        "navigation_expression" => {
+            // navigation_expression children: object, navigation_suffix
+            // navigation_suffix contains the identifier after the dot
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.kind() == "navigation_suffix" {
+                        // The identifier inside navigation_suffix
+                        if let Some(id) = child.child_by_field_name("name") {
+                            let name = id.utf8_text(source).unwrap_or("").to_string();
+                            if !name.is_empty() {
+                                out.push(RawName {
+                                    name,
+                                    line: id.start_position().row + 1,
+                                    kind: NameKind::Identifier,
+                                    file: file_path.to_string(),
+                                });
+                            }
+                        } else {
+                            // Fallback: try simple_identifier child
+                            for j in 0..child.child_count() {
+                                if let Some(inner) = child.child(j) {
+                                    if inner.kind() == "simple_identifier" {
+                                        let name =
+                                            inner.utf8_text(source).unwrap_or("").to_string();
+                                        if !name.is_empty() {
+                                            out.push(RawName {
+                                                name,
+                                                line: inner.start_position().row + 1,
+                                                kind: NameKind::Identifier,
+                                                file: file_path.to_string(),
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Recurse into first child (the object) to capture nested navigation
+            if let Some(obj) = node.child(0) {
+                if obj.kind() != "navigation_suffix" {
+                    collect_kotlin_names(obj, source, file_path, out);
+                }
+            }
+            return;
+        }
         // String literals
         "line_string_literal" | "multi_line_string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -231,5 +279,28 @@ mod tests {
         let source = "package com.example\n\nclass Foo { fun bar() {} }\n";
         let calls = parser.parse_call_exprs(source, "Foo.kt");
         assert!(calls.is_empty());
+    }
+
+    #[test]
+    fn test_kotlin_parse_names_navigation_identifier() {
+        use crate::domain::entity::name::NameKind;
+        let source = "package com.example\n\nfun main() { val x = config.gcp.bucket }\n";
+        let names = parse_kotlin_names(source, "Foo.kt").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "navigation 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "navigation 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
     }
 }

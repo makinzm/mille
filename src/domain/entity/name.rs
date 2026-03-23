@@ -24,6 +24,8 @@ pub enum NameKind {
     Comment,
     /// String literal content.
     StringLiteral,
+    /// Identifier reference (e.g. attribute access segments like `gcp` in `cfg.gcp.bucket`).
+    Identifier,
 }
 
 /// Parsed names grouped by kind.
@@ -40,6 +42,8 @@ pub struct ParsedNames {
     pub comments: Vec<RawName>,
     /// String literal contents.
     pub string_literals: Vec<RawName>,
+    /// Identifier references (e.g. attribute access segments).
+    pub identifiers: Vec<RawName>,
 }
 
 impl ParsedNames {
@@ -49,12 +53,14 @@ impl ParsedNames {
             self.symbols.len()
                 + self.variables.len()
                 + self.comments.len()
-                + self.string_literals.len(),
+                + self.string_literals.len()
+                + self.identifiers.len(),
         );
         out.extend(self.symbols);
         out.extend(self.variables);
         out.extend(self.comments);
         out.extend(self.string_literals);
+        out.extend(self.identifiers);
         out
     }
 }

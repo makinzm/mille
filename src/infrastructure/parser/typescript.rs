@@ -132,6 +132,25 @@ fn collect_ts_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Ra
                 });
             }
         }
+        // Identifier: member access (e.g. `obj.prop` → extract `prop`)
+        "member_expression" => {
+            if let Some(prop_node) = node.child_by_field_name("property") {
+                let name = prop_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: prop_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into object to capture nested member access
+            if let Some(obj) = node.child_by_field_name("object") {
+                collect_ts_names(obj, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string" | "template_string" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -536,6 +555,28 @@ mod tests {
         assert!(
             found.is_some(),
             "line comment with aws should be detected, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_ts_parse_names_member_identifier() {
+        let source = "const x = config.gcp.bucket;";
+        let names = parse_ts_names(source, "test.ts").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "member access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "member access 'bucket' should be detected as Identifier, got: {:#?}",
             names
         );
     }

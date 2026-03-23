@@ -327,6 +327,44 @@ fn collect_php_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<R
                 });
             }
         }
+        // Identifier: member access (e.g. `$obj->prop` → extract `prop`)
+        "member_access_expression" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: name_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into object to capture nested access
+            if let Some(obj) = node.child_by_field_name("object") {
+                collect_php_names(obj, source, file_path, out);
+            }
+            return;
+        }
+        // Identifier: scoped access (e.g. `Class::prop` → extract `prop`)
+        "scoped_property_access_expression" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: name_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into scope to capture nested access
+            if let Some(scope) = node.child_by_field_name("scope") {
+                collect_php_names(scope, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string" | "encapsed_string" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -565,5 +603,27 @@ mod tests {
         let source = "<?php\nclass Foo {}\n";
         let calls = parse_php_call_exprs(source, "test.php");
         assert!(calls.is_empty());
+    }
+
+    #[test]
+    fn test_php_parse_names_member_access_identifier() {
+        let source = "<?php\n$x = $config->gcp->bucket;\n";
+        let names = parse_php_names(source, "test.php").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "member access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "member access 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
     }
 }

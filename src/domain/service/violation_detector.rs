@@ -265,6 +265,7 @@ impl<'a> ViolationDetector<'a> {
                         crate::domain::entity::name::NameKind::Variable => "variable",
                         crate::domain::entity::name::NameKind::Comment => "comment",
                         crate::domain::entity::name::NameKind::StringLiteral => "string_literal",
+                        crate::domain::entity::name::NameKind::Identifier => "identifier",
                     };
                     violations.push(Violation {
                         file: raw_name.file.clone(),
@@ -2117,6 +2118,57 @@ mod tests {
             violations.len(),
             0,
             "StringLiteral should be ignored when name_targets=[Symbol, Variable]"
+        );
+    }
+
+    #[test]
+    fn test_detect_naming_identifier_violation() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["gcp"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "gcp",
+            NameKind::Identifier,
+            10,
+            "src/usecase/training/vertex_train.py",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "Identifier 'gcp' should violate name_deny"
+        );
+        assert_eq!(violations[0].from_layer, "usecase");
+        assert_eq!(violations[0].to_layer, "identifier");
+        assert_eq!(violations[0].import_path, "gcp");
+        assert_eq!(violations[0].kind, ViolationKind::NamingViolation);
+    }
+
+    #[test]
+    fn test_detect_naming_target_filter_excludes_identifier() {
+        // name_targets = [Symbol] のとき Identifier は対象外
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["gcp"],
+            vec![NameTarget::Symbol],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "gcp",
+            NameKind::Identifier,
+            10,
+            "src/usecase/training/vertex_train.py",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "Identifier should be ignored when name_targets=[Symbol]"
         );
     }
 }
