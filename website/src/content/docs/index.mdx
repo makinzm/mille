@@ -21,25 +21,18 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-```
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  presentation
-  · · · · · · · · · · · · · · · · · ·  (deps only flow inward)
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  infrastructure
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  usecase
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  domain
-```
-
 `mille` は、クリーンアーキテクチャ・オニオンアーキテクチャ・ヘキサゴナルアーキテクチャなど、**レイヤードアーキテクチャの依存ルールを静的解析する CLI ツール**です。
 
 ## チェック機能
 
-| チェック | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin | PHP | C |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| レイヤー依存ルール (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 外部ライブラリルール (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DI メソッド呼び出しルール (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+**対応言語:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C
+
+| チェック | 説明 |
+|---|---|
+| `dependency_mode` | レイヤー間の依存ルール — どのレイヤーからどのレイヤーへの import を許可するか |
+| `external_mode` | 外部ライブラリルール — レイヤーごとにサードパーティの使用を制限 |
+| `allow_call_patterns` | DI メソッド呼び出しルール — 注入された型で呼べるメソッドを制限 |
+| `name_deny` | ネーミング規則 — domain/usecase にインフラ固有キーワードが現れないか検査 |
 
 <CardGrid>
   <Card title="インストール" icon="rocket">

@@ -2,28 +2,20 @@
 
 > Like a mille crêpe — your architecture, one clean layer at a time.
 
-```
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  presentation
-  · · · · · · · · · · · · · · · · · ·  (deps only flow inward)
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  infrastructure
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  usecase
-  · · · · · · · · · · · · · · · · · ·
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  domain
-```
-
 `mille` is a static analysis CLI that enforces **dependency rules for layered architectures** — Clean Architecture, Onion Architecture, Hexagonal Architecture, and more.
 
 One TOML config. Rust-powered. CI-ready. Supports multiple languages from a single config file.
 
 ## What it checks
 
-| Check | Rust | Go | TypeScript | JavaScript | Python | Java | Kotlin | PHP | C |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Layer dependency rules (`dependency_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| External library rules (`external_mode`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| DI method call rules (`allow_call_patterns`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Naming convention rules (`name_deny`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+**Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C
+
+| Check | Description |
+|---|---|
+| `dependency_mode` | Layer dependency rules — control which layers can import from which |
+| `external_mode` | External library rules — restrict third-party package usage per layer |
+| `allow_call_patterns` | DI method call rules — limit which methods may be called on injected types |
+| `name_deny` | Naming convention rules — forbid infrastructure keywords in domain/usecase |
 
 ## Install
 
