@@ -647,4 +647,26 @@ mod tests {
         let names = parse_rust_names(source, "test.rs").into_all();
         assert!(names.is_empty(), "empty source should produce no names");
     }
+
+    #[test]
+    fn test_rust_parse_names_field_identifier() {
+        let source = "fn main() { let x = config.gcp.bucket; }";
+        let names = parse_rust_names(source, "test.rs").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "field access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "field access 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
+    }
 }

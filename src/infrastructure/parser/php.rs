@@ -604,4 +604,26 @@ mod tests {
         let calls = parse_php_call_exprs(source, "test.php");
         assert!(calls.is_empty());
     }
+
+    #[test]
+    fn test_php_parse_names_member_access_identifier() {
+        let source = "<?php\n$x = $config->gcp->bucket;\n";
+        let names = parse_php_names(source, "test.php").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "member access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "member access 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
+    }
 }

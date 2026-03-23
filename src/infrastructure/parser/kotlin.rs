@@ -280,4 +280,27 @@ mod tests {
         let calls = parser.parse_call_exprs(source, "Foo.kt");
         assert!(calls.is_empty());
     }
+
+    #[test]
+    fn test_kotlin_parse_names_navigation_identifier() {
+        use crate::domain::entity::name::NameKind;
+        let source = "package com.example\n\nfun main() { val x = config.gcp.bucket }\n";
+        let names = parse_kotlin_names(source, "Foo.kt").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "navigation 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "navigation 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
+    }
 }

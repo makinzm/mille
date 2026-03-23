@@ -558,4 +558,26 @@ mod tests {
             names
         );
     }
+
+    #[test]
+    fn test_ts_parse_names_member_identifier() {
+        let source = "const x = config.gcp.bucket;";
+        let names = parse_ts_names(source, "test.ts").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "member access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "member access 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
+    }
 }

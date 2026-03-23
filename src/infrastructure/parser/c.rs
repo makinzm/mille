@@ -386,4 +386,26 @@ mod tests {
             names
         );
     }
+
+    #[test]
+    fn test_c_parse_names_field_identifier() {
+        let source = "void f() { int x = config.gcp.bucket; }";
+        let names = parse_c_names(source, "test.c").into_all();
+        let gcp = names
+            .iter()
+            .find(|n| n.name == "gcp" && n.kind == NameKind::Identifier);
+        assert!(
+            gcp.is_some(),
+            "field access 'gcp' should be detected as Identifier, got: {:#?}",
+            names
+        );
+        let bucket = names
+            .iter()
+            .find(|n| n.name == "bucket" && n.kind == NameKind::Identifier);
+        assert!(
+            bucket.is_some(),
+            "field access 'bucket' should be detected as Identifier, got: {:#?}",
+            names
+        );
+    }
 }
