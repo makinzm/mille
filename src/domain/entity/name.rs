@@ -41,7 +41,8 @@ pub struct ParsedNames {
 impl ParsedNames {
     /// Flatten all parsed names into a single `Vec<RawName>`.
     pub fn into_all(self) -> Vec<RawName> {
-        let mut out = Vec::with_capacity(self.symbols.len() + self.variables.len() + self.comments.len());
+        let mut out =
+            Vec::with_capacity(self.symbols.len() + self.variables.len() + self.comments.len());
         out.extend(self.symbols);
         out.extend(self.variables);
         out.extend(self.comments);

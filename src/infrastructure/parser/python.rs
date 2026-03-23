@@ -1,8 +1,9 @@
 use tree_sitter::Node;
 
+use super::partition_names;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::{NameKind, RawName};
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Python source files.
@@ -17,7 +18,7 @@ impl Parser for PythonParser {
         parse_python_call_exprs(source, file_path)
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         parse_python_names(source, file_path)
     }
 }
@@ -28,7 +29,7 @@ impl Parser for PythonParser {
 /// - `Symbol`: function_definition, class_definition names
 /// - `Variable`: assignment targets at module/function scope (simple identifiers)
 /// - `Comment`: comment content
-pub fn parse_python_names(source: &str, file_path: &str) -> Vec<RawName> {
+pub fn parse_python_names(source: &str, file_path: &str) -> ParsedNames {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_python::language())
@@ -39,7 +40,7 @@ pub fn parse_python_names(source: &str, file_path: &str) -> Vec<RawName> {
 
     let mut names = Vec::new();
     collect_python_names(root, source.as_bytes(), file_path, &mut names);
-    names
+    partition_names(names)
 }
 
 fn collect_python_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
@@ -70,6 +71,22 @@ fn collect_python_names(node: Node, source: &[u8], file_path: &str, out: &mut Ve
                         kind: NameKind::Symbol,
                         file: file_path.to_string(),
                     });
+                }
+            }
+        }
+        // Variables: simple assignments (x = ...) at module/function scope
+        "assignment" => {
+            if let Some(left) = node.child_by_field_name("left") {
+                if left.kind() == "identifier" {
+                    let name = left.utf8_text(source).unwrap_or("").to_string();
+                    if !name.is_empty() {
+                        out.push(RawName {
+                            name,
+                            line,
+                            kind: NameKind::Variable,
+                            file: file_path.to_string(),
+                        });
+                    }
                 }
             }
         }
@@ -384,7 +401,7 @@ mod tests {
     #[test]
     fn test_py_parse_names_function() {
         let source = "def aws_handler():\n    pass\n";
-        let names = parse_python_names(source, "test.py");
+        let names = parse_python_names(source, "test.py").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "aws_handler" && n.kind == NameKind::Symbol);
@@ -399,7 +416,7 @@ mod tests {
     #[test]
     fn test_py_parse_names_class() {
         let source = "class AwsClient:\n    pass\n";
-        let names = parse_python_names(source, "test.py");
+        let names = parse_python_names(source, "test.py").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
@@ -413,7 +430,7 @@ mod tests {
     #[test]
     fn test_py_parse_names_comment() {
         let source = "# connect to aws\nx = 1\n";
-        let names = parse_python_names(source, "test.py");
+        let names = parse_python_names(source, "test.py").into_all();
         let found = names
             .iter()
             .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));

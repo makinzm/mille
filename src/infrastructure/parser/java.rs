@@ -1,8 +1,9 @@
 use tree_sitter::Node;
 
+use super::partition_names;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::{NameKind, RawName};
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Java source files.
@@ -19,7 +20,7 @@ impl Parser for JavaParser {
         vec![]
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         parse_java_names(source, file_path)
     }
 }
@@ -32,7 +33,7 @@ impl Parser for JavaParser {
 /// - `Comment`: line_comment, block_comment
 ///
 /// NOTE: tree-sitter-java comment node types are `line_comment` and `block_comment`.
-pub fn parse_java_names(source: &str, file_path: &str) -> Vec<RawName> {
+pub fn parse_java_names(source: &str, file_path: &str) -> ParsedNames {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_java::language())
@@ -43,7 +44,7 @@ pub fn parse_java_names(source: &str, file_path: &str) -> Vec<RawName> {
 
     let mut names = Vec::new();
     collect_java_names(root, source.as_bytes(), file_path, &mut names);
-    names
+    partition_names(names)
 }
 
 fn collect_java_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {

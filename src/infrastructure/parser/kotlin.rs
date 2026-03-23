@@ -1,8 +1,9 @@
 use tree_sitter::Node;
 
+use super::partition_names;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::{NameKind, RawName};
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Kotlin source files.
@@ -17,7 +18,7 @@ impl Parser for KotlinParser {
         vec![]
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         parse_kotlin_names(source, file_path)
     }
 }
@@ -30,7 +31,7 @@ impl Parser for KotlinParser {
 /// - `Comment`: multiline_comment, line_comment
 ///
 /// NOTE: tree-sitter-kotlin comment node types are `multiline_comment` and `line_comment`.
-pub fn parse_kotlin_names(source: &str, file_path: &str) -> Vec<RawName> {
+pub fn parse_kotlin_names(source: &str, file_path: &str) -> ParsedNames {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_kotlin::language())
@@ -41,7 +42,7 @@ pub fn parse_kotlin_names(source: &str, file_path: &str) -> Vec<RawName> {
 
     let mut names = Vec::new();
     collect_kotlin_names(root, source.as_bytes(), file_path, &mut names);
-    names
+    partition_names(names)
 }
 
 fn collect_kotlin_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {

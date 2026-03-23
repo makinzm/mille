@@ -1,8 +1,9 @@
 use tree_sitter::Node;
 
+use super::partition_names;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::{NameKind, RawName};
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for PHP source files.
@@ -17,7 +18,7 @@ impl Parser for PhpParser {
         parse_php_call_exprs(source, file_path)
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         parse_php_names(source, file_path)
     }
 }
@@ -222,8 +223,9 @@ fn extract_group_clause_name(node: &Node, source: &[u8]) -> Option<String> {
 ///
 /// Extracts:
 /// - `Symbol`: class, interface, trait, enum declarations; function declarations
+/// - `Variable`: property declarations, const declarations
 /// - `Comment`: `comment` nodes (both `//` and `/* */` styles)
-pub fn parse_php_names(source: &str, file_path: &str) -> Vec<RawName> {
+pub fn parse_php_names(source: &str, file_path: &str) -> ParsedNames {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_php::language_php())
@@ -234,7 +236,7 @@ pub fn parse_php_names(source: &str, file_path: &str) -> Vec<RawName> {
 
     let mut names = Vec::new();
     collect_php_names(root, source.as_bytes(), file_path, &mut names);
-    names
+    partition_names(names)
 }
 
 fn collect_php_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
@@ -270,6 +272,46 @@ fn collect_php_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<R
                         kind: NameKind::Symbol,
                         file: file_path.to_string(),
                     });
+                }
+            }
+        }
+        // Variables: property declarations (class properties)
+        "property_declaration" => {
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.kind() == "property_element" {
+                        if let Some(var_node) = child.child(0) {
+                            let name = var_node.utf8_text(source).unwrap_or("").to_string();
+                            if !name.is_empty() {
+                                out.push(RawName {
+                                    name,
+                                    line: child.start_position().row + 1,
+                                    kind: NameKind::Variable,
+                                    file: file_path.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Variables: const declarations (class constants)
+        "const_declaration" => {
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.kind() == "const_element" {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = name_node.utf8_text(source).unwrap_or("").to_string();
+                            if !name.is_empty() {
+                                out.push(RawName {
+                                    name,
+                                    line: child.start_position().row + 1,
+                                    kind: NameKind::Variable,
+                                    file: file_path.to_string(),
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -449,7 +491,7 @@ mod tests {
     #[test]
     fn test_parse_php_names_class() {
         let source = "<?php\nclass UserController {}\n";
-        let names = parse_php_names(source, "test.php");
+        let names = parse_php_names(source, "test.php").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "UserController" && n.kind == NameKind::Symbol);
@@ -464,7 +506,7 @@ mod tests {
     #[test]
     fn test_parse_php_names_function() {
         let source = "<?php\nfunction getUserById() {}\n";
-        let names = parse_php_names(source, "test.php");
+        let names = parse_php_names(source, "test.php").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "getUserById" && n.kind == NameKind::Symbol);
@@ -478,7 +520,7 @@ mod tests {
     #[test]
     fn test_parse_php_names_comment() {
         let source = "<?php\n// connect to db\n$x = 1;\n";
-        let names = parse_php_names(source, "test.php");
+        let names = parse_php_names(source, "test.php").into_all();
         let found = names
             .iter()
             .find(|n| n.kind == NameKind::Comment && n.name.contains("connect to db"));

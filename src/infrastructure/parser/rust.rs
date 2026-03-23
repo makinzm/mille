@@ -1,8 +1,9 @@
 use tree_sitter::Node;
 
+use super::partition_names;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::{ImportKind, RawImport};
-use crate::domain::entity::name::{NameKind, RawName};
+use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
 use crate::domain::repository::parser::Parser;
 
 /// Concrete implementation of the `Parser` port for Rust source files.
@@ -17,7 +18,7 @@ impl Parser for RustParser {
         parse_rust_call_exprs(source, file_path)
     }
 
-    fn parse_names(&self, source: &str, file_path: &str) -> Vec<RawName> {
+    fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
         parse_rust_names(source, file_path)
     }
 }
@@ -28,7 +29,7 @@ impl Parser for RustParser {
 /// - `Symbol`: function, struct, enum, trait, type alias, impl block names
 /// - `Variable`: let bindings, const, static declarations
 /// - `Comment`: line_comment, block_comment content
-pub fn parse_rust_names(source: &str, file_path: &str) -> Vec<RawName> {
+pub fn parse_rust_names(source: &str, file_path: &str) -> ParsedNames {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_rust::language())
@@ -39,7 +40,7 @@ pub fn parse_rust_names(source: &str, file_path: &str) -> Vec<RawName> {
 
     let mut names = Vec::new();
     collect_rust_names(root, source.as_bytes(), file_path, &mut names);
-    names
+    partition_names(names)
 }
 
 fn collect_rust_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<RawName>) {
@@ -510,7 +511,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_function() {
         let source = "fn aws_handler() {}";
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "aws_handler" && n.kind == NameKind::Symbol);
@@ -525,7 +526,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_struct() {
         let source = "struct AwsClient;";
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "AwsClient" && n.kind == NameKind::Symbol);
@@ -539,7 +540,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_enum() {
         let source = "enum AwsRegion { Us, Eu }";
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "AwsRegion" && n.kind == NameKind::Symbol);
@@ -553,7 +554,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_let_variable() {
         let source = "fn f() { let aws_url = \"\"; }";
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "aws_url" && n.kind == NameKind::Variable);
@@ -567,7 +568,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_const() {
         let source = r#"const AWS_KEY: &str = "";"#;
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         let found = names
             .iter()
             .find(|n| n.name == "AWS_KEY" && n.kind == NameKind::Variable);
@@ -581,7 +582,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_line_comment() {
         let source = "// connect to aws\nfn f() {}";
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         let found = names
             .iter()
             .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
@@ -596,7 +597,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_block_comment() {
         let source = "/* aws integration */\nfn f() {}";
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         let found = names
             .iter()
             .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
@@ -610,7 +611,7 @@ mod tests {
     #[test]
     fn test_rust_parse_names_no_names_in_empty_source() {
         let source = "";
-        let names = parse_rust_names(source, "test.rs");
+        let names = parse_rust_names(source, "test.rs").into_all();
         assert!(names.is_empty(), "empty source should produce no names");
     }
 }
