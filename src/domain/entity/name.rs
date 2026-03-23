@@ -23,3 +23,28 @@ pub enum NameKind {
     /// Inline comment content.
     Comment,
 }
+
+/// Parsed names grouped by kind.
+///
+/// `Default` is intentionally NOT derived so that adding a new field
+/// causes a compile error in every parser that constructs this struct.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ParsedNames {
+    /// Function, struct, enum, class, trait, interface, type alias definition names.
+    pub symbols: Vec<RawName>,
+    /// Variable, const, let, static declaration names.
+    pub variables: Vec<RawName>,
+    /// Inline comment contents.
+    pub comments: Vec<RawName>,
+}
+
+impl ParsedNames {
+    /// Flatten all parsed names into a single `Vec<RawName>`.
+    pub fn into_all(self) -> Vec<RawName> {
+        let mut out = Vec::with_capacity(self.symbols.len() + self.variables.len() + self.comments.len());
+        out.extend(self.symbols);
+        out.extend(self.variables);
+        out.extend(self.comments);
+        out
+    }
+}
