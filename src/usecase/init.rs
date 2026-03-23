@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::domain::entity::layer::{DependencyMode, LayerConfig, NameTarget};
+use crate::domain::repository::language_detector::LanguageDetector;
 use crate::domain::repository::resolve_config_generator::ResolveConfigGenerator;
 
 /// Per-directory import analysis, built externally by the infrastructure layer.
@@ -294,13 +295,13 @@ pub fn is_excluded_dir(name: &str) -> bool {
 
 /// Detect project languages from file extensions under `root`.
 /// Returns a sorted, deduplicated list of language names.
-pub fn detect_languages(root: &str) -> Vec<String> {
+pub fn detect_languages(root: &str, detector: &dyn LanguageDetector) -> Vec<String> {
     let mut langs: BTreeSet<String> = BTreeSet::new();
-    collect_languages(Path::new(root), &mut langs);
+    collect_languages(Path::new(root), &mut langs, detector);
     langs.into_iter().collect()
 }
 
-fn collect_languages(dir: &Path, langs: &mut BTreeSet<String>) {
+fn collect_languages(dir: &Path, langs: &mut BTreeSet<String>, detector: &dyn LanguageDetector) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -314,10 +315,10 @@ fn collect_languages(dir: &Path, langs: &mut BTreeSet<String>) {
             continue;
         }
         if path.is_dir() {
-            collect_languages(&path, langs);
+            collect_languages(&path, langs, detector);
         } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            if let Some(lang) = crate::infrastructure::parser::ext_to_language(ext) {
-                langs.insert(lang.to_string());
+            if let Some(lang) = detector.detect_from_extension(ext) {
+                langs.insert(lang);
             }
         }
     }
@@ -426,6 +427,14 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::PathBuf;
+
+    /// Test stub that uses the real extension-to-language mapping.
+    struct StubLanguageDetector;
+    impl LanguageDetector for StubLanguageDetector {
+        fn detect_from_extension(&self, ext: &str) -> Option<String> {
+            crate::infrastructure::parser::ext_to_language(ext).map(|s| s.to_string())
+        }
+    }
 
     /// Test stub that generates no resolve sections and reports no internal packages.
     struct NoResolveGen;
@@ -1372,7 +1381,7 @@ mod tests {
     fn test_detect_languages_from_extensions() {
         let tmp = TempDir::new("lang_rust");
         make_file(tmp.path(), "src/main.rs");
-        let langs = detect_languages(tmp.path().to_str().unwrap());
+        let langs = detect_languages(tmp.path().to_str().unwrap(), &StubLanguageDetector);
         assert_eq!(langs, vec!["rust".to_string()]);
     }
 
@@ -1381,7 +1390,7 @@ mod tests {
         let tmp = TempDir::new("lang_multi");
         make_file(tmp.path(), "src/main.rs");
         make_file(tmp.path(), "src/index.ts");
-        let langs = detect_languages(tmp.path().to_str().unwrap());
+        let langs = detect_languages(tmp.path().to_str().unwrap(), &StubLanguageDetector);
         assert!(langs.contains(&"rust".to_string()));
         assert!(langs.contains(&"typescript".to_string()));
     }

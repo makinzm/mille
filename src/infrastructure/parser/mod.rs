@@ -82,6 +82,15 @@ pub(crate) fn strip_string_delimiters(text: &str) -> String {
     t.to_string()
 }
 
+/// Concrete implementation of `LanguageDetector` using file extensions.
+pub struct ExtensionLanguageDetector;
+
+impl crate::domain::repository::language_detector::LanguageDetector for ExtensionLanguageDetector {
+    fn detect_from_extension(&self, ext: &str) -> Option<String> {
+        ext_to_language(ext).map(|s| s.to_string())
+    }
+}
+
 /// Map a file extension to the language name used in `mille.toml`.
 pub fn ext_to_language(ext: &str) -> Option<&'static str> {
     match ext {
