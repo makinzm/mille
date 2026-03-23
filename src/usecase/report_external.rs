@@ -140,6 +140,7 @@ mod tests {
             },
             category,
             resolved_path: None,
+            package_name: None,
         }
     }
 
@@ -281,6 +282,7 @@ mod tests {
             },
             category: ImportCategory::External,
             resolved_path: None,
+            package_name: None,
         }];
 
         let result = compute_external_report(&imports, &layers);

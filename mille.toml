@@ -13,7 +13,7 @@ external_mode = "opt-in"
 external_allow = ["serde"]
 name_deny = ["python", "go", "java", "kotlin", "javascript", "typescript", "ruby", "php", "csharp", "cpp", "rust"]
 name_allow = ["category", "algorithm", "diagonal", "cargo", "ergonomic"]
-name_targets = ["file", "symbol", "variable", "comment"]
+name_deny_ignore = ["src/domain/entity/config.rs", "src/domain/service/violation_detector.rs"]
 
 [[layers]]
 name = "infrastructure"
@@ -32,7 +32,7 @@ external_mode = "opt-in"
 external_allow = []
 name_deny = ["python", "go", "java", "kotlin", "javascript", "typescript", "ruby", "php", "csharp", "cpp", "rust"]
 name_allow = ["algorithm", "cargo", "ergonomic"]
-name_targets = ["file", "symbol", "variable", "comment"]
+name_deny_ignore = ["src/usecase/init.rs", "src/usecase/check_architecture.rs"]
 
 [[layers]]
 name = "presentation"

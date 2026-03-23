@@ -82,46 +82,11 @@ impl<'a> ViolationDetector<'a> {
             let Some(from_layer) = self.find_layer_for_file(&import.raw.file) else {
                 continue;
             };
-            let crate_name: &str = if import.raw.file.ends_with(".py") {
-                // Dot-separated imports: "matplotlib.pyplot" -> "matplotlib"
-                import
-                    .raw
-                    .path
-                    .split('.')
-                    .next()
-                    .unwrap_or(&import.raw.path)
-            } else if import.raw.file.ends_with(".ts")
-                || import.raw.file.ends_with(".tsx")
-                || import.raw.file.ends_with(".js")
-                || import.raw.file.ends_with(".jsx")
-            {
-                // Slash-separated imports: "vitest/config" -> "vitest", "@scope/pkg/sub" -> "@scope/pkg"
-                extract_ts_package_name(&import.raw.path)
-            } else if import.raw.file.ends_with(".c") || import.raw.file.ends_with(".h") {
-                // Slash-separated includes: "curl/curl.h" -> "curl", "sqlite3.h" -> "sqlite3.h"
-                import
-                    .raw
-                    .path
-                    .split('/')
-                    .next()
-                    .unwrap_or(&import.raw.path)
-            } else if import.raw.file.ends_with(".php") {
-                // Backslash-separated imports: "Illuminate\Http\Request" -> "Illuminate"
-                import
-                    .raw
-                    .path
-                    .split('\\')
-                    .next()
-                    .unwrap_or(&import.raw.path)
-            } else {
-                // Colon-separated imports: "serde::Deserialize" -> "serde"
-                // Full-path imports: full path used as-is (no "::" separator)
-                import
-                    .raw
-                    .path
-                    .split("::")
-                    .next()
-                    .unwrap_or(&import.raw.path)
+            // Use package_name set by the resolver (language-aware, no extension checks here).
+            // Fallback to raw path for backwards compatibility with tests.
+            let crate_name: &str = match &import.package_name {
+                Some(name) => name.as_str(),
+                None => &import.raw.path,
             };
             let allowed = match from_layer.external_mode {
                 DependencyMode::OptIn => from_layer
@@ -367,27 +332,6 @@ fn matches_external_pattern(pattern: &str, crate_name: &str) -> bool {
     pattern == crate_name
 }
 
-/// Extract the npm package name from a slash-separated import path.
-///
-/// - Non-scoped: `"vitest/config"` -> `"vitest"`, `"react"` -> `"react"`
-/// - Scoped: `"@vueuse/core/utilities"` -> `"@vueuse/core"`, `"@scope/pkg"` -> `"@scope/pkg"`
-fn extract_ts_package_name(path: &str) -> &str {
-    if let Some(rest) = path.strip_prefix('@') {
-        // Scoped package: @scope/name[/subpath] → @scope/name
-        // Skip '@', find first slash (end of scope), then find next slash (end of name).
-        if let Some(first_slash) = rest.find('/') {
-            let after_scope = &rest[first_slash + 1..];
-            let name_end = after_scope.find('/').unwrap_or(after_scope.len());
-            &path[..1 + first_slash + 1 + name_end]
-        } else {
-            path
-        }
-    } else {
-        // Non-scoped: first segment before '/'
-        path.split('/').next().unwrap_or(path)
-    }
-}
-
 /// Extract the type/package name brought into scope by an import path.
 ///
 /// - Colon-separated: `"crate::infrastructure::Repo"` -> `Some("Repo")`
@@ -467,6 +411,22 @@ mod tests {
             },
             category: ImportCategory::Internal,
             resolved_path: Some(resolved.to_string()),
+            package_name: None,
+        }
+    }
+
+    fn make_external(file: &str, line: usize, path: &str, package: &str) -> ResolvedImport {
+        ResolvedImport {
+            raw: RawImport {
+                path: path.to_string(),
+                line,
+                file: file.to_string(),
+                kind: ImportKind::Use,
+                named_imports: vec![],
+            },
+            category: ImportCategory::External,
+            resolved_path: None,
+            package_name: Some(package.to_string()),
         }
     }
 
@@ -744,6 +704,7 @@ mod tests {
                 },
                 category: ImportCategory::Stdlib,
                 resolved_path: None,
+                package_name: None,
             },
             ResolvedImport {
                 raw: RawImport {
@@ -755,6 +716,7 @@ mod tests {
                 },
                 category: ImportCategory::External,
                 resolved_path: None,
+                package_name: None,
             },
         ];
 
@@ -853,20 +815,6 @@ mod tests {
         }
     }
 
-    fn make_external(file: &str, line: usize, path: &str) -> ResolvedImport {
-        ResolvedImport {
-            raw: RawImport {
-                path: path.to_string(),
-                line,
-                file: file.to_string(),
-                kind: ImportKind::Use,
-                named_imports: vec![],
-            },
-            category: ImportCategory::External,
-            resolved_path: None,
-        }
-    }
-
     #[test]
     fn test_detect_external_opt_in_allowed_crate_no_violation() {
         // domain opt-in, external_allow=["serde"] → serde import OK
@@ -882,6 +830,7 @@ mod tests {
             "src/domain/entity/config.rs",
             1,
             "serde::Deserialize",
+            "serde",
         )];
         assert!(detector.detect_external(&imports).is_empty());
     }
@@ -901,6 +850,7 @@ mod tests {
             "src/domain/entity/config.rs",
             1,
             "serde::Deserialize",
+            "serde",
         )];
         let violations = detector.detect_external(&imports);
         assert_eq!(violations.len(), 1);
@@ -927,6 +877,7 @@ mod tests {
             "src/infrastructure/parser/rust.rs",
             1,
             "tree_sitter::Node",
+            "tree_sitter",
         )];
         assert!(detector.detect_external(&imports).is_empty());
     }
@@ -942,7 +893,12 @@ mod tests {
             &["sqlx"],
         )];
         let detector = ViolationDetector::new(&layers);
-        let imports = vec![make_external("src/infrastructure/db.rs", 5, "sqlx::query")];
+        let imports = vec![make_external(
+            "src/infrastructure/db.rs",
+            5,
+            "sqlx::query",
+            "sqlx",
+        )];
         let violations = detector.detect_external(&imports);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].from_layer, "infrastructure");
@@ -962,8 +918,13 @@ mod tests {
         )];
         let detector = ViolationDetector::new(&layers);
         let imports = vec![
-            make_external("src/infra/db.rs", 1, "sqlx::query"),
-            make_external("src/infra/orm.rs", 2, "sea_orm::DatabaseConnection"),
+            make_external("src/infra/db.rs", 1, "sqlx::query", "sqlx"),
+            make_external(
+                "src/infra/orm.rs",
+                2,
+                "sea_orm::DatabaseConnection",
+                "sea_orm",
+            ),
         ];
         assert!(detector.detect_external(&imports).is_empty());
     }
@@ -979,7 +940,7 @@ mod tests {
             &[],
         )];
         let detector = ViolationDetector::new(&layers);
-        let imports = vec![make_external("src/infra/db.rs", 1, "sqlx::query")];
+        let imports = vec![make_external("src/infra/db.rs", 1, "sqlx::query", "sqlx")];
         // "sqlx|sea_orm" is not "sqlx", so this must be a violation
         assert_eq!(detector.detect_external(&imports).len(), 1);
     }
@@ -1005,6 +966,7 @@ mod tests {
             },
             category: ImportCategory::External,
             resolved_path: None,
+            package_name: None,
         }];
         assert!(
             detector.detect_external(&imports).is_empty(),
@@ -1034,6 +996,7 @@ mod tests {
                 },
                 category: ImportCategory::Internal,
                 resolved_path: Some("src/domain/entity/config".to_string()),
+                package_name: None,
             },
             ResolvedImport {
                 raw: RawImport {
@@ -1045,6 +1008,7 @@ mod tests {
                 },
                 category: ImportCategory::Stdlib,
                 resolved_path: None,
+                package_name: None,
             },
         ];
         assert!(detector.detect_external(&imports).is_empty());
@@ -1061,7 +1025,12 @@ mod tests {
             &[],
         )];
         let detector = ViolationDetector::new(&layers);
-        let imports = vec![make_external("src/infra/parser.rs", 3, "tree_sitter::Node")];
+        let imports = vec![make_external(
+            "src/infra/parser.rs",
+            3,
+            "tree_sitter::Node",
+            "tree_sitter",
+        )];
         assert!(detector.detect_external(&imports).is_empty());
     }
 
@@ -1086,6 +1055,7 @@ mod tests {
             },
             category: ImportCategory::External,
             resolved_path: None,
+            package_name: Some("matplotlib".to_string()),
         }];
         assert!(
             detector.detect_external(&imports).is_empty(),
@@ -1114,6 +1084,7 @@ mod tests {
             },
             category: ImportCategory::External,
             resolved_path: None,
+            package_name: Some("unknown".to_string()),
         }];
         let violations = detector.detect_external(&imports);
         assert_eq!(violations.len(), 1, "unknown.submodule must be a violation");
@@ -1145,6 +1116,7 @@ mod tests {
             },
             category: ImportCategory::External,
             resolved_path: None,
+            package_name: Some("vitest".to_string()),
         }];
         assert!(
             detector.detect_external(&imports).is_empty(),
@@ -1173,6 +1145,7 @@ mod tests {
             },
             category: ImportCategory::External,
             resolved_path: None,
+            package_name: Some("@vueuse/core".to_string()),
         }];
         assert!(
             detector.detect_external(&imports).is_empty(),
@@ -1201,6 +1174,7 @@ mod tests {
             },
             category: ImportCategory::External,
             resolved_path: None,
+            package_name: None,
         }];
         assert!(
             detector.detect_external(&imports).is_empty(),
@@ -1230,6 +1204,7 @@ mod tests {
                 },
                 category: ImportCategory::External,
                 resolved_path: None,
+                package_name: None,
             },
             ResolvedImport {
                 raw: RawImport {
@@ -1241,6 +1216,7 @@ mod tests {
                 },
                 category: ImportCategory::External,
                 resolved_path: None,
+                package_name: None,
             },
         ];
         assert!(
@@ -1260,7 +1236,12 @@ mod tests {
             &[],
         )];
         let detector = ViolationDetector::new(&layers);
-        let imports = vec![make_external("src/infra/repo.rs", 1, "serde::Deserialize")];
+        let imports = vec![make_external(
+            "src/infra/repo.rs",
+            1,
+            "serde::Deserialize",
+            "serde",
+        )];
         assert!(
             detector.detect_external(&imports).is_empty(),
             "serde::Deserialize should be allowed for .rs files"
@@ -1309,6 +1290,7 @@ mod tests {
             },
             category: ImportCategory::Internal,
             resolved_path: Some(resolved.to_string()),
+            package_name: None,
         }
     }
 
@@ -1525,6 +1507,7 @@ mod tests {
             "src/domain/entity/config.rs",
             1,
             "serde::Deserialize",
+            "serde",
         )];
         let violations = detector.detect_external(&imports);
         assert_eq!(violations.len(), 1);
@@ -1581,6 +1564,7 @@ mod tests {
             },
             category: ImportCategory::Unknown,
             resolved_path: None,
+            package_name: None,
         }];
         let violations = detector.detect_unknown(&imports);
         assert_eq!(violations.len(), 1, "unknown import must be reported");
@@ -1614,6 +1598,7 @@ mod tests {
             },
             category: ImportCategory::Unknown,
             resolved_path: None,
+            package_name: None,
         }];
         let violations = detector.detect_unknown(&imports);
         assert_eq!(violations.len(), 1);
@@ -1641,6 +1626,7 @@ mod tests {
             },
             category: ImportCategory::Unknown,
             resolved_path: None,
+            package_name: None,
         }];
         assert!(
             detector.detect_unknown(&imports).is_empty(),
@@ -1665,7 +1651,12 @@ mod tests {
                 "crate::domain::entity::config",
                 "src/domain/entity/config",
             ),
-            make_external("src/domain/entity/config.rs", 2, "serde::Deserialize"),
+            make_external(
+                "src/domain/entity/config.rs",
+                2,
+                "serde::Deserialize",
+                "serde",
+            ),
         ];
         assert!(
             detector.detect_unknown(&imports).is_empty(),

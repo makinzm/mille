@@ -179,6 +179,7 @@ mod tests {
                 raw: import.clone(),
                 category: crate::domain::entity::resolved_import::ImportCategory::Unknown,
                 resolved_path: None,
+                package_name: None,
             }
         }
     }

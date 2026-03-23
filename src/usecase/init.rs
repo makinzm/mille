@@ -316,25 +316,10 @@ fn collect_languages(dir: &Path, langs: &mut BTreeSet<String>) {
         if path.is_dir() {
             collect_languages(&path, langs);
         } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            if let Some(lang) = ext_to_language(ext) {
+            if let Some(lang) = crate::infrastructure::parser::ext_to_language(ext) {
                 langs.insert(lang.to_string());
             }
         }
-    }
-}
-
-fn ext_to_language(ext: &str) -> Option<&'static str> {
-    match ext {
-        "rs" => Some("rust"),
-        "ts" | "tsx" => Some("typescript"),
-        "js" | "jsx" | "mjs" | "cjs" => Some("javascript"),
-        "go" => Some("go"),
-        "py" => Some("python"),
-        "java" => Some("java"),
-        "kt" => Some("kotlin"),
-        "php" => Some("php"),
-        "c" | "h" => Some("c"),
-        _ => None,
     }
 }
 

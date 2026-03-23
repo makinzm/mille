@@ -82,6 +82,22 @@ pub(crate) fn strip_string_delimiters(text: &str) -> String {
     t.to_string()
 }
 
+/// Map a file extension to the language name used in `mille.toml`.
+pub fn ext_to_language(ext: &str) -> Option<&'static str> {
+    match ext {
+        "rs" => Some("rust"),
+        "ts" | "tsx" => Some("typescript"),
+        "js" | "jsx" | "mjs" | "cjs" => Some("javascript"),
+        "go" => Some("go"),
+        "py" => Some("python"),
+        "java" => Some("java"),
+        "kt" => Some("kotlin"),
+        "php" => Some("php"),
+        "c" | "h" => Some("c"),
+        _ => None,
+    }
+}
+
 /// Dispatches to the appropriate parser based on file extension.
 pub struct DispatchingParser {
     c: CParser,

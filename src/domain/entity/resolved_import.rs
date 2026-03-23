@@ -8,6 +8,9 @@ pub struct ResolvedImport {
     /// Normalised file-system path for `Internal` imports (e.g. `src/domain/entity/config`).
     /// `None` when the path could not be resolved (wildcards, grouped imports, `super::` etc.).
     pub resolved_path: Option<String>,
+    /// Top-level package/crate name for `External` imports (e.g. `"serde"`, `"matplotlib"`, `"@scope/pkg"`).
+    /// Set by the resolver so that domain logic does not need to know language-specific separators.
+    pub package_name: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

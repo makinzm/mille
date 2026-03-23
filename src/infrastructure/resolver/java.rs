@@ -155,10 +155,17 @@ fn resolve_java_impl(import: &RawImport, module_name: &str) -> ResolvedImport {
     } else {
         None
     };
+    // Java uses full dotted path as external_allow key (e.g. "java.util.List")
+    let package_name = if category == ImportCategory::External {
+        Some(import.path.clone())
+    } else {
+        None
+    };
     ResolvedImport {
         raw: import.clone(),
         category,
         resolved_path,
+        package_name,
     }
 }
 

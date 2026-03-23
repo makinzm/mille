@@ -44,10 +44,16 @@ fn resolve_go_impl(import: &RawImport, module_name: &str) -> ResolvedImport {
     } else {
         None
     };
+    let package_name = if category == ImportCategory::External {
+        Some(import.path.clone())
+    } else {
+        None
+    };
     ResolvedImport {
         raw: import.clone(),
         category,
         resolved_path,
+        package_name,
     }
 }
 
