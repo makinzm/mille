@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn test_matches_any_glob_double_star() {
         assert!(matches_any_glob(
-            "tests/fixtures/go_sample/domain/user.go",
+            "tests/fixtures/sample_project/domain/user.txt",
             &["tests/fixtures/**".to_string()]
         ));
     }

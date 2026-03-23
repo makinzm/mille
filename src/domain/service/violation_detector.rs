@@ -457,7 +457,7 @@ mod tests {
         let found = detector.find_layer_for_file("src/domain/entity/config.rs");
         assert_eq!(found.map(|l| l.name.as_str()), Some("domain"));
 
-        let found2 = detector.find_layer_for_file("src/infrastructure/parser/rust.rs");
+        let found2 = detector.find_layer_for_file("src/infrastructure/parser/lang.rs");
         assert_eq!(found2.map(|l| l.name.as_str()), Some("infrastructure"));
     }
 
@@ -779,8 +779,8 @@ mod tests {
         let imports = vec![make_internal(
             "src/domain/service/foo.rs",
             1,
-            "crate::infrastructure::parser::rust",
-            "src/infrastructure/parser/rust",
+            "crate::infrastructure::parser::lang",
+            "src/infrastructure/parser/lang",
         )];
         let violations = detector.detect(&imports);
         assert_eq!(violations.len(), 1);
@@ -874,7 +874,7 @@ mod tests {
         )];
         let detector = ViolationDetector::new(&layers);
         let imports = vec![make_external(
-            "src/infrastructure/parser/rust.rs",
+            "src/infrastructure/parser/lang.rs",
             1,
             "tree_sitter::Node",
             "tree_sitter",
@@ -1158,7 +1158,7 @@ mod tests {
         // Full module path used as crate_name -- exact match required
         let layers = vec![make_layer_with_external(
             "infra",
-            &["go/infra/**"],
+            &["lang/infra/**"],
             DependencyMode::OptIn,
             &["github.com/cilium/ebpf"],
             &[],
@@ -1168,7 +1168,7 @@ mod tests {
             raw: RawImport {
                 path: "github.com/cilium/ebpf".to_string(),
                 line: 1,
-                file: "go/infra/ebpf.go".to_string(),
+                file: "lang/infra/ebpf.x".to_string(),
                 kind: ImportKind::Use,
                 named_imports: vec![],
             },
@@ -1187,7 +1187,7 @@ mod tests {
         // Stdlib packages ("fmt", "net/http") appear in external_allow with full path
         let layers = vec![make_layer_with_external(
             "domain",
-            &["go/domain/**"],
+            &["lang/domain/**"],
             DependencyMode::OptIn,
             &["fmt", "net/http"],
             &[],
@@ -1198,7 +1198,7 @@ mod tests {
                 raw: RawImport {
                     path: "fmt".to_string(),
                     line: 1,
-                    file: "go/domain/user.go".to_string(),
+                    file: "lang/domain/user.x".to_string(),
                     kind: ImportKind::Use,
                     named_imports: vec![],
                 },
@@ -1210,7 +1210,7 @@ mod tests {
                 raw: RawImport {
                     path: "net/http".to_string(),
                     line: 2,
-                    file: "go/domain/user.go".to_string(),
+                    file: "lang/domain/user.x".to_string(),
                     kind: ImportKind::Use,
                     named_imports: vec![],
                 },
@@ -1938,7 +1938,7 @@ mod tests {
     fn test_detect_naming_name_allow_suppresses_false_positive() {
         // "category" contains a denied keyword but name_allow = ["category"] should suppress it
         let mut layer =
-            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["bad"], NameTarget::all());
         layer.name_allow = vec!["category".to_string()];
         let layers = vec![layer];
         let detector = ViolationDetector::new(&layers);
@@ -1960,30 +1960,30 @@ mod tests {
     fn test_detect_naming_name_allow_does_not_suppress_standalone_keyword() {
         // name_allow = ["category"] must NOT suppress names without "category" substring
         let mut layer =
-            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["bad"], NameTarget::all());
         layer.name_allow = vec!["category".to_string()];
         let layers = vec![layer];
         let detector = ViolationDetector::new(&layers);
         let names = vec![make_raw_name(
-            "GoConfig",
+            "BadConfig",
             NameKind::Symbol,
             10,
             "src/domain/entity/config.rs",
         )];
         let violations = detector.detect_naming(&names);
-        assert_eq!(violations.len(), 1, "GoConfig must still be flagged");
+        assert_eq!(violations.len(), 1, "BadConfig must still be flagged");
     }
 
     #[test]
     fn test_detect_naming_name_allow_partial_coverage_still_violations() {
         // Name still contains the denied keyword after stripping "category" -- still a violation
         let mut layer =
-            make_layer_with_name_deny("domain", &["src/domain/**"], &["go"], NameTarget::all());
+            make_layer_with_name_deny("domain", &["src/domain/**"], &["bad"], NameTarget::all());
         layer.name_allow = vec!["category".to_string()];
         let layers = vec![layer];
         let detector = ViolationDetector::new(&layers);
         let names = vec![make_raw_name(
-            "GoCategory",
+            "BadCategory",
             NameKind::Symbol,
             5,
             "src/domain/entity/config.rs",
@@ -1992,7 +1992,7 @@ mod tests {
         assert_eq!(
             violations.len(),
             1,
-            "GoCategory must still be flagged (standalone 'Go' remains after stripping 'category')"
+            "BadCategory must still be flagged (standalone 'Bad' remains after stripping 'category')"
         );
     }
 
