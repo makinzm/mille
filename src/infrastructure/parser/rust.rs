@@ -103,6 +103,25 @@ fn collect_rust_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
                 });
             }
         }
+        // Identifier: field access (e.g. `obj.field` → extract `field`)
+        "field_expression" => {
+            if let Some(field_node) = node.child_by_field_name("field") {
+                let name = field_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: field_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into value to capture nested field access
+            if let Some(value) = node.child_by_field_name("value") {
+                collect_rust_names(value, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string_literal" | "raw_string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");

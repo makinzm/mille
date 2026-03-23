@@ -168,6 +168,7 @@ mod tests {
                 variables: vec![],
                 comments: vec![],
                 string_literals: vec![],
+                identifiers: vec![],
             }
         }
     }

@@ -162,6 +162,25 @@ fn collect_c_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Raw
                 });
             }
         }
+        // Identifier: field expression (e.g. `s.field` or `p->field` → extract `field`)
+        "field_expression" => {
+            if let Some(field_node) = node.child_by_field_name("field") {
+                let name = field_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: field_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into argument to capture nested field access
+            if let Some(arg) = node.child_by_field_name("argument") {
+                collect_c_names(arg, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");

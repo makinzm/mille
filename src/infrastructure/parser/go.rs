@@ -126,6 +126,25 @@ fn collect_go_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<Ra
                 });
             }
         }
+        // Identifier: selector expression (e.g. `pkg.Func` → extract `Func`)
+        "selector_expression" => {
+            if let Some(field_node) = node.child_by_field_name("field") {
+                let name = field_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: field_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into operand to capture nested selectors
+            if let Some(operand) = node.child_by_field_name("operand") {
+                collect_go_names(operand, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "interpreted_string_literal" | "raw_string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");

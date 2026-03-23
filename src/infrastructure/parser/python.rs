@@ -101,6 +101,25 @@ fn collect_python_names(node: Node, source: &[u8], file_path: &str, out: &mut Ve
                 });
             }
         }
+        // Attribute access: extract the attribute identifier (e.g. `gcp` from `cfg.gcp`)
+        "attribute" => {
+            if let Some(attr_node) = node.child_by_field_name("attribute") {
+                let name = attr_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: attr_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into object to capture nested attributes (e.g. cfg.gcp.bucket → gcp, bucket)
+            if let Some(obj) = node.child_by_field_name("object") {
+                collect_python_names(obj, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string" => {
             let text = node.utf8_text(source).unwrap_or("");
@@ -480,7 +499,8 @@ mod tests {
 
     #[test]
     fn test_py_parse_names_docstring_string_literal() {
-        let source = "def train():\n    \"\"\"cfg.gcp.project: GCP プロジェクト ID\"\"\"\n    pass\n";
+        let source =
+            "def train():\n    \"\"\"cfg.gcp.project: GCP プロジェクト ID\"\"\"\n    pass\n";
         let names = parse_python_names(source, "test.py").into_all();
         let found = names
             .iter()

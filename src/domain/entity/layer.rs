@@ -11,6 +11,7 @@ pub enum NameTarget {
     Variable,
     Comment,
     StringLiteral,
+    Identifier,
 }
 
 impl NameTarget {
@@ -21,6 +22,7 @@ impl NameTarget {
             NameTarget::Variable,
             NameTarget::Comment,
             NameTarget::StringLiteral,
+            NameTarget::Identifier,
         ]
     }
 
@@ -31,6 +33,7 @@ impl NameTarget {
             NameTarget::Variable => NameKind::Variable,
             NameTarget::Comment => NameKind::Comment,
             NameTarget::StringLiteral => NameKind::StringLiteral,
+            NameTarget::Identifier => NameKind::Identifier,
         }
     }
 }

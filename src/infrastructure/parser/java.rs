@@ -116,6 +116,25 @@ fn collect_java_names(node: Node, source: &[u8], file_path: &str, out: &mut Vec<
                 });
             }
         }
+        // Identifier: field access (e.g. `obj.field` → extract `field`)
+        "field_access" => {
+            if let Some(field_node) = node.child_by_field_name("field") {
+                let name = field_node.utf8_text(source).unwrap_or("").to_string();
+                if !name.is_empty() {
+                    out.push(RawName {
+                        name,
+                        line: field_node.start_position().row + 1,
+                        kind: NameKind::Identifier,
+                        file: file_path.to_string(),
+                    });
+                }
+            }
+            // Recurse into object to capture nested field access
+            if let Some(obj) = node.child_by_field_name("object") {
+                collect_java_names(obj, source, file_path, out);
+            }
+            return;
+        }
         // String literals
         "string_literal" => {
             let text = node.utf8_text(source).unwrap_or("");
