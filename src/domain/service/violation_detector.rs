@@ -2077,4 +2077,55 @@ mod tests {
             "both files should be checked when ignore is empty"
         );
     }
+
+    #[test]
+    fn test_detect_naming_string_literal_violation() {
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            NameTarget::all(),
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "aws-sdk-bucket",
+            NameKind::StringLiteral,
+            15,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            1,
+            "string literal containing 'aws' should violate name_deny"
+        );
+        assert_eq!(violations[0].from_layer, "usecase");
+        assert_eq!(violations[0].to_layer, "string_literal");
+        assert_eq!(violations[0].import_path, "aws");
+        assert_eq!(violations[0].kind, ViolationKind::NamingViolation);
+    }
+
+    #[test]
+    fn test_detect_naming_target_filter_excludes_string_literal() {
+        // name_targets = [Symbol, Variable] のとき StringLiteral は対象外
+        let layers = vec![make_layer_with_name_deny(
+            "usecase",
+            &["src/usecase/**"],
+            &["aws"],
+            vec![NameTarget::Symbol, NameTarget::Variable],
+        )];
+        let detector = ViolationDetector::new(&layers);
+        let names = vec![make_raw_name(
+            "aws-sdk-bucket",
+            NameKind::StringLiteral,
+            15,
+            "src/usecase/service.rs",
+        )];
+        let violations = detector.detect_naming(&names);
+        assert_eq!(
+            violations.len(),
+            0,
+            "StringLiteral should be ignored when name_targets=[Symbol, Variable]"
+        );
+    }
 }
