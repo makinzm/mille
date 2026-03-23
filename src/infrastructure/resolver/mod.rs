@@ -1,3 +1,4 @@
+pub mod c;
 pub mod go;
 pub mod java;
 pub mod php;
@@ -7,6 +8,7 @@ pub mod typescript;
 
 use std::collections::HashMap;
 
+use self::c::CResolver;
 use self::go::GoResolver;
 use self::java::JavaResolver;
 use self::php::PhpResolver;
@@ -19,6 +21,7 @@ use crate::domain::repository::resolver::Resolver;
 
 /// Dispatches to the appropriate resolver based on file extension.
 pub struct DispatchingResolver {
+    c: CResolver,
     rust: RustResolver,
     go: GoResolver,
     python: PythonResolver,
@@ -30,6 +33,7 @@ pub struct DispatchingResolver {
 impl DispatchingResolver {
     pub fn new(go: GoResolver, python: PythonResolver, typescript: TypeScriptResolver) -> Self {
         DispatchingResolver {
+            c: CResolver::new(),
             rust: RustResolver,
             go,
             python,
@@ -99,6 +103,7 @@ impl DispatchingResolver {
         };
 
         DispatchingResolver {
+            c: CResolver::new(),
             rust: RustResolver,
             go: GoResolver::new(go_module),
             python: PythonResolver::new(python_packages),
@@ -186,6 +191,10 @@ fn strip_json_line_comments(s: &str) -> String {
         .join("\n")
 }
 
+fn is_c(file: &str) -> bool {
+    file.ends_with(".c") || file.ends_with(".h")
+}
+
 fn is_ts_js(file: &str) -> bool {
     file.ends_with(".ts")
         || file.ends_with(".tsx")
@@ -195,7 +204,9 @@ fn is_ts_js(file: &str) -> bool {
 
 impl Resolver for DispatchingResolver {
     fn resolve(&self, import: &RawImport) -> ResolvedImport {
-        if import.file.ends_with(".go") {
+        if is_c(&import.file) {
+            self.c.resolve(import)
+        } else if import.file.ends_with(".go") {
             self.go.resolve(import)
         } else if import.file.ends_with(".py") {
             self.python.resolve(import)
@@ -211,7 +222,9 @@ impl Resolver for DispatchingResolver {
     }
 
     fn resolve_for_project(&self, import: &RawImport, own_crate: &str) -> ResolvedImport {
-        if import.file.ends_with(".go") {
+        if is_c(&import.file) {
+            self.c.resolve_for_project(import, own_crate)
+        } else if import.file.ends_with(".go") {
             self.go.resolve_for_project(import, own_crate)
         } else if import.file.ends_with(".py") {
             self.python.resolve_for_project(import, own_crate)
