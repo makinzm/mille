@@ -261,7 +261,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "mille"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "clap",
  "glob",
@@ -279,6 +279,7 @@ dependencies = [
  "tree-sitter-python",
  "tree-sitter-rust",
  "tree-sitter-typescript",
+ "tree-sitter-yaml",
 ]
 
 [[package]]
@@ -591,6 +592,16 @@ name = "tree-sitter-typescript"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ecb35d98a688378e56c18c9c159824fd16f730ccbea19aacf4f206e5d5438ed9"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-yaml"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aad27ec46ad343d8b514f64dd3fdffb478c592ece561b6c935d90ef55589c6b6"
 dependencies = [
  "cc",
  "tree-sitter",

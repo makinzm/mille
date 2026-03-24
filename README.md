@@ -8,7 +8,7 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 
 ## What it checks
 
-**Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C
+**Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C, YAML
 
 | Check | Description |
 |---|---|
@@ -415,7 +415,7 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"`, `"php"`, `"c"` |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"`, `"php"`, `"c"`, `"yaml"` |
 
 ### `[[layers]]`
 
@@ -466,7 +466,7 @@ name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from namin
   - `"comment"`: inline comment content
   - `"string_literal"`: string literal content
   - `"identifier"`: attribute/field access identifiers (e.g. `gcp` in `cfg.gcp.bucket`)
-- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP, C
+- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP, C, YAML
 - Severity is controlled by `severity.naming_violation` (default: `"error"`)
 
 ### `[[layers.allow_call_patterns]]`
@@ -653,6 +653,32 @@ dependency_mode = "opt-in"
 allow = ["domain"]
 ```
 
+### YAML
+
+> YAML is a **naming-only** language — it has no imports, so only `name_deny` checks are supported. `dependency_mode` and `external_mode` should be set to `"opt-out"`.
+
+**Example `mille.toml` for YAML config files:**
+
+```toml
+[project]
+name    = "my-k8s-project"
+root    = "."
+languages = ["yaml"]
+
+[[layers]]
+name      = "config"
+paths     = ["config/**"]
+dependency_mode = "opt-out"
+external_mode   = "opt-out"
+name_deny = ["aws", "gcp"]
+
+[[layers]]
+name      = "manifests"
+paths     = ["manifests/**"]
+dependency_mode = "opt-out"
+external_mode   = "opt-out"
+```
+
 ## How it Works
 
 mille uses [tree-sitter](https://tree-sitter.github.io/) for AST-based import extraction — no regex heuristics.
@@ -663,7 +689,7 @@ mille.toml
     ▼
 Layer definitions
     │
-Source files (*.rs, *.go, *.py, *.ts, *.js, *.java, ...)
+Source files (*.rs, *.go, *.py, *.ts, *.js, *.java, *.yaml, ...)
     │ tree-sitter parse
     ▼
 RawImport list

@@ -1,0 +1,16 @@
+[project]
+name = "yaml-sample"
+root = "."
+languages = ["yaml"]
+
+[[layers]]
+name = "config"
+paths = ["config/**"]
+dependency_mode = "opt-out"
+external_mode = "opt-out"
+
+[[layers]]
+name = "manifests"
+paths = ["manifests/**"]
+dependency_mode = "opt-out"
+external_mode = "opt-out"
