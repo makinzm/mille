@@ -6,6 +6,7 @@ pub mod php;
 pub mod python;
 pub mod rust;
 pub mod typescript;
+pub mod yaml;
 
 use self::c::CParser;
 use self::go::GoParser;
@@ -15,6 +16,7 @@ use self::php::PhpParser;
 use self::python::PythonParser;
 use self::rust::RustParser;
 use self::typescript::TypeScriptParser;
+use self::yaml::YamlParser;
 use crate::domain::entity::call_expr::RawCallExpr;
 use crate::domain::entity::import::RawImport;
 use crate::domain::entity::name::{NameKind, ParsedNames, RawName};
@@ -106,6 +108,7 @@ pub fn ext_to_language(ext: &str) -> Option<&'static str> {
         "kt" => Some("kotlin"),
         "php" => Some("php"),
         "c" | "h" => Some("c"),
+        "yaml" | "yml" => Some("yaml"),
         _ => None,
     }
 }
@@ -120,6 +123,7 @@ pub struct DispatchingParser {
     java: JavaParser,
     kotlin: KotlinParser,
     php: PhpParser,
+    yaml: YamlParser,
 }
 
 impl DispatchingParser {
@@ -133,6 +137,7 @@ impl DispatchingParser {
             java: JavaParser,
             kotlin: KotlinParser,
             php: PhpParser,
+            yaml: YamlParser,
         }
     }
 }
@@ -141,6 +146,10 @@ impl Default for DispatchingParser {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn is_yaml(file_path: &str) -> bool {
+    file_path.ends_with(".yaml") || file_path.ends_with(".yml")
 }
 
 fn is_c(file_path: &str) -> bool {
@@ -156,7 +165,9 @@ fn is_ts_js(file_path: &str) -> bool {
 
 impl Parser for DispatchingParser {
     fn parse_imports(&self, source: &str, file_path: &str) -> Vec<RawImport> {
-        if is_c(file_path) {
+        if is_yaml(file_path) {
+            self.yaml.parse_imports(source, file_path)
+        } else if is_c(file_path) {
             self.c.parse_imports(source, file_path)
         } else if file_path.ends_with(".go") {
             self.go.parse_imports(source, file_path)
@@ -176,7 +187,9 @@ impl Parser for DispatchingParser {
     }
 
     fn parse_call_exprs(&self, source: &str, file_path: &str) -> Vec<RawCallExpr> {
-        if is_c(file_path) {
+        if is_yaml(file_path) {
+            self.yaml.parse_call_exprs(source, file_path)
+        } else if is_c(file_path) {
             self.c.parse_call_exprs(source, file_path)
         } else if file_path.ends_with(".go") {
             self.go.parse_call_exprs(source, file_path)
@@ -196,7 +209,9 @@ impl Parser for DispatchingParser {
     }
 
     fn parse_names(&self, source: &str, file_path: &str) -> ParsedNames {
-        if is_c(file_path) {
+        if is_yaml(file_path) {
+            self.yaml.parse_names(source, file_path)
+        } else if is_c(file_path) {
             self.c.parse_names(source, file_path)
         } else if file_path.ends_with(".go") {
             self.go.parse_names(source, file_path)

@@ -8,7 +8,6 @@ name = "config"
 paths = ["config/**"]
 dependency_mode = "opt-out"
 external_mode = "opt-out"
-name_deny = ["aws"]
 
 [[layers]]
 name = "manifests"
