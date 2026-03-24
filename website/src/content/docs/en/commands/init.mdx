@@ -9,9 +9,10 @@ import { Aside } from '@astrojs/starlight/components';
 
 ```sh
 mille init
+mille init ./path/to/project    # specify target directory
 ```
 
-Analyzes import statements in your source files to infer layer structure and dependencies, then generates `mille.toml`.
+Analyzes import statements in your source files to infer layer structure and dependencies, then generates `mille.toml`. You can pass a project directory as a positional argument. Defaults to the current directory (`.`) if omitted.
 
 ## Options
 

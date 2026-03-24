@@ -55,10 +55,28 @@ where
     run_cli_inner(cli);
 }
 
+/// Change the working directory to the specified path if it is not ".".
+fn apply_path(path: &str) {
+    if path != "." {
+        let target = std::path::Path::new(path);
+        if !target.is_dir() {
+            eprintln!("Error: '{}' is not a directory or does not exist", path);
+            std::process::exit(3);
+        }
+        if let Err(e) = std::env::set_current_dir(target) {
+            eprintln!("Error: failed to change directory to '{}': {}", path, e);
+            std::process::exit(3);
+        }
+    }
+}
+
 fn run_cli_inner(cli: Cli) {
+    apply_path(&cli.command.common().path);
+
     match cli.command {
         Command::Report { subcommand } => match subcommand {
             ReportCommand::External {
+                common: _,
                 config,
                 format,
                 output,
@@ -118,6 +136,7 @@ fn run_cli_inner(cli: Cli) {
             }
         },
         Command::Analyze {
+            common: _,
             config,
             format,
             output,
@@ -177,6 +196,7 @@ fn run_cli_inner(cli: Cli) {
             }
         }
         Command::Init {
+            common: _,
             output,
             force,
             depth,
@@ -278,6 +298,7 @@ fn run_cli_inner(cli: Cli) {
             }
         }
         Command::Check {
+            common: _,
             config,
             format,
             fail_on,

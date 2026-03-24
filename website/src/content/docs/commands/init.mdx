@@ -9,9 +9,10 @@ import { Aside } from '@astrojs/starlight/components';
 
 ```sh
 mille init
+mille init ./path/to/project    # 対象ディレクトリを指定
 ```
 
-プロジェクト内の import 文を解析してレイヤー構造と依存関係を推論し、`mille.toml` を自動生成します。
+プロジェクト内の import 文を解析してレイヤー構造と依存関係を推論し、`mille.toml` を自動生成します。位置引数でプロジェクトディレクトリを指定できます。省略時はカレントディレクトリ（`.`）が対象です。
 
 ## オプション
 

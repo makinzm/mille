@@ -7,9 +7,12 @@ description: Visualize the dependency graph (no rules enforced)
 
 ```sh
 mille analyze
+mille analyze ./path/to/project    # specify target directory
 ```
 
 Visualizes actual dependencies as a graph without enforcing rules. Ideal for understanding the current state of your architecture before running `mille check`.
+
+You can pass a project directory as a positional argument. Defaults to the current directory (`.`) if omitted.
 
 `mille analyze` always exits with code 0.
 

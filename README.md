@@ -78,6 +78,7 @@ Pre-built binaries are on [GitHub Releases](https://github.com/makinzm/mille/rel
 
 ```sh
 mille init
+mille init ./path/to/project    # specify target directory
 ```
 
 `mille init` analyzes actual import statements in your source files to infer layer structure and dependencies — no predetermined naming conventions needed. It prints the inferred dependency graph before writing the config:
@@ -336,10 +337,11 @@ external_allow  = ["java.util.List", "java.util.Map"]
 Before enforcing rules, you can inspect the actual dependency graph:
 
 ```sh
-mille analyze                  # human-readable terminal output (default)
-mille analyze --format json    # machine-readable JSON graph
-mille analyze --format dot     # Graphviz DOT (pipe to: dot -Tsvg -o graph.svg)
-mille analyze --format svg     # self-contained SVG image (open in a browser)
+mille analyze                          # human-readable terminal output (default)
+mille analyze --format json            # machine-readable JSON graph
+mille analyze --format dot             # Graphviz DOT (pipe to: dot -Tsvg -o graph.svg)
+mille analyze --format svg             # self-contained SVG image (open in a browser)
+mille analyze ./path/to/project        # specify target directory
 ```
 
 Example SVG output (dark theme, green edges):
@@ -353,9 +355,10 @@ mille analyze --format svg > graph.svg && open graph.svg
 ### 3. Inspect external dependencies with `mille report external`
 
 ```sh
-mille report external                  # human-readable table (default)
-mille report external --format json    # machine-readable JSON
+mille report external                              # human-readable table (default)
+mille report external --format json                # machine-readable JSON
 mille report external --output report.json --format json   # write to file
+mille report external ./path/to/project            # specify target directory
 ```
 
 Shows which external packages each layer actually imports — useful for auditing `external_allow` lists or documenting your dependency footprint.
@@ -377,6 +380,7 @@ External Dependencies by Layer
 
 ```sh
 mille check
+mille check ./path/to/project        # specify target directory
 ```
 
 Output formats:

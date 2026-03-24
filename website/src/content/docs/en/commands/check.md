@@ -7,9 +7,12 @@ description: Check architecture dependency rules
 
 ```sh
 mille check
+mille check ./path/to/project    # specify target directory
 ```
 
 Checks layer dependencies, external library usage, and method call patterns against the rules defined in `mille.toml`.
+
+You can pass a project directory as a positional argument. Defaults to the current directory (`.`) if omitted.
 
 ## Output Formats
 

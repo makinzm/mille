@@ -7,9 +7,10 @@ description: レイヤー別の外部依存パッケージを一覧表示する
 
 ```sh
 mille report external
+mille report external ./path/to/project    # 対象ディレクトリを指定
 ```
 
-各レイヤーが実際にインポートしている外部パッケージを一覧表示します。`external_allow` リストの監査やプロジェクトの依存フットプリント把握に役立ちます。
+各レイヤーが実際にインポートしている外部パッケージを一覧表示します。位置引数でプロジェクトディレクトリを指定できます。省略時はカレントディレクトリ（`.`）が対象です。`external_allow` リストの監査やプロジェクトの依存フットプリント把握に役立ちます。
 
 `mille report external` は常に exit code 0 で終了します。
 

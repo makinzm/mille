@@ -7,9 +7,10 @@ description: List external dependency packages by layer
 
 ```sh
 mille report external
+mille report external ./path/to/project    # specify target directory
 ```
 
-Lists the external packages actually imported by each layer. Useful for auditing `external_allow` lists or documenting your dependency footprint.
+Lists the external packages actually imported by each layer. You can pass a project directory as a positional argument. Defaults to the current directory (`.`) if omitted. Useful for auditing `external_allow` lists or documenting your dependency footprint.
 
 `mille report external` always exits with code 0.
 
