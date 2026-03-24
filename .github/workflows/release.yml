@@ -298,6 +298,11 @@ jobs:
       - name: Sync version in pyproject.toml and Cargo.toml
         run: |
           VERSION="${{ needs.release.outputs.version }}"
+          # NOTE: ルート Cargo.toml もパッチする。packages/pypi は path = "../.." で
+          #       ルートクレートに依存しており、clap の #[command(version)] が
+          #       ルートの CARGO_PKG_VERSION をコンパイル時に埋め込むため。
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          rm -f Cargo.toml.bak
           sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/pyproject.toml
           rm -f packages/pypi/pyproject.toml.bak
           sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" packages/pypi/Cargo.toml
