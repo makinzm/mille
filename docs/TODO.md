@@ -35,6 +35,8 @@
 - ✅ `name_deny` 識別子チェック — `NameKind::Identifier` / `NameTarget::Identifier` 追加、属性アクセスチェーン（`cfg.gcp.bucket` の `gcp`）を全8言語パーサーで抽出、`name_targets` で `"identifier"` のオプトアウト可能（PR #73）
 - ✅ PHP 言語サポート — `.php` ファイルの `use` 文パース（simple/aliased/grouped/function/const）・Internal/External/Stdlib 分類、`[resolve.php] namespace` 設定、`composer.json` `autoload.psr-4` 自動検出、PHP stdlib クラス（DateTime/PDO/Exception 等）の Stdlib 自動分類
 
+- ✅ PATH 位置引数 — 全サブコマンドに `[PATH]` 位置引数を追加（デフォルト `.`）。`mille check ./other/project` で任意ディレクトリを検査可能。`CommonArgs` + `Command::common()` exhaustive match で新コマンド追加時にコンパイルエラーで PATH 対応を強制（PR #75）
+
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 （現在なし）
 
