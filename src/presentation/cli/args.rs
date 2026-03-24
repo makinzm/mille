@@ -274,4 +274,77 @@ mod tests {
             _ => panic!("expected Check command"),
         }
     }
+
+    // ---------------------------------------------------------------
+    // PATH positional argument tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_parse_check_default_path() {
+        let cli = Cli::try_parse_from(["mille", "check"]).unwrap();
+        assert_eq!(cli.command.common().path, ".");
+    }
+
+    #[test]
+    fn test_parse_check_custom_path() {
+        let cli = Cli::try_parse_from(["mille", "check", "./foo"]).unwrap();
+        assert_eq!(cli.command.common().path, "./foo");
+    }
+
+    #[test]
+    fn test_parse_check_path_with_config() {
+        let cli =
+            Cli::try_parse_from(["mille", "check", "./foo", "--config", "custom.toml"]).unwrap();
+        assert_eq!(cli.command.common().path, "./foo");
+        match cli.command {
+            Command::Check { config, .. } => assert_eq!(config, "custom.toml"),
+            _ => panic!("expected Check command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_analyze_default_path() {
+        let cli = Cli::try_parse_from(["mille", "analyze"]).unwrap();
+        assert_eq!(cli.command.common().path, ".");
+    }
+
+    #[test]
+    fn test_parse_analyze_custom_path() {
+        let cli = Cli::try_parse_from(["mille", "analyze", "./bar"]).unwrap();
+        assert_eq!(cli.command.common().path, "./bar");
+    }
+
+    #[test]
+    fn test_parse_report_external_default_path() {
+        let cli = Cli::try_parse_from(["mille", "report", "external"]).unwrap();
+        match &cli.command {
+            Command::Report { subcommand } => match subcommand {
+                ReportCommand::External { common, .. } => assert_eq!(common.path, "."),
+            },
+            _ => panic!("expected Report command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_report_external_custom_path() {
+        let cli = Cli::try_parse_from(["mille", "report", "external", "./baz"]).unwrap();
+        match &cli.command {
+            Command::Report { subcommand } => match subcommand {
+                ReportCommand::External { common, .. } => assert_eq!(common.path, "./baz"),
+            },
+            _ => panic!("expected Report command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_init_default_path() {
+        let cli = Cli::try_parse_from(["mille", "init"]).unwrap();
+        assert_eq!(cli.command.common().path, ".");
+    }
+
+    #[test]
+    fn test_parse_init_custom_path() {
+        let cli = Cli::try_parse_from(["mille", "init", "./qux"]).unwrap();
+        assert_eq!(cli.command.common().path, "./qux");
+    }
 }

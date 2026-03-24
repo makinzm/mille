@@ -885,3 +885,55 @@ fn test_rust_infra_empty_external_allow_mentions_tree_sitter() {
         s
     );
 }
+
+// ---------------------------------------------------------------------------
+// PATH positional argument tests
+// ---------------------------------------------------------------------------
+
+/// `mille check <PATH>` where PATH points to a fixture directory.
+/// The binary should chdir into that directory and find mille.toml there.
+#[test]
+fn test_check_with_path_argument() {
+    let fixture = project_root().join("tests/fixtures/rust_sample");
+    let out = Command::new(env!("CARGO_BIN_EXE_mille"))
+        .args(["check", fixture.to_str().unwrap()])
+        .current_dir(project_root()) // NOT the fixture dir
+        .output()
+        .expect("failed to execute mille binary");
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "check with path argument should succeed\nstderr:\n{}",
+        stderr(&out)
+    );
+}
+
+/// `mille check <PATH> --config <RELATIVE>` should resolve config relative to PATH.
+#[test]
+fn test_check_path_with_explicit_config() {
+    let fixture = project_root().join("tests/fixtures/rust_sample");
+    let out = Command::new(env!("CARGO_BIN_EXE_mille"))
+        .args(["check", fixture.to_str().unwrap(), "--config", "mille.toml"])
+        .current_dir(project_root())
+        .output()
+        .expect("failed to execute mille binary");
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "check with path + explicit config should succeed\nstderr:\n{}",
+        stderr(&out)
+    );
+}
+
+/// `mille check <NONEXISTENT>` should fail with a clear error.
+#[test]
+fn test_check_nonexistent_path_fails() {
+    let out = mille(&["check", "./nonexistent_dir_12345"]);
+    assert_ne!(exit_code(&out), 0, "nonexistent path should fail");
+    let err = stderr(&out);
+    assert!(
+        err.contains("nonexistent_dir_12345"),
+        "error message should mention the path\nstderr:\n{}",
+        err
+    );
+}
