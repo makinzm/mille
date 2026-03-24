@@ -1,0 +1,16 @@
+# Deployment config
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 3
+  aws_region: us-east-1
+  template:
+    spec:
+      containers:
+        - name: app
+          image: "my-app:latest"
+          env:
+            - name: CLOUD_PROVIDER
+              value: "aws-east-1"

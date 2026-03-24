@@ -1,0 +1,11 @@
+# Service manifest — aws keyword present but no name_deny on this layer
+apiVersion: v1
+kind: Service
+metadata:
+  name: aws-load-balancer
+spec:
+  type: LoadBalancer
+  aws_region: ap-northeast-1
+  ports:
+    - port: 80
+      targetPort: 8080

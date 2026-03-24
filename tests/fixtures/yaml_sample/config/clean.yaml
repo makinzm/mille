@@ -1,0 +1,9 @@
+# Clean config — no forbidden keywords
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  database_host: "localhost"
+  database_port: "5432"
+  log_level: "info"
