@@ -1,6 +1,6 @@
 {
     "name": "@makinzm/mille",
-    "version": "0.0.13",
+    "version": "0.0.14",
     "description": "Architecture Checker — Rust-based multi-language architecture linter",
     "main": "index.js",
     "bin": {

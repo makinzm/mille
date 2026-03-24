@@ -1,6 +1,6 @@
 [package]
 name = "mille"
-version = "0.0.13"
+version = "0.0.14"
 edition = "2021"
 description = "Architecture Checker — Rust-based multi-language architecture linter"
 license = "MIT"
