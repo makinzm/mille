@@ -71,11 +71,8 @@ external_deny  = []
 
 ## `[[layers.allow_call_patterns]]`
 
-Restricts which methods may be called on a given layer's types from the DI entrypoint.
-
-<Aside type="caution">
-`allow_call_patterns` is only valid on the `main` layer (or equivalent DI entrypoint). Placing it on other layers causes a configuration error.
-</Aside>
+Restricts which methods may be called on a given layer's types. This can be defined on any layer.
+A typical use case is restricting the DI assembly layer (e.g. main) to only call factory methods on infrastructure, but it can also be used to restrict usecase from calling certain domain methods, etc.
 
 | Key | Description |
 |---|---|

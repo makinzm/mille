@@ -150,6 +150,9 @@ jobs:
       - name: Self-check — YAML fixture (tests/fixtures/yaml_sample)
         working-directory: tests/fixtures/yaml_sample
         run: ${{ github.workspace }}/target/release/mille check
+      - name: Self-check — Rust multi-file main fixture (tests/fixtures/rust_multifile_main)
+        working-directory: tests/fixtures/rust_multifile_main
+        run: ${{ github.workspace }}/target/release/mille check
 
   # ------------------------------------------------------------------ #
   # 3b. Dogfooding-python — maturin build → pytest + mille check     #

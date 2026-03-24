@@ -71,11 +71,8 @@ external_deny  = []
 
 ## `[[layers.allow_call_patterns]]`
 
-DI エントリポイント以外から infrastructure のメソッドを呼び出すことを禁止します。
-
-<Aside type="caution">
-`allow_call_patterns` は `main` レイヤー（または DI エントリポイント相当のレイヤー）にのみ定義できます。他のレイヤーに書くと設定エラーになります。
-</Aside>
+任意のレイヤーにおいて、依存先レイヤーのメソッド呼び出しを制限します。
+典型的な用途は DI 組み立てレイヤー（main 等）で infrastructure のファクトリメソッドだけを許可するケースですが、usecase から domain のメソッドを制限するなど、どのレイヤーにも設定できます。
 
 | キー | 説明 |
 |---|---|
