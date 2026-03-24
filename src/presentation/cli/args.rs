@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 /// Output format for `mille report external`.
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
@@ -14,6 +14,8 @@ pub enum ReportExternalFormat {
 pub enum ReportCommand {
     /// Show external library dependencies for each layer.
     External {
+        #[command(flatten)]
+        common: CommonArgs,
         /// Path to mille.toml (default: ./mille.toml)
         #[arg(long, default_value = "mille.toml")]
         config: String,
@@ -59,6 +61,17 @@ pub enum AnalyzeFormat {
     Svg,
 }
 
+/// Common arguments shared by all subcommands.
+///
+/// Every new subcommand **must** include `#[command(flatten)] common: CommonArgs`.
+/// `Command::common()` enforces this at compile time via exhaustive match.
+#[derive(Args, Debug, Clone)]
+pub struct CommonArgs {
+    /// Project directory to check (default: current directory).
+    #[arg(default_value = ".")]
+    pub path: String,
+}
+
 #[derive(Parser, Debug)]
 #[command(
     name = "mille",
@@ -74,6 +87,8 @@ pub struct Cli {
 pub enum Command {
     /// Check architecture dependency rules against source files.
     Check {
+        #[command(flatten)]
+        common: CommonArgs,
         /// Path to mille.toml (default: ./mille.toml)
         #[arg(long, default_value = "mille.toml")]
         config: String,
@@ -87,6 +102,8 @@ pub enum Command {
     },
     /// Visualize the dependency graph without applying rules.
     Analyze {
+        #[command(flatten)]
+        common: CommonArgs,
         /// Path to mille.toml (default: ./mille.toml)
         #[arg(long, default_value = "mille.toml")]
         config: String,
@@ -104,6 +121,8 @@ pub enum Command {
     },
     /// Scan the project and generate a mille.toml configuration file.
     Init {
+        #[command(flatten)]
+        common: CommonArgs,
         /// Output path for the generated config (default: mille.toml)
         #[arg(long, default_value = "mille.toml")]
         output: String,
@@ -115,6 +134,30 @@ pub enum Command {
         #[arg(long)]
         depth: Option<usize>,
     },
+}
+
+impl Command {
+    /// Returns the common arguments shared by all subcommands.
+    ///
+    /// Adding a new variant to `Command` without a `common: CommonArgs` field
+    /// will cause a compile error here — this is intentional.
+    pub fn common(&self) -> &CommonArgs {
+        match self {
+            Command::Check { common, .. } => common,
+            Command::Analyze { common, .. } => common,
+            Command::Report { subcommand } => subcommand.common(),
+            Command::Init { common, .. } => common,
+        }
+    }
+}
+
+impl ReportCommand {
+    /// Returns the common arguments for report subcommands.
+    pub fn common(&self) -> &CommonArgs {
+        match self {
+            ReportCommand::External { common, .. } => common,
+        }
+    }
 }
 
 #[cfg(test)]

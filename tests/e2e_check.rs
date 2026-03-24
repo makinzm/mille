@@ -894,7 +894,7 @@ fn test_rust_infra_empty_external_allow_mentions_tree_sitter() {
 /// The binary should chdir into that directory and find mille.toml there.
 #[test]
 fn test_check_with_path_argument() {
-    let fixture = project_root().join("tests/fixtures/rust_sample");
+    let fixture = project_root().join("tests/fixtures/python_sample");
     let out = Command::new(env!("CARGO_BIN_EXE_mille"))
         .args(["check", fixture.to_str().unwrap()])
         .current_dir(project_root()) // NOT the fixture dir
@@ -903,15 +903,16 @@ fn test_check_with_path_argument() {
     assert_eq!(
         exit_code(&out),
         0,
-        "check with path argument should succeed\nstderr:\n{}",
-        stderr(&out)
+        "check with path argument should succeed\nstderr:\n{}\nstdout:\n{}",
+        stderr(&out),
+        stdout(&out)
     );
 }
 
 /// `mille check <PATH> --config <RELATIVE>` should resolve config relative to PATH.
 #[test]
 fn test_check_path_with_explicit_config() {
-    let fixture = project_root().join("tests/fixtures/rust_sample");
+    let fixture = project_root().join("tests/fixtures/python_sample");
     let out = Command::new(env!("CARGO_BIN_EXE_mille"))
         .args(["check", fixture.to_str().unwrap(), "--config", "mille.toml"])
         .current_dir(project_root())
@@ -920,8 +921,9 @@ fn test_check_path_with_explicit_config() {
     assert_eq!(
         exit_code(&out),
         0,
-        "check with path + explicit config should succeed\nstderr:\n{}",
-        stderr(&out)
+        "check with path + explicit config should succeed\nstderr:\n{}\nstdout:\n{}",
+        stderr(&out),
+        stdout(&out)
     );
 }
 
