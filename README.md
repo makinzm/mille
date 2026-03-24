@@ -6,6 +6,11 @@
 
 One TOML config. Rust-powered. CI-ready. Supports multiple languages from a single config file.
 
+> **Versioning policy**
+> - `0.0.z`: Under active development. No compatibility guarantees.
+> - `0.y.z` (y ≠ 0): Compatibility maintained within the same `y`.
+> - `x.y.z` (x ≠ 0): Stable release with full operational readiness.
+
 ## What it checks
 
 **Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C, YAML
