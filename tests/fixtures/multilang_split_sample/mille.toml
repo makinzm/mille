@@ -1,0 +1,46 @@
+[project]
+name = "multilang-split"
+root = "."
+languages = ["typescript", "python", "go"]
+
+[resolve.go]
+module_name = "github.com/example/multilang-split"
+
+[resolve.python]
+package_names = ["domain", "usecase", "infrastructure", "main"]
+
+[[layers]]
+name = "domain"
+paths = ["ts/domain/**", "py/domain/**", "go/domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["ts/usecase/**", "py/usecase/**", "go/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-in"
+external_allow = ["some-lib"]
+
+[[layers]]
+name = "infrastructure"
+paths = ["ts/infrastructure/**", "py/infrastructure/**", "go/infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "main"
+paths = ["ts/main/**", "py/main/**", "go/cmd/**"]
+dependency_mode = "opt-in"
+allow = ["domain", "usecase", "infrastructure"]
+external_mode = "opt-out"
+external_deny = []
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "domain"
+  allow_methods = ["create", "NewUser"]

@@ -20,96 +20,174 @@ use crate::domain::entity::resolved_import::ResolvedImport;
 use crate::domain::repository::resolver::Resolver;
 
 /// Dispatches to the appropriate resolver based on file extension.
+///
+/// Only resolvers for languages listed in `[project] languages` are registered.
+/// Unknown extensions fall back to the Rust resolver (if registered) for backwards
+/// compatibility with existing single-language Rust projects.
 pub struct DispatchingResolver {
-    c: CResolver,
-    rust: RustResolver,
-    go: GoResolver,
-    python: PythonResolver,
-    typescript: TypeScriptResolver,
-    java: JavaResolver,
-    php: PhpResolver,
+    /// Maps file extensions (e.g. ".rs", ".ts") to their resolver.
+    resolvers: HashMap<&'static str, Box<dyn Resolver>>,
 }
 
 impl DispatchingResolver {
-    pub fn new(go: GoResolver, python: PythonResolver, typescript: TypeScriptResolver) -> Self {
-        DispatchingResolver {
-            c: CResolver::new(),
-            rust: RustResolver,
-            go,
-            python,
-            typescript,
-            java: JavaResolver::new(String::new()),
-            php: PhpResolver::new(String::new()),
-        }
-    }
-
-    /// Build a `DispatchingResolver` from a raw resolve config value and config file path.
-    pub fn from_resolve_config(resolve: Option<&toml::Value>, config_path: &str) -> Self {
-        let go_module = resolve
-            .and_then(|r| r.get("go"))
-            .and_then(|g| g.get("module_name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string();
-
-        let python_packages: Vec<String> = resolve
-            .and_then(|r| r.get("python"))
-            .and_then(|p| p.get("package_names"))
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let ts_aliases = load_ts_aliases(config_path, resolve);
-
-        let java_value = resolve.and_then(|r| r.get("java"));
-
+    /// Build a `DispatchingResolver` from a raw resolve config value, config file path,
+    /// and the list of languages declared in `[project] languages`.
+    pub fn from_resolve_config(
+        resolve: Option<&toml::Value>,
+        config_path: &str,
+        languages: &[String],
+    ) -> Self {
         let config_dir = std::path::Path::new(config_path)
             .parent()
             .unwrap_or(std::path::Path::new("."));
 
-        let java_resolver = if let Some(jcfg) = java_value {
-            let manual_name = jcfg.get("module_name").and_then(|v| v.as_str());
-            let pom_path = jcfg
-                .get("pom_xml")
-                .and_then(|v| v.as_str())
-                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
-            let gradle_path = jcfg
-                .get("build_gradle")
-                .and_then(|v| v.as_str())
-                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
-            JavaResolver::from_config(
-                manual_name,
-                pom_path.as_deref(),
-                gradle_path.as_deref(),
-                None,
-            )
-        } else {
-            JavaResolver::new(String::new())
-        };
+        let mut resolvers: HashMap<&'static str, Box<dyn Resolver>> = HashMap::new();
 
-        let php_resolver = if let Some(pcfg) = resolve.and_then(|r| r.get("php")) {
-            let manual_ns = pcfg.get("namespace").and_then(|v| v.as_str());
-            let composer_path = pcfg
-                .get("composer_json")
-                .and_then(|v| v.as_str())
-                .map(|p| config_dir.join(p).to_string_lossy().into_owned());
-            PhpResolver::from_config(manual_ns, composer_path.as_deref())
-        } else {
-            PhpResolver::new(String::new())
-        };
+        for lang in languages {
+            match lang.as_str() {
+                "rust" => {
+                    resolvers.insert(".rs", Box::new(RustResolver));
+                }
+                "go" => {
+                    let go_module = resolve
+                        .and_then(|r| r.get("go"))
+                        .and_then(|g| g.get("module_name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    resolvers.insert(".go", Box::new(GoResolver::new(go_module)));
+                }
+                "python" => {
+                    let python_packages: Vec<String> = resolve
+                        .and_then(|r| r.get("python"))
+                        .and_then(|p| p.get("package_names"))
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    resolvers.insert(".py", Box::new(PythonResolver::new(python_packages)));
+                }
+                "typescript" | "javascript" => {
+                    let ts_aliases = load_ts_aliases(config_path, resolve);
+                    let ts_resolver = TypeScriptResolver::with_aliases(ts_aliases);
+                    resolvers.insert(".ts", Box::new(ts_resolver));
+                    // Share the same resolver config for all TS/JS extensions.
+                    // We need separate instances since Box doesn't impl Clone,
+                    // but the aliases are the same.
+                    let ts_aliases2 = load_ts_aliases(config_path, resolve);
+                    resolvers.insert(
+                        ".tsx",
+                        Box::new(TypeScriptResolver::with_aliases(ts_aliases2)),
+                    );
+                    let ts_aliases3 = load_ts_aliases(config_path, resolve);
+                    resolvers.insert(
+                        ".js",
+                        Box::new(TypeScriptResolver::with_aliases(ts_aliases3)),
+                    );
+                    let ts_aliases4 = load_ts_aliases(config_path, resolve);
+                    resolvers.insert(
+                        ".jsx",
+                        Box::new(TypeScriptResolver::with_aliases(ts_aliases4)),
+                    );
+                }
+                "java" | "kotlin" => {
+                    let java_value = resolve.and_then(|r| r.get("java"));
+                    let java_resolver = if let Some(jcfg) = java_value {
+                        let manual_name = jcfg.get("module_name").and_then(|v| v.as_str());
+                        let pom_path = jcfg
+                            .get("pom_xml")
+                            .and_then(|v| v.as_str())
+                            .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+                        let gradle_path = jcfg
+                            .get("build_gradle")
+                            .and_then(|v| v.as_str())
+                            .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+                        JavaResolver::from_config(
+                            manual_name,
+                            pom_path.as_deref(),
+                            gradle_path.as_deref(),
+                            None,
+                        )
+                    } else {
+                        JavaResolver::new(String::new())
+                    };
+                    resolvers.insert(".java", Box::new(java_resolver));
+                    // Kotlin uses the same Java resolver logic
+                    let java_value2 = resolve.and_then(|r| r.get("java"));
+                    let kt_resolver = if let Some(jcfg) = java_value2 {
+                        let manual_name = jcfg.get("module_name").and_then(|v| v.as_str());
+                        let pom_path = jcfg
+                            .get("pom_xml")
+                            .and_then(|v| v.as_str())
+                            .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+                        let gradle_path = jcfg
+                            .get("build_gradle")
+                            .and_then(|v| v.as_str())
+                            .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+                        JavaResolver::from_config(
+                            manual_name,
+                            pom_path.as_deref(),
+                            gradle_path.as_deref(),
+                            None,
+                        )
+                    } else {
+                        JavaResolver::new(String::new())
+                    };
+                    resolvers.insert(".kt", Box::new(kt_resolver));
+                }
+                "php" => {
+                    let php_resolver = if let Some(pcfg) = resolve.and_then(|r| r.get("php")) {
+                        let manual_ns = pcfg.get("namespace").and_then(|v| v.as_str());
+                        let composer_path = pcfg
+                            .get("composer_json")
+                            .and_then(|v| v.as_str())
+                            .map(|p| config_dir.join(p).to_string_lossy().into_owned());
+                        PhpResolver::from_config(manual_ns, composer_path.as_deref())
+                    } else {
+                        PhpResolver::new(String::new())
+                    };
+                    resolvers.insert(".php", Box::new(php_resolver));
+                }
+                "c" => {
+                    resolvers.insert(".c", Box::new(CResolver::new()));
+                    resolvers.insert(".h", Box::new(CResolver::new()));
+                }
+                _ => {
+                    // Unknown language — skip silently.
+                    // The parser layer handles unsupported languages separately.
+                }
+            }
+        }
 
-        DispatchingResolver {
-            c: CResolver::new(),
-            rust: RustResolver,
-            go: GoResolver::new(go_module),
-            python: PythonResolver::new(python_packages),
-            typescript: TypeScriptResolver::with_aliases(ts_aliases),
-            java: java_resolver,
-            php: php_resolver,
+        DispatchingResolver { resolvers }
+    }
+
+    /// Look up the resolver for a given file path by its extension.
+    fn resolver_for(&self, file: &str) -> Option<&dyn Resolver> {
+        let dot_pos = file.rfind('.')?;
+        let ext = &file[dot_pos..];
+        self.resolvers.get(ext).map(|r| r.as_ref())
+    }
+}
+
+impl Resolver for DispatchingResolver {
+    fn resolve(&self, import: &RawImport) -> ResolvedImport {
+        if let Some(r) = self.resolver_for(&import.file) {
+            r.resolve(import)
+        } else {
+            // Fallback: treat unknown extensions as Rust for backwards compatibility.
+            RustResolver.resolve(import)
+        }
+    }
+
+    fn resolve_for_project(&self, import: &RawImport, own_crate: &str) -> ResolvedImport {
+        if let Some(r) = self.resolver_for(&import.file) {
+            r.resolve_for_project(import, own_crate)
+        } else {
+            RustResolver.resolve_for_project(import, own_crate)
         }
     }
 }
@@ -189,53 +267,4 @@ fn strip_json_line_comments(s: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-fn is_c(file: &str) -> bool {
-    file.ends_with(".c") || file.ends_with(".h")
-}
-
-fn is_ts_js(file: &str) -> bool {
-    file.ends_with(".ts")
-        || file.ends_with(".tsx")
-        || file.ends_with(".js")
-        || file.ends_with(".jsx")
-}
-
-impl Resolver for DispatchingResolver {
-    fn resolve(&self, import: &RawImport) -> ResolvedImport {
-        if is_c(&import.file) {
-            self.c.resolve(import)
-        } else if import.file.ends_with(".go") {
-            self.go.resolve(import)
-        } else if import.file.ends_with(".py") {
-            self.python.resolve(import)
-        } else if is_ts_js(&import.file) {
-            self.typescript.resolve(import)
-        } else if import.file.ends_with(".java") || import.file.ends_with(".kt") {
-            self.java.resolve(import)
-        } else if import.file.ends_with(".php") {
-            self.php.resolve(import)
-        } else {
-            self.rust.resolve(import)
-        }
-    }
-
-    fn resolve_for_project(&self, import: &RawImport, own_crate: &str) -> ResolvedImport {
-        if is_c(&import.file) {
-            self.c.resolve_for_project(import, own_crate)
-        } else if import.file.ends_with(".go") {
-            self.go.resolve_for_project(import, own_crate)
-        } else if import.file.ends_with(".py") {
-            self.python.resolve_for_project(import, own_crate)
-        } else if is_ts_js(&import.file) {
-            self.typescript.resolve_for_project(import, own_crate)
-        } else if import.file.ends_with(".java") || import.file.ends_with(".kt") {
-            self.java.resolve_for_project(import, own_crate)
-        } else if import.file.ends_with(".php") {
-            self.php.resolve_for_project(import, own_crate)
-        } else {
-            self.rust.resolve_for_project(import, own_crate)
-        }
-    }
 }

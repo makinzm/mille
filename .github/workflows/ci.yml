@@ -153,6 +153,12 @@ jobs:
       - name: Self-check — Rust multi-file main fixture (tests/fixtures/rust_multifile_main)
         working-directory: tests/fixtures/rust_multifile_main
         run: ${{ github.workspace }}/target/release/mille check
+      - name: Self-check — Multilang mixed fixture (tests/fixtures/multilang_mixed_sample)
+        working-directory: tests/fixtures/multilang_mixed_sample
+        run: ${{ github.workspace }}/target/release/mille check
+      - name: Self-check — Multilang split fixture (tests/fixtures/multilang_split_sample)
+        working-directory: tests/fixtures/multilang_split_sample
+        run: ${{ github.workspace }}/target/release/mille check
 
   # ------------------------------------------------------------------ #
   # 3b. Dogfooding-python — maturin build → pytest + mille check     #
