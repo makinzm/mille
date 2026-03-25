@@ -41,8 +41,16 @@ external_mode = "opt-in"
 external_allow = ["clap"]
 
 [[layers]]
-name = "main"
+name = "entrypoint"
 paths = ["src/main.rs"]
+dependency_mode = "opt-in"
+allow = ["runner"]
+external_mode = "opt-in"
+external_allow = []
+
+[[layers]]
+name = "runner"
+paths = ["src/runner.rs"]
 dependency_mode = "opt-in"
 allow = ["domain", "infrastructure", "usecase", "presentation"]
 external_mode = "opt-in"
@@ -50,8 +58,12 @@ external_allow = ["clap"]
 
   [[layers.allow_call_patterns]]
   callee_layer = "usecase"
-  allow_methods = ["check", "detect_languages", "infer_layers", "generate_toml", "is_excluded_dir"]
+  allow_methods = ["check", "analyze", "report_external", "detect_languages", "infer_layers", "generate_toml", "is_excluded_dir"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "infrastructure"
+  allow_methods = ["new", "from_resolve_config"]
 
   [[layers.allow_call_patterns]]
   callee_layer = "presentation"
-  allow_methods = ["parse"]
+  allow_methods = ["parse", "parse_from"]
