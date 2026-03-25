@@ -431,9 +431,8 @@ mod tests {
 
     #[test]
     fn test_parse_add_with_config() {
-        let cli =
-            Cli::try_parse_from(["mille", "add", "src/newlayer", "--config", "custom.toml"])
-                .unwrap();
+        let cli = Cli::try_parse_from(["mille", "add", "src/newlayer", "--config", "custom.toml"])
+            .unwrap();
         match &cli.command {
             Command::Add { config, .. } => assert_eq!(config, "custom.toml"),
             _ => panic!("expected Add command"),

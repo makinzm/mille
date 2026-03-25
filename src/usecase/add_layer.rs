@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use crate::domain::entity::layer::{DependencyMode, LayerConfig, NameTarget};
 use crate::usecase::init::DirAnalysis;
 
@@ -347,9 +345,6 @@ external_mode = "opt-in"
             "domain_v2"
         );
         // Second layer preserved
-        assert_eq!(
-            layers[1].get("name").unwrap().as_str().unwrap(),
-            "usecase"
-        );
+        assert_eq!(layers[1].get("name").unwrap().as_str().unwrap(), "usecase");
     }
 }
