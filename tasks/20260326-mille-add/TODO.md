@@ -5,11 +5,11 @@
 
 ## タスク
 
-- [ ] CLI args テスト（`Command::Add` バリアント追加）
-- [ ] CLI args 実装
-- [ ] Usecase unit テスト（`add_layer.rs`）
-- [ ] Usecase 実装
-- [ ] Runner ワイヤリング
-- [ ] E2E テスト（`tests/e2e_add.rs`）
-- [ ] E2E テスト修正
-- [ ] README / docs 更新
+- [x] CLI args テスト（`Command::Add` バリアント追加）
+- [x] CLI args 実装
+- [x] Usecase unit テスト（`add_layer.rs`）
+- [x] Usecase 実装
+- [x] Runner ワイヤリング
+- [x] E2E テスト（`tests/e2e_add.rs`）
+- [x] E2E テスト修正
+- [x] README 更新

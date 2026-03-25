@@ -141,6 +141,25 @@ Inferred layer structure:
 Generated 'mille.toml'
 ```
 
+### 1b. Add a layer with `mille add`
+
+When you add a new directory to an existing project, use `mille add` to append it as a layer to your `mille.toml` — without rewriting the entire config:
+
+```sh
+mille add src/newlayer                     # add using directory basename as layer name
+mille add src/newlayer --name my_layer     # specify a custom layer name
+mille add src/newlayer --config custom.toml # target a specific config file
+mille add src/newlayer --force             # overwrite if a layer with overlapping paths exists
+```
+
+`mille add` scans the target directory for imports (just like `mille init` does) and appends a `[[layers]]` section to the existing config. If a layer with overlapping paths already exists, it exits with an error unless `--force` is specified — in which case the existing layer is replaced.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--config <path>` | `mille.toml` | Path to the config file to modify |
+| `--name <name>` | directory basename | Layer name to use |
+| `--force` | false | Replace existing layer with overlapping paths |
+
 ### 2. (Or) Create `mille.toml` manually
 
 Place `mille.toml` in your project root:
