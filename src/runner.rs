@@ -420,7 +420,18 @@ fn run_cli_inner(cli: Cli) {
             // 5. Build target glob
             let target_glob = format!("{}/**", target_path);
 
-            // 6. Check for conflicts
+            // 6. Scan target directory
+            println!("Scanning '{}'...", target_path);
+            let analysis = scan_single_dir(Path::new(target_path));
+            println!(
+                "  {} files, {} internal deps, {} external deps",
+                analysis.file_count,
+                analysis.internal_deps.len(),
+                analysis.external_pkgs.len()
+            );
+            let new_layer = add_layer::build_layer_config(&layer_name, &target_glob, &analysis);
+
+            // 7. Check for conflicts
             if let Some(conflict) = add_layer::find_conflict(&app_config.layers, &target_glob) {
                 if !force {
                     eprintln!(
@@ -447,10 +458,6 @@ fn run_cli_inner(cli: Cli) {
                     }
                 };
 
-                // Scan target directory
-                let analysis = scan_single_dir(Path::new(target_path));
-                let new_layer = add_layer::build_layer_config(&layer_name, &target_glob, &analysis);
-
                 if let Err(e) =
                     add_layer::replace_layer_in_table(&mut table, conflict.layer_index, &new_layer)
                 {
@@ -470,8 +477,6 @@ fn run_cli_inner(cli: Cli) {
                 }
             } else {
                 // No conflict: append to file
-                let analysis = scan_single_dir(Path::new(target_path));
-                let new_layer = add_layer::build_layer_config(&layer_name, &target_glob, &analysis);
                 let layer_str = add_layer::layer_to_toml_string(&new_layer);
 
                 let mut existing = match fs::read_to_string(&config) {
@@ -821,7 +826,19 @@ fn scan_project(
 fn is_source_file(name: &str) -> bool {
     matches!(
         name.rsplit('.').next().unwrap_or(""),
-        "rs" | "ts" | "tsx" | "js" | "jsx" | "go" | "py" | "java" | "kt"
+        "rs" | "ts"
+            | "tsx"
+            | "js"
+            | "jsx"
+            | "go"
+            | "py"
+            | "java"
+            | "kt"
+            | "php"
+            | "c"
+            | "h"
+            | "yaml"
+            | "yml"
     )
 }
 
