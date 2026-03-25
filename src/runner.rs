@@ -71,7 +71,10 @@ fn apply_path(path: &str) {
 }
 
 fn run_cli_inner(cli: Cli) {
-    apply_path(&cli.command.common().path);
+    // Add command does NOT call apply_path — it operates relative to cwd
+    if !matches!(cli.command, Command::Add { .. }) {
+        apply_path(&cli.command.common().path);
+    }
 
     match cli.command {
         Command::Report { subcommand } => match subcommand {
@@ -373,6 +376,14 @@ fn run_cli_inner(cli: Cli) {
                     std::process::exit(3);
                 }
             }
+        }
+        Command::Add {
+            common,
+            config,
+            name,
+            force,
+        } => {
+            todo!("mille add not yet implemented")
         }
     }
 }
