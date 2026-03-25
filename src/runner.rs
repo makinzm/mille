@@ -82,7 +82,7 @@ fn run_cli_inner(cli: Cli) {
                 output,
             } => {
                 let config_repo = TomlConfigRepository;
-                let (_app_config, resolve) = match config_repo.load_with_resolve(&config) {
+                let (app_config, resolve) = match config_repo.load_with_resolve(&config) {
                     Ok(c) => c,
                     Err(e) => {
                         eprintln!("Error: {}", e);
@@ -91,7 +91,11 @@ fn run_cli_inner(cli: Cli) {
                 };
 
                 let parser = DispatchingParser::new();
-                let resolver = DispatchingResolver::from_resolve_config(resolve.as_ref(), &config);
+                let resolver = DispatchingResolver::from_resolve_config(
+                    resolve.as_ref(),
+                    &config,
+                    &app_config.project.languages,
+                );
 
                 match report_external::report_external(
                     &config,
@@ -142,7 +146,7 @@ fn run_cli_inner(cli: Cli) {
             output,
         } => {
             let config_repo = TomlConfigRepository;
-            let (_app_config, resolve) = match config_repo.load_with_resolve(&config) {
+            let (app_config, resolve) = match config_repo.load_with_resolve(&config) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -151,7 +155,11 @@ fn run_cli_inner(cli: Cli) {
             };
 
             let parser = DispatchingParser::new();
-            let resolver = DispatchingResolver::from_resolve_config(resolve.as_ref(), &config);
+            let resolver = DispatchingResolver::from_resolve_config(
+                resolve.as_ref(),
+                &config,
+                &app_config.project.languages,
+            );
 
             match analyze::analyze(
                 &config,
@@ -306,7 +314,7 @@ fn run_cli_inner(cli: Cli) {
             // Pre-load config to build the resolver, then pass path to check().
             // NOTE: Double-load is acceptable for a CLI tool.
             let config_repo = TomlConfigRepository;
-            let (_app_config, resolve) = match config_repo.load_with_resolve(&config) {
+            let (app_config, resolve) = match config_repo.load_with_resolve(&config) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -315,7 +323,11 @@ fn run_cli_inner(cli: Cli) {
             };
 
             let parser = DispatchingParser::new();
-            let resolver = DispatchingResolver::from_resolve_config(resolve.as_ref(), &config);
+            let resolver = DispatchingResolver::from_resolve_config(
+                resolve.as_ref(),
+                &config,
+                &app_config.project.languages,
+            );
 
             match check_architecture::check(
                 &config,
