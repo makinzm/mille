@@ -16,8 +16,7 @@ use std::process::{Command, Output};
 // ---------------------------------------------------------------------------
 
 fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/rust_multifile_main")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rust_multifile_main")
 }
 
 fn mille_at(dir: &PathBuf, args: &[&str]) -> Output {
@@ -269,7 +268,11 @@ fn test_multifile_main_runner_dep_violation_mentions_runner() {
 #[test]
 fn test_multifile_main_call_pattern_violation_exits_one() {
     let dir = fixture_dir();
-    let cfg = TempConfig::new(&dir, "mille_e2e_call.toml", MAIN_CALL_PATTERN_VIOLATION_TOML);
+    let cfg = TempConfig::new(
+        &dir,
+        "mille_e2e_call.toml",
+        MAIN_CALL_PATTERN_VIOLATION_TOML,
+    );
     let out = mille_at(&dir, &["check", "--config", cfg.file_name()]);
     assert_eq!(
         exit_code(&out),
@@ -282,7 +285,11 @@ fn test_multifile_main_call_pattern_violation_exits_one() {
 #[test]
 fn test_multifile_main_call_pattern_violation_mentions_hello() {
     let dir = fixture_dir();
-    let cfg = TempConfig::new(&dir, "mille_e2e_call2.toml", MAIN_CALL_PATTERN_VIOLATION_TOML);
+    let cfg = TempConfig::new(
+        &dir,
+        "mille_e2e_call2.toml",
+        MAIN_CALL_PATTERN_VIOLATION_TOML,
+    );
     let out = mille_at(&dir, &["check", "--config", cfg.file_name()]);
     let s = stdout(&out);
     assert!(
