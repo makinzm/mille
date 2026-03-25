@@ -19,7 +19,7 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 |---|---|
 | `dependency_mode` | Layer dependency rules — control which layers can import from which |
 | `external_mode` | External library rules — restrict third-party package usage per layer |
-| `allow_call_patterns` | DI method call rules — limit which methods may be called on injected types |
+| `allow_call_patterns` | Method call rules — limit which methods may be called on any layer's types |
 | `name_deny` | Naming convention rules — forbid infrastructure keywords in domain/usecase |
 
 ## Install
@@ -476,7 +476,7 @@ name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from namin
 
 ### `[[layers.allow_call_patterns]]`
 
-Restricts which methods may be called on a given layer's types. Only valid on the `main` layer (or equivalent DI entrypoint).
+Restricts which methods may be called on a given layer's types. Can be defined on any layer.
 
 | Key | Description |
 |---|---|

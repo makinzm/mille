@@ -10,7 +10,7 @@
 現在の `mille check` は以下を正常に動作させています：
 - ✅ 内部レイヤー依存チェック (`dependency_mode`)
 - ✅ 外部ライブラリ依存チェック (`external_mode`)
-- ✅ DIエントリーポイントのメソッド呼び出しチェック (`allow_call_patterns`)
+- ✅ メソッド呼び出しチェック (`allow_call_patterns`) — 全レイヤーで定義可能
 - ✅ Rust / Go / TypeScript / JavaScript / Python / Java / Kotlin / PHP サポート
 - ✅ `[resolve.typescript]` tsconfig.json paths エイリアス解決
 - ✅ cargo / npm(WASM) / go install / pip パッケージ配布

@@ -1,0 +1,48 @@
+[project]
+name = "rust-multifile-main"
+root = "."
+languages = ["rust"]
+
+[[layers]]
+name = "domain"
+paths = ["src/domain/**"]
+dependency_mode = "opt-out"
+deny = ["infrastructure", "usecase", "main"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["src/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "domain"
+  allow_methods = ["new"]
+
+[[layers]]
+name = "infrastructure"
+paths = ["src/infrastructure/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "main"
+paths = ["src/main.rs", "src/runner.rs"]
+dependency_mode = "opt-in"
+allow = ["usecase", "infrastructure", "domain"]
+external_mode = "opt-out"
+external_deny = []
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "usecase"
+  allow_methods = ["hello"]
+
+  [[layers.allow_call_patterns]]
+  callee_layer = "infrastructure"
+  allow_methods = ["print"]
