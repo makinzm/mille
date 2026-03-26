@@ -58,7 +58,7 @@ external_allow = ["clap"]
 
   [[layers.allow_call_patterns]]
   callee_layer = "usecase"
-  allow_methods = ["check", "analyze", "report_external", "detect_languages", "infer_layers", "generate_toml", "is_excluded_dir"]
+  allow_methods = ["check", "analyze", "report_external", "detect_languages", "infer_layers", "generate_toml", "is_excluded_dir", "find_conflict", "build_layer_config", "layer_to_toml_string", "replace_layer_in_table"]
 
   [[layers.allow_call_patterns]]
   callee_layer = "infrastructure"

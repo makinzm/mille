@@ -313,7 +313,7 @@ mod tests {
 [project]
 name = "test"
 root = "."
-languages = ["rust"]
+languages = ["lang_a"]
 
 [[layers]]
 name = "domain"
