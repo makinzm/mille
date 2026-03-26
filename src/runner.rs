@@ -383,6 +383,7 @@ fn run_cli_inner(cli: Cli) {
             config,
             name,
             force,
+            depth,
         } => {
             let target_path = &common.path;
 
@@ -398,103 +399,160 @@ fn run_cli_inner(cli: Cli) {
                 std::process::exit(3);
             }
 
-            // 3. Load existing config
+            // 3. Validate config is parseable
             let config_repo = TomlConfigRepository;
-            let (app_config, _resolve) = match config_repo.load_with_resolve(&config) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Error: failed to parse '{}': {}", config, e);
-                    std::process::exit(3);
+            if let Err(e) = config_repo.load_with_resolve(&config) {
+                eprintln!("Error: failed to parse '{}': {}", config, e);
+                std::process::exit(3);
+            }
+
+            // 4. Scan and build layers
+            println!("Scanning '{}'...", target_path);
+            let new_layers = if depth.is_some() {
+                // --depth: scan subdirectories and produce multiple layers
+                let target_abs = std::env::current_dir()
+                    .expect("cannot determine current directory")
+                    .join(target_path);
+                let parser = DispatchingParser::new();
+                let analyses = scan_target_with_depth(&target_abs, &parser, depth, target_path);
+                let mut layers = init::infer_layers(&analyses);
+                // Append /** glob to paths
+                for layer in &mut layers {
+                    layer.paths = layer.paths.iter().map(|p| format!("{}/**", p)).collect();
                 }
+                if layers.is_empty() {
+                    println!("No layers detected under '{}'.", target_path);
+                } else {
+                    println!("Detected {} layers:", layers.len());
+                    for layer in &layers {
+                        if layer.allow.is_empty() {
+                            println!("  {:<20} ← (no internal dependencies)", layer.name);
+                        } else {
+                            println!("  {:<20} → {}", layer.name, layer.allow.join(", "));
+                        }
+                    }
+                }
+                layers
+            } else {
+                // No depth: single layer
+                let layer_name = name.unwrap_or_else(|| {
+                    Path::new(target_path)
+                        .file_name()
+                        .unwrap_or(std::ffi::OsStr::new(target_path))
+                        .to_string_lossy()
+                        .to_string()
+                });
+                let target_glob = format!("{}/**", target_path);
+                let analysis = scan_single_dir(Path::new(target_path));
+                println!(
+                    "  {} files, {} internal deps, {} external deps",
+                    analysis.file_count,
+                    analysis.internal_deps.len(),
+                    analysis.external_pkgs.len()
+                );
+                vec![add_layer::build_layer_config(
+                    &layer_name,
+                    &target_glob,
+                    &analysis,
+                )]
             };
 
-            // 4. Determine layer name
-            let layer_name = name.unwrap_or_else(|| {
-                Path::new(target_path)
-                    .file_name()
-                    .unwrap_or(std::ffi::OsStr::new(target_path))
-                    .to_string_lossy()
-                    .to_string()
-            });
-
-            // 5. Build target glob
-            let target_glob = format!("{}/**", target_path);
-
-            // 6. Scan target directory
-            println!("Scanning '{}'...", target_path);
-            let analysis = scan_single_dir(Path::new(target_path));
-            println!(
-                "  {} files, {} internal deps, {} external deps",
-                analysis.file_count,
-                analysis.internal_deps.len(),
-                analysis.external_pkgs.len()
-            );
-            let new_layer = add_layer::build_layer_config(&layer_name, &target_glob, &analysis);
-
-            // 7. Check for conflicts
-            if let Some(conflict) = add_layer::find_conflict(&app_config.layers, &target_glob) {
-                if !force {
-                    eprintln!(
-                        "Error: layer '{}' already has overlapping paths: {}",
-                        conflict.layer_name,
-                        conflict.overlapping_paths.join(", ")
-                    );
-                    std::process::exit(1);
-                }
-
-                // --force: replace via toml::Table
-                let raw_content = match fs::read_to_string(&config) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        eprintln!("Error: failed to read '{}': {}", config, e);
-                        std::process::exit(1);
-                    }
-                };
-                let mut table: toml::Table = match raw_content.parse() {
-                    Ok(t) => t,
+            // 5. Add each layer (conflict check per layer)
+            let mut added = 0usize;
+            let mut replaced = 0usize;
+            let mut skipped = 0usize;
+            // Re-read config for each pass to reflect prior writes
+            for new_layer in &new_layers {
+                let target_glob = new_layer.paths.first().cloned().unwrap_or_default();
+                // Reload config to get current layers (may have changed in prior iteration)
+                let current_config = match TomlConfigRepository.load_with_resolve(&config) {
+                    Ok((c, _)) => c,
                     Err(e) => {
                         eprintln!("Error: failed to parse '{}': {}", config, e);
                         std::process::exit(3);
                     }
                 };
 
-                if let Err(e) =
-                    add_layer::replace_layer_in_table(&mut table, conflict.layer_index, &new_layer)
+                if let Some(conflict) =
+                    add_layer::find_conflict(&current_config.layers, &target_glob)
                 {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
-
-                let new_content = toml::to_string_pretty(&table).unwrap_or_default();
-                match fs::write(&config, &new_content) {
-                    Ok(_) => {
-                        println!("Replaced layer '{}' in '{}'", conflict.layer_name, config);
+                    if !force {
+                        eprintln!(
+                            "  Skipping '{}': overlaps with layer '{}'",
+                            new_layer.name, conflict.layer_name
+                        );
+                        skipped += 1;
+                        continue;
                     }
-                    Err(e) => {
+                    // --force: replace via toml::Table
+                    let raw = match fs::read_to_string(&config) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Error: failed to read '{}': {}", config, e);
+                            std::process::exit(1);
+                        }
+                    };
+                    let mut table: toml::Table = match raw.parse() {
+                        Ok(t) => t,
+                        Err(e) => {
+                            eprintln!("Error: failed to parse '{}': {}", config, e);
+                            std::process::exit(3);
+                        }
+                    };
+                    if let Err(e) = add_layer::replace_layer_in_table(
+                        &mut table,
+                        conflict.layer_index,
+                        new_layer,
+                    ) {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                    let content = toml::to_string_pretty(&table).unwrap_or_default();
+                    if let Err(e) = fs::write(&config, &content) {
                         eprintln!("Error: failed to write '{}': {}", config, e);
                         std::process::exit(1);
                     }
+                    replaced += 1;
+                } else {
+                    // Append
+                    let layer_str = add_layer::layer_to_toml_string(new_layer);
+                    let mut existing = match fs::read_to_string(&config) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Error: failed to read '{}': {}", config, e);
+                            std::process::exit(1);
+                        }
+                    };
+                    existing.push_str(&layer_str);
+                    if let Err(e) = fs::write(&config, &existing) {
+                        eprintln!("Error: failed to write '{}': {}", config, e);
+                        std::process::exit(1);
+                    }
+                    added += 1;
                 }
+            }
+
+            // Summary
+            if new_layers.len() == 1 && added == 1 {
+                println!("Added layer '{}' to '{}'", new_layers[0].name, config);
+            } else if new_layers.len() == 1 && replaced == 1 {
+                println!("Replaced layer '{}' in '{}'", new_layers[0].name, config);
             } else {
-                // No conflict: append to file
-                let layer_str = add_layer::layer_to_toml_string(&new_layer);
-
-                let mut existing = match fs::read_to_string(&config) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        eprintln!("Error: failed to read '{}': {}", config, e);
-                        std::process::exit(1);
-                    }
-                };
-                existing.push_str(&layer_str);
-
-                match fs::write(&config, &existing) {
-                    Ok(_) => println!("Added layer '{}' to '{}'", layer_name, config),
-                    Err(e) => {
-                        eprintln!("Error: failed to write '{}': {}", config, e);
-                        std::process::exit(1);
-                    }
+                let mut parts = vec![];
+                if added > 0 {
+                    parts.push(format!("{} added", added));
                 }
+                if replaced > 0 {
+                    parts.push(format!("{} replaced", replaced));
+                }
+                if skipped > 0 {
+                    parts.push(format!("{} skipped", skipped));
+                }
+                println!("{} in '{}'", parts.join(", "), config);
+            }
+
+            if skipped > 0 && !force {
+                std::process::exit(1);
             }
         }
     }
@@ -503,6 +561,126 @@ fn run_cli_inner(cli: Cli) {
 // ---------------------------------------------------------------------------
 // Single-directory scanning for `mille add`
 // ---------------------------------------------------------------------------
+
+/// Scan a target directory with depth-based layer detection.
+///
+/// Works like `scan_project` but scoped to a subdirectory. Paths in the returned
+/// `BTreeMap` are relative to the project root (prefixed with `target_rel`).
+fn scan_target_with_depth(
+    target_abs: &Path,
+    parser: &DispatchingParser,
+    depth: Option<usize>,
+    target_rel: &str,
+) -> BTreeMap<String, DirAnalysis> {
+    // Collect source dirs relative to target_abs
+    let mut source_dirs: BTreeSet<String> = BTreeSet::new();
+    collect_source_dirs(target_abs, target_abs, &mut source_dirs);
+
+    if source_dirs.is_empty() {
+        return BTreeMap::new();
+    }
+
+    let target_depth = depth.unwrap_or_else(|| auto_detect_layer_depth(&source_dirs));
+
+    // Compute layer dirs at the target depth, then prefix with target_rel
+    let layer_dirs: BTreeSet<String> = source_dirs
+        .iter()
+        .filter_map(|d| ancestor_at_depth(d, target_depth))
+        .collect();
+
+    // Build analyses keyed by project-relative paths (target_rel/layer_dir)
+    let mut analyses: BTreeMap<String, DirAnalysis> = BTreeMap::new();
+    for dir in &layer_dirs {
+        let project_rel = format!("{}/{}", target_rel, dir);
+        analyses.insert(project_rel, DirAnalysis::default());
+    }
+
+    // Scan files, mapping them to the correct layer
+    scan_target_imports(
+        target_abs,
+        target_abs,
+        parser,
+        target_depth,
+        target_rel,
+        &mut analyses,
+    );
+
+    analyses
+}
+
+fn scan_target_imports(
+    root: &Path,
+    dir: &Path,
+    parser: &DispatchingParser,
+    target_depth: usize,
+    target_rel: &str,
+    analyses: &mut BTreeMap<String, DirAnalysis>,
+) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if init::is_excluded_dir(&name) {
+            continue;
+        }
+        if path.is_dir() {
+            scan_target_imports(
+                root,
+                &path,
+                parser,
+                target_depth,
+                target_rel,
+                analyses,
+            );
+        } else if is_source_file(&name) {
+            let Ok(source) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let file_str = path.to_string_lossy().to_string();
+
+            let dir_rel = path
+                .parent()
+                .and_then(|p| p.strip_prefix(root).ok())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Roll up to target depth
+            let layer_dir = if dir_rel.is_empty() {
+                continue;
+            } else {
+                ancestor_at_depth(&dir_rel, target_depth).unwrap_or(dir_rel)
+            };
+
+            let project_key = format!("{}/{}", target_rel, layer_dir);
+            let imports = SourceParser::parse_imports(parser, &source, &file_str);
+            let analysis = analyses.entry(project_key).or_default();
+            analysis.file_count += 1;
+
+            for imp in &imports {
+                if imp.kind == ImportKind::Mod {
+                    continue;
+                }
+                match classify_import_for_init(&imp.path, &file_str, None) {
+                    Some(InitImport::Internal(seg)) => {
+                        analysis.internal_deps.insert(seg);
+                    }
+                    Some(InitImport::External(pkg)) => {
+                        analysis.external_pkgs.insert(pkg);
+                    }
+                    Some(InitImport::TryInternal(seg)) => {
+                        analysis.internal_deps.insert(seg);
+                    }
+                    None => {}
+                }
+            }
+        }
+    }
+}
 
 /// Scan a single directory (recursively) and build a DirAnalysis.
 ///

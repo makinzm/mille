@@ -267,3 +267,198 @@ fn test_add_target_not_directory() {
         err
     );
 }
+
+// ---------------------------------------------------------------------------
+// --depth tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_add_depth_creates_multiple_layers() {
+    let tmp = TempDir::new().unwrap();
+    write_config(tmp.path(), base_config());
+    make_file(tmp.path(), "src/domain/entity.rs", "pub struct User;");
+    // Target dir with 3 subdirectories, each with source files
+    make_file(tmp.path(), "lib/alpha/mod.rs", "pub fn a() {}");
+    make_file(tmp.path(), "lib/beta/mod.rs", "use crate::alpha::a;");
+    make_file(tmp.path(), "lib/gamma/mod.rs", "pub fn g() {}");
+
+    let out = mille_add(tmp.path(), "lib", &["--depth", "1"]);
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "mille add --depth should exit 0\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    // Each subdirectory should be a separate layer
+    assert!(
+        content.contains("name = \"alpha\""),
+        "alpha layer should be added\n{}",
+        content
+    );
+    assert!(
+        content.contains("name = \"beta\""),
+        "beta layer should be added\n{}",
+        content
+    );
+    assert!(
+        content.contains("name = \"gamma\""),
+        "gamma layer should be added\n{}",
+        content
+    );
+    // Paths should include the target prefix
+    assert!(
+        content.contains("lib/alpha/**"),
+        "alpha path should include target prefix\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_add_depth_preserves_existing_layers() {
+    let tmp = TempDir::new().unwrap();
+    write_config(tmp.path(), base_config());
+    make_file(tmp.path(), "src/domain/entity.rs", "pub struct User;");
+    make_file(tmp.path(), "lib/alpha/mod.rs", "pub fn a() {}");
+    make_file(tmp.path(), "lib/beta/mod.rs", "pub fn b() {}");
+
+    let out = mille_add(tmp.path(), "lib", &["--depth", "1"]);
+    assert_eq!(exit_code(&out), 0, "stderr:\n{}", stderr(&out));
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("name = \"domain\""),
+        "existing domain layer should be preserved\n{}",
+        content
+    );
+    assert!(
+        content.contains("src/domain/**"),
+        "existing domain path should be preserved\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_add_depth_with_conflict_skips_overlapping() {
+    let tmp = TempDir::new().unwrap();
+    // Config already has lib/alpha as a layer
+    let config = r#"[project]
+name = "test_project"
+root = "."
+languages = ["lang_a"]
+
+[[layers]]
+name = "alpha"
+paths = ["lib/alpha/**"]
+dependency_mode = "opt-in"
+external_mode = "opt-in"
+"#;
+    write_config(tmp.path(), config);
+    make_file(tmp.path(), "lib/alpha/mod.rs", "pub fn a() {}");
+    make_file(tmp.path(), "lib/beta/mod.rs", "pub fn b() {}");
+
+    let out = mille_add(tmp.path(), "lib", &["--depth", "1"]);
+    // Should exit 1 because of skipped overlapping layer
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "should exit 1 when layers are skipped\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    // beta should be added
+    assert!(
+        content.contains("name = \"beta\""),
+        "beta layer should be added\n{}",
+        content
+    );
+    // alpha should appear only once (not duplicated)
+    let alpha_count = content.matches("name = \"alpha\"").count();
+    assert_eq!(
+        alpha_count, 1,
+        "alpha should appear exactly once (original, not duplicated)\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_add_depth_with_force_replaces_overlapping() {
+    let tmp = TempDir::new().unwrap();
+    let config = r#"[project]
+name = "test_project"
+root = "."
+languages = ["lang_a"]
+
+[[layers]]
+name = "alpha"
+paths = ["lib/alpha/**"]
+dependency_mode = "opt-in"
+external_mode = "opt-in"
+"#;
+    write_config(tmp.path(), config);
+    make_file(tmp.path(), "lib/alpha/mod.rs", "pub fn a() {}");
+    make_file(tmp.path(), "lib/beta/mod.rs", "pub fn b() {}");
+
+    let out = mille_add(tmp.path(), "lib", &["--depth", "1", "--force"]);
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "should exit 0 with --force\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("name = \"alpha\""),
+        "alpha should exist\n{}",
+        content
+    );
+    assert!(
+        content.contains("name = \"beta\""),
+        "beta should exist\n{}",
+        content
+    );
+    let alpha_count = content.matches("name = \"alpha\"").count();
+    assert_eq!(
+        alpha_count, 1,
+        "alpha should appear exactly once\n{}",
+        content
+    );
+}
+
+#[test]
+fn test_add_without_depth_unchanged() {
+    // Verify the original single-layer behavior still works
+    let tmp = TempDir::new().unwrap();
+    write_config(tmp.path(), base_config());
+    make_file(tmp.path(), "src/domain/entity.rs", "pub struct User;");
+    make_file(tmp.path(), "lib/alpha/mod.rs", "pub fn a() {}");
+    make_file(tmp.path(), "lib/beta/mod.rs", "pub fn b() {}");
+
+    // Without --depth: the whole lib dir is one layer
+    let out = mille_add(tmp.path(), "lib", &[]);
+    assert_eq!(exit_code(&out), 0, "stderr:\n{}", stderr(&out));
+
+    let content = fs::read_to_string(tmp.path().join("mille.toml")).unwrap();
+    assert!(
+        content.contains("name = \"lib\""),
+        "should add 'lib' as a single layer\n{}",
+        content
+    );
+    assert!(
+        content.contains("lib/**"),
+        "path should be lib/**\n{}",
+        content
+    );
+    // Should NOT have alpha/beta as separate layers
+    assert!(
+        !content.contains("name = \"alpha\""),
+        "alpha should NOT be a separate layer without --depth\n{}",
+        content
+    );
+}
