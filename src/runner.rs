@@ -28,6 +28,7 @@ use crate::presentation::formatter::svg::format_svg;
 use crate::presentation::formatter::terminal::{
     format_layer_stats, format_summary, format_violation,
 };
+use crate::usecase::add_layer;
 use crate::usecase::analyze;
 use crate::usecase::check_architecture;
 use crate::usecase::init::{self, DirAnalysis};
@@ -71,7 +72,10 @@ fn apply_path(path: &str) {
 }
 
 fn run_cli_inner(cli: Cli) {
-    apply_path(&cli.command.common().path);
+    // Add command does NOT call apply_path — it operates relative to cwd
+    if !matches!(cli.command, Command::Add { .. }) {
+        apply_path(&cli.command.common().path);
+    }
 
     match cli.command {
         Command::Report { subcommand } => match subcommand {
@@ -374,6 +378,185 @@ fn run_cli_inner(cli: Cli) {
                 }
             }
         }
+        Command::Add {
+            common,
+            config,
+            name,
+            force,
+        } => {
+            let target_path = &common.path;
+
+            // 1. Config must exist
+            if !Path::new(&config).exists() {
+                eprintln!("Error: '{}' not found. Run 'mille init' first.", config);
+                std::process::exit(3);
+            }
+
+            // 2. Target must be a directory
+            if !Path::new(target_path).is_dir() {
+                eprintln!("Error: '{}' is not a directory", target_path);
+                std::process::exit(3);
+            }
+
+            // 3. Load existing config
+            let config_repo = TomlConfigRepository;
+            let (app_config, _resolve) = match config_repo.load_with_resolve(&config) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Error: failed to parse '{}': {}", config, e);
+                    std::process::exit(3);
+                }
+            };
+
+            // 4. Determine layer name
+            let layer_name = name.unwrap_or_else(|| {
+                Path::new(target_path)
+                    .file_name()
+                    .unwrap_or(std::ffi::OsStr::new(target_path))
+                    .to_string_lossy()
+                    .to_string()
+            });
+
+            // 5. Build target glob
+            let target_glob = format!("{}/**", target_path);
+
+            // 6. Scan target directory
+            println!("Scanning '{}'...", target_path);
+            let analysis = scan_single_dir(Path::new(target_path));
+            println!(
+                "  {} files, {} internal deps, {} external deps",
+                analysis.file_count,
+                analysis.internal_deps.len(),
+                analysis.external_pkgs.len()
+            );
+            let new_layer = add_layer::build_layer_config(&layer_name, &target_glob, &analysis);
+
+            // 7. Check for conflicts
+            if let Some(conflict) = add_layer::find_conflict(&app_config.layers, &target_glob) {
+                if !force {
+                    eprintln!(
+                        "Error: layer '{}' already has overlapping paths: {}",
+                        conflict.layer_name,
+                        conflict.overlapping_paths.join(", ")
+                    );
+                    std::process::exit(1);
+                }
+
+                // --force: replace via toml::Table
+                let raw_content = match fs::read_to_string(&config) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Error: failed to read '{}': {}", config, e);
+                        std::process::exit(1);
+                    }
+                };
+                let mut table: toml::Table = match raw_content.parse() {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!("Error: failed to parse '{}': {}", config, e);
+                        std::process::exit(3);
+                    }
+                };
+
+                if let Err(e) =
+                    add_layer::replace_layer_in_table(&mut table, conflict.layer_index, &new_layer)
+                {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+
+                let new_content = toml::to_string_pretty(&table).unwrap_or_default();
+                match fs::write(&config, &new_content) {
+                    Ok(_) => {
+                        println!("Replaced layer '{}' in '{}'", conflict.layer_name, config);
+                    }
+                    Err(e) => {
+                        eprintln!("Error: failed to write '{}': {}", config, e);
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                // No conflict: append to file
+                let layer_str = add_layer::layer_to_toml_string(&new_layer);
+
+                let mut existing = match fs::read_to_string(&config) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Error: failed to read '{}': {}", config, e);
+                        std::process::exit(1);
+                    }
+                };
+                existing.push_str(&layer_str);
+
+                match fs::write(&config, &existing) {
+                    Ok(_) => println!("Added layer '{}' to '{}'", layer_name, config),
+                    Err(e) => {
+                        eprintln!("Error: failed to write '{}': {}", config, e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Single-directory scanning for `mille add`
+// ---------------------------------------------------------------------------
+
+/// Scan a single directory (recursively) and build a DirAnalysis.
+///
+/// This is a simplified version of `scan_project` that treats the target directory
+/// as a single layer. Internal deps are recorded as top-level import segments
+/// (e.g. `crate::domain::...` → "domain"), and external packages are recorded as-is.
+fn scan_single_dir(target: &Path) -> DirAnalysis {
+    let parser = DispatchingParser::new();
+    let mut analysis = DirAnalysis::default();
+    scan_dir_recursive(target, &parser, &mut analysis);
+    analysis
+}
+
+fn scan_dir_recursive(dir: &Path, parser: &DispatchingParser, analysis: &mut DirAnalysis) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if init::is_excluded_dir(&name) {
+            continue;
+        }
+        if path.is_dir() {
+            scan_dir_recursive(&path, parser, analysis);
+        } else if is_source_file(&name) {
+            let Ok(source) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let file_str = path.to_string_lossy().to_string();
+            let imports = SourceParser::parse_imports(parser, &source, &file_str);
+            analysis.file_count += 1;
+
+            for imp in &imports {
+                if imp.kind == ImportKind::Mod {
+                    continue;
+                }
+                match classify_import_for_init(&imp.path, &file_str, None) {
+                    Some(InitImport::Internal(seg)) => {
+                        analysis.internal_deps.insert(seg);
+                    }
+                    Some(InitImport::External(pkg)) => {
+                        analysis.external_pkgs.insert(pkg);
+                    }
+                    Some(InitImport::TryInternal(seg)) => {
+                        analysis.internal_deps.insert(seg);
+                    }
+                    None => {}
+                }
+            }
+        }
     }
 }
 
@@ -643,7 +826,19 @@ fn scan_project(
 fn is_source_file(name: &str) -> bool {
     matches!(
         name.rsplit('.').next().unwrap_or(""),
-        "rs" | "ts" | "tsx" | "js" | "jsx" | "go" | "py" | "java" | "kt"
+        "rs" | "ts"
+            | "tsx"
+            | "js"
+            | "jsx"
+            | "go"
+            | "py"
+            | "java"
+            | "kt"
+            | "php"
+            | "c"
+            | "h"
+            | "yaml"
+            | "yml"
     )
 }
 

@@ -37,6 +37,7 @@
 
 - ✅ PATH 位置引数 — 全サブコマンドに `[PATH]` 位置引数を追加（デフォルト `.`）。`mille check ./other/project` で任意ディレクトリを検査可能。`CommonArgs` + `Command::common()` exhaustive match で新コマンド追加時にコンパイルエラーで PATH 対応を強制（PR #75）
 - ✅ YAML 言語サポート — naming-only 言語として `.yaml`/`.yml` ファイルの `name_deny` チェックをサポート。マッピングキー→Symbol、スカラー値→StringLiteral、コメント→Comment として抽出。tree-sitter-yaml 0.6 使用（PR #76）
+- ✅ `mille add` コマンド — 既存の `mille.toml` にディレクトリをレイヤーとして追加。ターゲットをスキャンして `[[layers]]` を追記、重複時は `--force` で置換。`--name` でレイヤー名カスタマイズ可（PR #85）
 
 以下は **設定ファイルにフィールドが存在しても、まだ動作していない** 項目です（README に掲載しないよう修正済み）：
 （現在なし）
