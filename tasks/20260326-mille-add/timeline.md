@@ -25,3 +25,10 @@
 ### ドキュメント
 - README.md に `mille add` セクション追加
 - TODO.md 完了チェック
+
+### バグ修正（ユーザー指摘）
+- `is_source_file` が `.yaml`/`.yml`/`.php`/`.c`/`.h` を含んでおらず、後発言語がスキャン対象外だった → 全言語を追加
+- dogfood テスト失敗を見落とし:
+  1. `mille.toml` の `allow_call_patterns` に add_layer の関数が未登録 → CallPatternViolation
+  2. テスト内の文字列 `"rust"` が usecase の `name_deny` に引っかかる → `"lang_a"` に変更
+- **教訓**: `cargo test` 全体を通してから `--no-verify` でコミットすべき
