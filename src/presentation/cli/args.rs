@@ -141,12 +141,17 @@ pub enum Command {
         /// Path to mille.toml (default: ./mille.toml)
         #[arg(long, default_value = "mille.toml")]
         config: String,
-        /// Layer name (default: directory basename)
+        /// Layer name (default: directory basename). Ignored when --depth is set.
         #[arg(long)]
         name: Option<String>,
         /// Overwrite existing layer with overlapping paths without prompting
         #[arg(long, default_value_t = false)]
         force: bool,
+        /// Scan subdirectories at this depth and add each as a separate layer.
+        /// Without this flag, the entire directory is added as a single layer.
+        /// Example: --depth 1 for conf/cloud, conf/executor as separate layers.
+        #[arg(long)]
+        depth: Option<usize>,
     },
 }
 
@@ -419,11 +424,13 @@ mod tests {
                 config,
                 name,
                 force,
+                depth,
             } => {
                 assert_eq!(common.path, "src/newlayer");
                 assert_eq!(config, "mille.toml");
                 assert!(name.is_none());
                 assert!(!force);
+                assert!(depth.is_none());
             }
             _ => panic!("expected Add command"),
         }
@@ -462,5 +469,14 @@ mod tests {
     fn test_parse_add_default_target() {
         let cli = Cli::try_parse_from(["mille", "add"]).unwrap();
         assert_eq!(cli.command.common().path, ".");
+    }
+
+    #[test]
+    fn test_parse_add_with_depth() {
+        let cli = Cli::try_parse_from(["mille", "add", "conf", "--depth", "1"]).unwrap();
+        match &cli.command {
+            Command::Add { depth, .. } => assert_eq!(*depth, Some(1)),
+            _ => panic!("expected Add command"),
+        }
     }
 }

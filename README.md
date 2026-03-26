@@ -150,15 +150,19 @@ mille add src/newlayer                     # add using directory basename as lay
 mille add src/newlayer --name my_layer     # specify a custom layer name
 mille add src/newlayer --config custom.toml # target a specific config file
 mille add src/newlayer --force             # overwrite if a layer with overlapping paths exists
+mille add conf --depth 1                   # add each subdirectory as a separate layer
 ```
 
 `mille add` scans the target directory for imports (just like `mille init` does) and appends a `[[layers]]` section to the existing config. If a layer with overlapping paths already exists, it exits with an error unless `--force` is specified — in which case the existing layer is replaced.
 
+With `--depth`, subdirectories are scanned and each becomes a separate layer — the same depth-based detection that `mille init` uses. For example, `mille add conf --depth 1` with subdirectories `cloud/`, `executor/`, `usecase/` creates three layers.
+
 | Flag | Default | Description |
 |---|---|---|
 | `--config <path>` | `mille.toml` | Path to the config file to modify |
-| `--name <name>` | directory basename | Layer name to use |
+| `--name <name>` | directory basename | Layer name to use (ignored with `--depth`) |
 | `--force` | false | Replace existing layer with overlapping paths |
+| `--depth <N>` | (none) | Scan subdirectories at this depth and add each as a separate layer |
 
 ### 2. (Or) Create `mille.toml` manually
 
