@@ -81,6 +81,8 @@ h1, h2, h3, h4, h5, h6,
 
 /* Table styling */
 .sl-markdown-content table {
+  display: table;
+  table-layout: fixed;
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
@@ -99,6 +101,12 @@ h1, h2, h3, h4, h5, h6,
 .sl-markdown-content th {
   padding: 0.625rem 0.875rem;
   border: 1px solid var(--sl-color-gray-5);
+}
+
+.sl-markdown-content td:first-child,
+.sl-markdown-content th:first-child {
+  text-align: center;
+  width: 30%;
 }
 
 .sl-markdown-content tr:hover td {
