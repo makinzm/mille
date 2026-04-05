@@ -469,6 +469,16 @@ jobs:
           sed -i.bak "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" packages/npm/package.json
           rm -f packages/npm/package.json.bak
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Regenerate uv.lock
+        working-directory: packages/pypi
+        # NOTE: pyproject.toml のバージョンを更新した後 uv.lock を再生成しないと
+        #       uv.lock 内の mille パッケージバージョンが古いまま残り不整合が生じる。
+        #       uv lock --locked は既存 lock との整合チェックのみなので --upgrade-package で再生成する。
+        run: uv lock
+
       - name: Commit and push version bump
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
@@ -477,7 +487,7 @@ jobs:
           if git diff --exit-code; then
             echo "Version already up to date. No commit needed."
           else
-            git add Cargo.toml packages/pypi/pyproject.toml packages/pypi/Cargo.toml packages/npm/package.json
+            git add Cargo.toml packages/pypi/pyproject.toml packages/pypi/Cargo.toml packages/npm/package.json packages/pypi/uv.lock
             git commit -m "[fix] v${VERSION} リリース後のバージョン更新 [skip ci]"
             git push origin main
           fi
