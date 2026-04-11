@@ -14,7 +14,7 @@ jobs:
     name: actionlint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install devbox
         uses: jetify-com/devbox-install-action@v0.12.0
         with:
@@ -28,7 +28,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -55,7 +55,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # NOTE: devbox を使って test ジョブと同一の Rust バージョン（rust-toolchain.toml 準拠）を
       #       使用する。dtolnay/rust-toolchain@stable を直接使うと stable（≠ 固定バージョン）が
@@ -94,7 +94,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -168,7 +168,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -216,7 +216,7 @@ jobs:
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # NOTE: CI でビルドした .wasm を packages/go/mille/ に配置する。
       #       packages/go/mille/mille.wasm が //go:embed のソースであり、唯一の canonical .wasm。
@@ -256,7 +256,7 @@ jobs:
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # NOTE: CI でビルドした .wasm を packages/go/mille/ に配置してから npm 用にコピーする。
       #       packages/go/mille/mille.wasm が唯一の canonical .wasm（dogfood-go と同じ理由）。
@@ -295,7 +295,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download wasm artifact
         uses: actions/download-artifact@v4
