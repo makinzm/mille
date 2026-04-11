@@ -1,0 +1,31 @@
+[project]
+name = "elixir-sample"
+root = "."
+languages = ["elixir"]
+
+[resolve.elixir]
+app_name = "MyApp"
+
+[[layers]]
+name = "domain"
+paths = ["lib/domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["lib/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["lib/infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-out"
+external_deny = []

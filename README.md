@@ -13,7 +13,7 @@ One TOML config. Rust-powered. CI-ready. Supports multiple languages from a sing
 
 ## What it checks
 
-**Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C, YAML
+**Languages:** Rust, Go, TypeScript, JavaScript, Python, Java, Kotlin, PHP, C, YAML, Elixir
 
 | Check | Description |
 |---|---|
@@ -443,7 +443,7 @@ Exit codes:
 |---|---|
 | `name` | Project name |
 | `root` | Root directory for analysis |
-| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"`, `"php"`, `"c"`, `"yaml"` |
+| `languages` | Languages to check: `"rust"`, `"go"`, `"typescript"`, `"javascript"`, `"python"`, `"java"`, `"kotlin"`, `"php"`, `"c"`, `"yaml"`, `"elixir"` |
 
 ### `[[layers]]`
 
@@ -494,7 +494,7 @@ name_deny_ignore = ["**/test_*.rs", "tests/**"]  # exclude test files from namin
   - `"comment"`: inline comment content
   - `"string_literal"`: string literal content
   - `"identifier"`: attribute/field access identifiers (e.g. `gcp` in `cfg.gcp.bucket`)
-- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP, C, YAML
+- Supported languages: Rust, TypeScript, JavaScript, Python, Go, Java, Kotlin, PHP, C, YAML, Elixir
 - Severity is controlled by `severity.naming_violation` (default: `"error"`)
 
 ### `[[layers.allow_call_patterns]]`
@@ -705,6 +705,40 @@ name      = "manifests"
 paths     = ["manifests/**"]
 dependency_mode = "opt-out"
 external_mode   = "opt-out"
+```
+
+### Elixir
+
+Set `app_name` to the PascalCase module name corresponding to `:app` in `mix.exs`. All four Elixir directives (`alias`, `import`, `require`, `use`) are analyzed as dependencies.
+
+**Example `mille.toml` for Elixir projects:**
+
+```toml
+[project]
+name      = "my-elixir-app"
+root      = "."
+languages = ["elixir"]
+
+[resolve.elixir]
+app_name = "MyApp"   # PascalCase version of :app in mix.exs
+
+[[layers]]
+name            = "domain"
+paths           = ["lib/domain/**"]
+dependency_mode = "opt-in"
+allow           = []
+
+[[layers]]
+name            = "usecase"
+paths           = ["lib/usecase/**"]
+dependency_mode = "opt-in"
+allow           = ["domain"]
+
+[[layers]]
+name            = "infrastructure"
+paths           = ["lib/infrastructure/**"]
+dependency_mode = "opt-out"
+deny            = []
 ```
 
 ## How it Works
