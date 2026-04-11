@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  # NOTE: Go モジュール (packages/go/mille) の依存を自動更新する。
+  #       go.work で workspace 管理しているため directory は個別モジュールを指定。
+  - package-ecosystem: "gomod"
+    directory: "/packages/go/mille"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # NOTE: npm パッケージ (packages/npm) の依存を自動更新する。
+  #       現状 dependencies はないが devDependencies 追加時に備えて設定しておく。
+  - package-ecosystem: "npm"
+    directory: "/packages/npm"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # NOTE: Python パッケージ (packages/pypi) の dev deps (maturin, pytest) を自動更新する。
+  #       pip-audit でスキャンされる対象と揃える。
+  - package-ecosystem: "pip"
+    directory: "/packages/pypi"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # NOTE: GitHub Actions 自体のバージョンも追跡する。
+  #       actions/checkout 等のサプライチェーンリスクを低減する。
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
