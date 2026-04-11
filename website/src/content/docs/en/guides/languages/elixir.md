@@ -65,3 +65,7 @@ All four Elixir directives are analyzed as dependencies.
 Internal module paths are resolved using the following rule:
 
 `MyApp.Domain.User` → strip `app_name` → `Domain.User` → lowercase → `lib/domain/user.ex`
+
+## Unsupported Features
+
+`allow_call_patterns` is not supported for Elixir. Because Elixir uses dynamic dispatch, static receiver-type inference is not reliable.

@@ -50,11 +50,24 @@ fn collect_elixir_names(node: Node, source: &[u8], file_path: &str, out: &mut Ve
                     let keyword = id_node.utf8_text(source).unwrap_or("");
                     match keyword {
                         "defmodule" | "def" | "defp" | "defmacro" | "defmacrop" => {
-                            // Extract the name from arguments
+                            // Extract the name from arguments.
+                            // `arguments` children include `(` `)` `,` as anonymous nodes;
+                            // use `named_child(0)` to skip them and get the first named node.
                             if let Some(args) = node.child(1) {
                                 if args.kind() == "arguments" {
-                                    if let Some(first_arg) = args.child(0) {
-                                        let name = first_arg.utf8_text(source).unwrap_or("");
+                                    if let Some(first_named) = args.named_child(0) {
+                                        // `def name(args)` → first_named is a `call` node:
+                                        //   call → identifier("name"), arguments(...)
+                                        // `defmodule Foo.Bar` → first_named is an `alias` node
+                                        let name = if first_named.kind() == "call" {
+                                            first_named
+                                                .named_child(0)
+                                                .filter(|n| n.kind() == "identifier")
+                                                .and_then(|n| n.utf8_text(source).ok())
+                                                .unwrap_or("")
+                                        } else {
+                                            first_named.utf8_text(source).unwrap_or("")
+                                        };
                                         if !name.is_empty() {
                                             out.push(RawName {
                                                 name: name.to_string(),
@@ -130,16 +143,12 @@ pub fn parse_elixir_imports(source: &str, file_path: &str) -> Vec<RawImport> {
     imports
 }
 
-/// Parse Elixir source code and extract call expressions (currently returns empty list).
+/// Parse Elixir source code and extract call expressions.
 ///
-/// Elixir's dynamic dispatch makes static call analysis unreliable.
-pub fn parse_elixir_call_exprs(source: &str, _file_path: &str) -> Vec<RawCallExpr> {
-    let mut parser = tree_sitter::Parser::new();
-    parser
-        .set_language(&tree_sitter_elixir::language())
-        .expect("Failed to load Elixir grammar");
-
-    let _tree = parser.parse(source, None).expect("Failed to parse source");
+/// Always returns an empty list. Elixir's dynamic dispatch makes static
+/// receiver-type inference unreliable, so `allow_call_patterns` is not
+/// supported for Elixir.
+pub fn parse_elixir_call_exprs(_source: &str, _file_path: &str) -> Vec<RawCallExpr> {
     Vec::new()
 }
 
@@ -258,5 +267,67 @@ mod tests {
         assert_eq!(imports[0].path, "MyApp.Domain.User");
         assert_eq!(imports[1].path, "Enum");
         assert_eq!(imports[2].path, "Logger");
+    }
+
+    // ------------------------------------------------------------------
+    // parse_elixir_names
+    // ------------------------------------------------------------------
+
+    use crate::domain::entity::name::NameKind;
+
+    #[test]
+    fn test_names_defmodule() {
+        let source = "defmodule MyApp.Domain.User do\nend\n";
+        let names = parse_elixir_names(source, "test.ex").into_all();
+        let found = names
+            .iter()
+            .find(|n| n.name == "MyApp.Domain.User" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "defmodule should be detected as Symbol, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_names_def_function() {
+        let source = "defmodule MyApp do\n  def create(attrs) do\n    attrs\n  end\nend\n";
+        let names = parse_elixir_names(source, "test.ex").into_all();
+        let found = names
+            .iter()
+            .find(|n| n.name == "create" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "def create(...) should extract 'create' as Symbol, not 'create(attrs)'; got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_names_defp_function() {
+        let source = "defmodule MyApp do\n  defp helper(x) do\n    x\n  end\nend\n";
+        let names = parse_elixir_names(source, "test.ex").into_all();
+        let found = names
+            .iter()
+            .find(|n| n.name == "helper" && n.kind == NameKind::Symbol);
+        assert!(
+            found.is_some(),
+            "defp helper(x) should extract 'helper' as Symbol, got: {:#?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_names_comment() {
+        let source = "# connect to aws\nx = 1\n";
+        let names = parse_elixir_names(source, "test.ex").into_all();
+        let found = names
+            .iter()
+            .find(|n| n.kind == NameKind::Comment && n.name.contains("aws"));
+        assert!(
+            found.is_some(),
+            "comment with aws should be detected, got: {:#?}",
+            names
+        );
     }
 }

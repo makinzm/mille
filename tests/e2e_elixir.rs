@@ -284,3 +284,59 @@ external_deny = ["Ecto"]
         stderr(&out)
     );
 }
+
+// ---------------------------------------------------------------------------
+// Broken fixture: infrastructure external_mode=opt-in, external_allow=[]
+// ---------------------------------------------------------------------------
+
+/// infrastructure/repo.ex imports `alias Ecto.Repo`.
+/// Setting `external_mode="opt-in"` with `external_allow=[]` must produce a violation.
+#[test]
+fn test_elixir_broken_external_opt_in_exits_one() {
+    let broken_config = elixir_fixture_dir().join("mille_broken_ext_opt_in.toml");
+    let config_content = r#"
+[project]
+name = "elixir-sample"
+root = "."
+languages = ["elixir"]
+
+[resolve.elixir]
+app_name = "MyApp"
+
+[[layers]]
+name = "domain"
+paths = ["lib/domain/**"]
+dependency_mode = "opt-in"
+allow = []
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "usecase"
+paths = ["lib/usecase/**"]
+dependency_mode = "opt-in"
+allow = ["domain"]
+external_mode = "opt-out"
+external_deny = []
+
+[[layers]]
+name = "infrastructure"
+paths = ["lib/infrastructure/**"]
+dependency_mode = "opt-out"
+deny = []
+external_mode = "opt-in"
+external_allow = []
+"#;
+    std::fs::write(&broken_config, config_content).expect("failed to write broken config");
+
+    let out = mille_in_elixir_fixture(&["check", "--config", "mille_broken_ext_opt_in.toml"]);
+    std::fs::remove_file(&broken_config).ok();
+
+    assert_eq!(
+        exit_code(&out),
+        1,
+        "external_mode=opt-in with external_allow=[] must exit 1 (Ecto.Repo is denied)\nstdout:\n{}\nstderr:\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+}
