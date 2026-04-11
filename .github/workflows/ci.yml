@@ -159,6 +159,9 @@ jobs:
       - name: Self-check — Multilang split fixture (tests/fixtures/multilang_split_sample)
         working-directory: tests/fixtures/multilang_split_sample
         run: ${{ github.workspace }}/target/release/mille check
+      - name: Self-check — Elixir fixture (tests/fixtures/elixir_sample)
+        working-directory: tests/fixtures/elixir_sample
+        run: ${{ github.workspace }}/target/release/mille check
 
   # ------------------------------------------------------------------ #
   # 3b. Dogfooding-python — maturin build → pytest + mille check     #
