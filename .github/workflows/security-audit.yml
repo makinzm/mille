@@ -54,7 +54,7 @@ jobs:
       #       push / PR 時はワークフローの fail で十分（Issue ノイズ回避）。
       - name: Create GitHub Issue on vulnerability found (schedule only)
         if: steps.audit.outputs.vulnerable == 'true' && github.event_name == 'schedule'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
