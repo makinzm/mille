@@ -6,20 +6,20 @@ Elixir 言語の構造チェック機能を追加する。既存の9言語（Rus
 
 ## 実施順序（CLAUDE.md 言語追加チェックリスト厳守）
 
-- [ ] CI dogfooding ステップ追加（`.github/workflows/ci.yml`）← 最初に追加
-- [ ] E2E fixture 作成（`tests/fixtures/elixir_sample/`）
-- [ ] E2E テスト作成（`tests/e2e_elixir.rs`）← テストファースト・--no-verifyでコミット
-- [ ] `Cargo.toml` に `tree-sitter-elixir = "0.3.5"` 追加
-- [ ] Parser 実装（`src/infrastructure/parser/elixir.rs`）
-- [ ] Resolver 実装（`src/infrastructure/resolver/elixir.rs`）
-- [ ] DispatchingParser 登録（`src/infrastructure/parser/mod.rs`）
-- [ ] DispatchingResolver 登録（`src/infrastructure/resolver/mod.rs`）
-- [ ] Website ドキュメント（`website/src/content/docs/guides/languages/elixir.md`）
-- [ ] Website en ドキュメント（`website/src/content/docs/en/guides/languages/elixir.md`）
-- [ ] astro.config.mjs のサイドバーに Elixir を追加
-- [ ] index.mdx の対応言語リストに Elixir を追加
-- [ ] README.md フィーチャーマトリックス更新
-- [ ] docs/TODO.md 更新
+- [x] CI dogfooding ステップ追加（`.github/workflows/ci.yml`）← 最初に追加
+- [x] E2E fixture 作成（`tests/fixtures/elixir_sample/`）
+- [x] E2E テスト作成（`tests/e2e_elixir.rs`）← テストファースト・--no-verifyでコミット
+- [x] `Cargo.toml` に `tree-sitter-elixir = "0.2.0"` 追加
+- [x] Parser 実装（`src/infrastructure/parser/elixir.rs`）
+- [x] Resolver 実装（`src/infrastructure/resolver/elixir.rs`）
+- [x] DispatchingParser 登録（`src/infrastructure/parser/mod.rs`）
+- [x] DispatchingResolver 登録（`src/infrastructure/resolver/mod.rs`）
+- [x] Website ドキュメント（`website/src/content/docs/guides/languages/elixir.md`）
+- [x] Website en ドキュメント（`website/src/content/docs/en/guides/languages/elixir.md`）
+- [x] astro.config.mjs のサイドバーに Elixir を追加
+- [x] index.mdx の対応言語リストに Elixir を追加
+- [x] README.md フィーチャーマトリックス更新
+- [x] docs/TODO.md 更新
 
 ## TDD コミット順序
 

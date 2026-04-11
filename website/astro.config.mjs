@@ -75,6 +75,7 @@ export default defineConfig({
                 { slug: 'guides/languages/php', label: 'PHP' },
                 { slug: 'guides/languages/c', label: 'C' },
                 { slug: 'guides/languages/yaml', label: 'YAML' },
+                { slug: 'guides/languages/elixir', label: 'Elixir' },
               ],
             },
             { slug: 'guides/best-practices', label: 'ベストプラクティス', translations: { en: 'Best Practices' } },
