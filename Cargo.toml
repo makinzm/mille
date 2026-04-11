@@ -38,6 +38,7 @@ tree-sitter-kotlin = "0.3"
 tree-sitter-php = "0.22"
 tree-sitter-c = "0.21"
 tree-sitter-yaml = "0.6"
+tree-sitter-elixir = "0.2.0"
 
 [dev-dependencies]
 tempfile = "3"

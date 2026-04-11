@@ -1,4 +1,5 @@
 pub mod c;
+pub mod elixir;
 pub mod go;
 pub mod java;
 pub mod php;
@@ -9,6 +10,7 @@ pub mod typescript;
 use std::collections::HashMap;
 
 use self::c::CResolver;
+use self::elixir::ElixirResolver;
 use self::go::GoResolver;
 use self::java::JavaResolver;
 use self::php::PhpResolver;
@@ -154,6 +156,16 @@ impl DispatchingResolver {
                 "c" => {
                     resolvers.insert(".c", Box::new(CResolver::new()));
                     resolvers.insert(".h", Box::new(CResolver::new()));
+                }
+                "elixir" => {
+                    let app_name = resolve
+                        .and_then(|r| r.get("elixir"))
+                        .and_then(|e| e.get("app_name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    resolvers.insert(".ex", Box::new(ElixirResolver::new(app_name.clone())));
+                    resolvers.insert(".exs", Box::new(ElixirResolver::new(app_name)));
                 }
                 _ => {
                     // Unknown language — skip silently.

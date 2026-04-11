@@ -1,4 +1,5 @@
 pub mod c;
+pub mod elixir;
 pub mod go;
 pub mod java;
 pub mod kotlin;
@@ -9,6 +10,7 @@ pub mod typescript;
 pub mod yaml;
 
 use self::c::CParser;
+use self::elixir::ElixirParser;
 use self::go::GoParser;
 use self::java::JavaParser;
 use self::kotlin::KotlinParser;
@@ -109,6 +111,7 @@ pub fn ext_to_language(ext: &str) -> Option<&'static str> {
         "php" => Some("php"),
         "c" | "h" => Some("c"),
         "yaml" | "yml" => Some("yaml"),
+        "ex" | "exs" => Some("elixir"),
         _ => None,
     }
 }
@@ -116,6 +119,7 @@ pub fn ext_to_language(ext: &str) -> Option<&'static str> {
 /// Dispatches to the appropriate parser based on file extension.
 pub struct DispatchingParser {
     c: CParser,
+    elixir: ElixirParser,
     rust: RustParser,
     go: GoParser,
     python: PythonParser,
@@ -130,6 +134,7 @@ impl DispatchingParser {
     pub fn new() -> Self {
         DispatchingParser {
             c: CParser,
+            elixir: ElixirParser,
             rust: RustParser,
             go: GoParser,
             python: PythonParser,
@@ -163,12 +168,18 @@ fn is_ts_js(file_path: &str) -> bool {
         || file_path.ends_with(".jsx")
 }
 
+fn is_elixir(file_path: &str) -> bool {
+    file_path.ends_with(".ex") || file_path.ends_with(".exs")
+}
+
 impl Parser for DispatchingParser {
     fn parse_imports(&self, source: &str, file_path: &str) -> Vec<RawImport> {
         if is_yaml(file_path) {
             self.yaml.parse_imports(source, file_path)
         } else if is_c(file_path) {
             self.c.parse_imports(source, file_path)
+        } else if is_elixir(file_path) {
+            self.elixir.parse_imports(source, file_path)
         } else if file_path.ends_with(".go") {
             self.go.parse_imports(source, file_path)
         } else if file_path.ends_with(".py") {
@@ -191,6 +202,8 @@ impl Parser for DispatchingParser {
             self.yaml.parse_call_exprs(source, file_path)
         } else if is_c(file_path) {
             self.c.parse_call_exprs(source, file_path)
+        } else if is_elixir(file_path) {
+            self.elixir.parse_call_exprs(source, file_path)
         } else if file_path.ends_with(".go") {
             self.go.parse_call_exprs(source, file_path)
         } else if file_path.ends_with(".py") {
@@ -213,6 +226,8 @@ impl Parser for DispatchingParser {
             self.yaml.parse_names(source, file_path)
         } else if is_c(file_path) {
             self.c.parse_names(source, file_path)
+        } else if is_elixir(file_path) {
+            self.elixir.parse_names(source, file_path)
         } else if file_path.ends_with(".go") {
             self.go.parse_names(source, file_path)
         } else if file_path.ends_with(".py") {
