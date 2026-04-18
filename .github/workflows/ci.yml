@@ -225,7 +225,7 @@ jobs:
       #       packages/go/mille/mille.wasm が //go:embed のソースであり、唯一の canonical .wasm。
       #       コミット済みの .wasm はローカル環境依存であり CI ビルドと異なる場合があるため上書きする。
       - name: Download wasm artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mille-wasm
           path: packages/go/mille
@@ -264,7 +264,7 @@ jobs:
       # NOTE: CI でビルドした .wasm を packages/go/mille/ に配置してから npm 用にコピーする。
       #       packages/go/mille/mille.wasm が唯一の canonical .wasm（dogfood-go と同じ理由）。
       - name: Download wasm artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mille-wasm
           path: packages/go/mille
@@ -301,7 +301,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download wasm artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mille-wasm
           path: packages/go/mille
