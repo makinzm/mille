@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install devbox
-        uses: jetify-com/devbox-install-action@v0.12.0
+        uses: jetify-com/devbox-install-action@v0.15.0
         with:
           enable-cache: 'true'
       - name: Run actionlint
@@ -34,7 +34,7 @@ jobs:
         with:
           components: clippy, rustfmt
       - name: Install devbox
-        uses: jetify-com/devbox-install-action@v0.12.0
+        uses: jetify-com/devbox-install-action@v0.15.0
         with:
           enable-cache: 'true'
       - name: Setup toolchains via devbox
@@ -61,7 +61,7 @@ jobs:
       #       使用する。dtolnay/rust-toolchain@stable を直接使うと stable（≠ 固定バージョン）が
       #       インストールされ、ローカルビルドと異なるバイナリが生成される。
       - name: Install devbox
-        uses: jetify-com/devbox-install-action@v0.12.0
+        uses: jetify-com/devbox-install-action@v0.15.0
         with:
           enable-cache: 'true'
 
