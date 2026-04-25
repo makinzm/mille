@@ -80,7 +80,7 @@ jobs:
       #       代わりに build-wasm artifact を dogfood-go に渡してテストし、
       #       main へのマージ後は update-wasm ジョブが CI ビルド結果で自動上書きコミットする。
       - name: Upload wasm artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mille-wasm
           path: packages/go/mille/mille.wasm
