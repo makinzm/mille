@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.85.0
+        uses: dtolnay/rust-toolchain@1.100.0
 
       # NOTE: cargo-audit は crates.io からインストール。
       #       Cargo.lock を参照するためリポジトリルートで実行する。
