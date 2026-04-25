@@ -107,7 +107,7 @@ jobs:
           "ARTIFACT=${artifact}.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bin-${{ matrix.target }}
           path: ${{ env.ARTIFACT }}
@@ -178,7 +178,7 @@ jobs:
           echo "DEB_FILE=$VERSIONED" >> "$GITHUB_ENV"
 
       - name: Upload .deb artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deb-${{ matrix.arch }}
           path: ${{ env.DEB_FILE }}
