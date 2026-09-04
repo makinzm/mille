@@ -36,3 +36,9 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+    ignore:
+      # NOTE: dtolnay/rust-toolchain のバージョンタグはブランチ管理のため、Rust 本体の
+      #       正式リリースに先行して存在することがある。Dependabot が未リリースバージョンへ
+      #       自動更新すると CI が 404 で落ちる（例: 1.100.0, run 28784476221）。
+      #       rust-toolchain.toml と同期させるため手動更新に限定する。
+      - dependency-name: "dtolnay/rust-toolchain"
