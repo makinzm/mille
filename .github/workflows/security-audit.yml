@@ -29,8 +29,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # NOTE: rust-toolchain.toml と同じバージョンに固定する。dtolnay/rust-toolchain の
+      #       バージョンタグは Rust 本体のリリースに先行してブランチが作られることがあり、
+      #       Dependabot が未リリースバージョン（1.100.0）へ自動更新して 404 で CI が落ちた
+      #       (https://github.com/makinzm/mille/actions/runs/28784476221)。以後は手動更新する。
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.100.0
+        uses: dtolnay/rust-toolchain@1.85.0
 
       # NOTE: cargo-audit は crates.io からインストール。
       #       Cargo.lock を参照するためリポジトリルートで実行する。
