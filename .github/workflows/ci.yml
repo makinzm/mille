@@ -297,8 +297,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # NOTE: 短時間に main へ複数 push があると、それぞれの CI run が並行して
+    #       このジョブを実行し push が競合する
+    #       (https://github.com/makinzm/mille/actions/runs/34601820960)。
+    #       同一グループで直列化し、後続 run は先行 run の push 後に実行させる。
+    concurrency:
+      group: update-wasm-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+
+      # NOTE: actions/checkout はワークフロー起動時点の github.sha に固定
+      #       チェックアウトする。concurrency で直列化していても、先行 run が
+      #       その間に push した最新 main を取り込まないと non-fast-forward で
+      #       push が reject される。push 前に必ず最新化する。
+      - name: Sync to latest main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
 
       - name: Download wasm artifact
         uses: actions/download-artifact@v8
