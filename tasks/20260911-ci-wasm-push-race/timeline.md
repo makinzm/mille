@@ -31,3 +31,18 @@
 - CI infra のみの変更のため、Rust テストコードの追加は対象外
   （プロジェクトの TDD 原則は Rust ソースコード変更が対象。workflow YAML の
   検証は actionlint が相当する）。
+- commit (`e9a12bc`) → push (`fix/ci-wasm-push-race`) → `gh pr create` で
+  PR #119 (https://github.com/makinzm/mille/pull/119) を作成。
+
+## Lint / Formatter 実行ログ（PR #119 完了前）
+
+- `devbox run -- actionlint` → exit 0, 指摘なし（今回変更した
+  `.github/workflows/ci.yml` に対する唯一の関連 lint）
+- `devbox run -- cargo fmt --check` → exit 1。ただし diff は
+  `src/infrastructure/parser/elixir.rs` / `fs_source_file_repository.rs` /
+  `src/infrastructure/resolver/elixir.rs` / `src/runner.rs` の4ファイルで、
+  いずれも今回のブランチ差分に含まれない
+  （`git diff --stat main -- src/` が空であることを確認済み）。
+  rustfmt が toolchain 1.85.0 → 1.98.0 更新 (#117/#118) に伴うルール変更で
+  main 上に既存ドリフトが生じたものと推測される。本タスクのスコープ外のため
+  未修正。別タスクとしてユーザーに報告する。
