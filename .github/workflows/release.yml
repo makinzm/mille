@@ -62,7 +62,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.85.0
+          toolchain: 1.98.0
           targets: ${{ matrix.target }}
 
       - name: Install cross (aarch64-linux only)
@@ -139,7 +139,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.85.0
+          toolchain: 1.98.0
           targets: ${{ matrix.target }}
 
       - name: Install cross (arm64 only)
@@ -228,7 +228,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.85.0
+          toolchain: 1.98.0
 
       - name: Sync version in Cargo.toml
         run: |

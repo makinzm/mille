@@ -70,7 +70,7 @@ node packages/npm/index.js check
 
 | ツール | 用途 | 入手方法 |
 |--------|------|----------|
-| Rust 1.85.0 | コアのビルド | `rustup` (devbox で管理) |
+| Rust 1.98.0 | コアのビルド | `rustup` (devbox で管理) |
 | wasm32-wasip1 target | wasm クロスコンパイル | 後述のスクリプトが自動追加 |
 | wasi-sdk-30 | tree-sitter の C コードを wasm 向けにコンパイル | 後述のスクリプトが自動ダウンロード |
 | Go 1.24+ | Go ラッパーのビルド | devbox で管理 |
@@ -83,7 +83,7 @@ node packages/npm/index.js check
 devbox run -- bash scripts/build-wasm.sh
 ```
 
-devbox が `rust-toolchain.toml` の Rust バージョン（1.85.0）を使ってビルドします。
+devbox が `rust-toolchain.toml` の Rust バージョン（1.98.0）を使ってビルドします。
 初回は `.wasi-sdk/` ディレクトリに wasi-sdk-30 を自動ダウンロードします（約 130MB）。
 2 回目以降はキャッシュを再利用します（`WASI_SDK_PATH` 環境変数で上書きも可）。
 
@@ -172,7 +172,7 @@ test → build-wasm → dogfood-go  ┐
 ### なぜバイナリ比較による stale 検知をしないか
 
 Rust の wasm ビルドはビット単位の再現性（reproducibility）が保証されません。
-同一ソース・同一 Rust バージョン（1.85.0）・同一 wasi-sdk-30 でも、
+同一ソース・同一 Rust バージョン（1.98.0）・同一 wasi-sdk-30 でも、
 LLVM の最適化パス順序や host 環境の差異で異なるバイナリが生成されます。
 
 代わりに以下の方針を採用します：
@@ -183,12 +183,12 @@ LLVM の最適化パス順序や host 環境の差異で異なるバイナリが
 ### なぜ devbox 経由で実行するか
 
 `dtolnay/rust-toolchain@stable` で直接 Rust をインストールすると、その時点の `stable`
-（例: 1.93.1）が使われ、`rust-toolchain.toml` の固定バージョン（1.85.0）が無視されます。
+（例: 1.93.1）が使われ、`rust-toolchain.toml` の固定バージョン（1.98.0）が無視されます。
 
 CI で実行されるコマンド（`build-wasm` ジョブの核心部分）:
 
 ```bash
-# devbox が rust-toolchain.toml を参照して Rust 1.85.0 を使用する
+# devbox が rust-toolchain.toml を参照して Rust 1.98.0 を使用する
 devbox run -- bash scripts/build-wasm.sh
 ```
 
