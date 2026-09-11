@@ -18,7 +18,7 @@
 
 ## 設計メモ
 
-- Rust toolchain: 1.85.0（rust-toolchain.toml 準拠）
+- Rust toolchain: 1.98.0（rust-toolchain.toml 準拠）
 - `cargo audit` は `cargo install cargo-audit` でインストール
 - Issue 作成には `actions/github-script` を使用
 - PR / push 実行ではワークフローを fail させる（CI ゲート）
