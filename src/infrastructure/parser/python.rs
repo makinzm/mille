@@ -322,7 +322,7 @@ fn extract_python_named_imports(node: &Node, source: &[u8]) -> Vec<String> {
             "dotted_name" | "identifier" => {
                 if let Some(text) = extract_text(&child, source) {
                     // Only take the last component for dotted names used as identifiers
-                    let name = text.split('.').last().unwrap_or(&text).to_string();
+                    let name = text.split('.').next_back().unwrap_or(&text).to_string();
                     names.push(name);
                 }
             }

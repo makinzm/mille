@@ -158,10 +158,7 @@ mod tests {
 
     #[test]
     fn test_enum_is_external() {
-        assert_eq!(
-            classify_elixir("Enum", APP_NAME),
-            ImportCategory::External
-        );
+        assert_eq!(classify_elixir("Enum", APP_NAME), ImportCategory::External);
     }
 
     #[test]
