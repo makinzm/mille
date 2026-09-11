@@ -8,7 +8,7 @@
 //!   - allow_call_patterns work on non-main layers (usecase)
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 // ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@ fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rust_multifile_main")
 }
 
-fn mille_at(dir: &PathBuf, args: &[&str]) -> Output {
+fn mille_at(dir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_mille"))
         .args(args)
         .current_dir(dir)
@@ -35,7 +35,7 @@ struct TempConfig {
 }
 
 impl TempConfig {
-    fn new(dir: &PathBuf, name: &str, content: &str) -> Self {
+    fn new(dir: &Path, name: &str, content: &str) -> Self {
         let path = dir.join(name);
         fs::write(&path, content).expect("failed to write temp config");
         TempConfig { path }

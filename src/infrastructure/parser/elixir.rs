@@ -246,7 +246,11 @@ mod tests {
     #[test]
     fn test_parse_alias_with_as() {
         let imports = parse("alias MyApp.Domain.User, as: User\n");
-        assert_eq!(imports.len(), 1, "alias with as: should still yield 1 import");
+        assert_eq!(
+            imports.len(),
+            1,
+            "alias with as: should still yield 1 import"
+        );
         assert_eq!(
             imports[0].path, "MyApp.Domain.User",
             "should use original module path, not the alias"

@@ -61,8 +61,8 @@ fn resolve_go_impl(import: &RawImport, module_name: &str) -> ResolvedImport {
 ///
 /// - internal: path starts with `module_name`
 /// - external: everything else, including Go stdlib packages like `fmt`, `net/http`,
-///             `database/sql`. Go architecture rules apply to all non-internal imports,
-///             so stdlib packages are subject to `external_allow` / `external_deny` checks.
+///   `database/sql`. Go architecture rules apply to all non-internal imports,
+///   so stdlib packages are subject to `external_allow` / `external_deny` checks.
 pub fn classify_go(path: &str, module_name: &str) -> ImportCategory {
     // internal: starts with the project's module name
     if !module_name.is_empty()

@@ -353,13 +353,13 @@ fn type_name_from_import(path: &str) -> Option<&str> {
     // Backslash-separated paths use "\" separator (e.g. "App\Domain\User").
     // The last segment is the class name used as the call receiver.
     if path.contains('\\') {
-        return path.split('\\').last().filter(|s| !s.is_empty());
+        return path.split('\\').next_back().filter(|s| !s.is_empty());
     }
 
     // Slash-separated paths use "/" separator (e.g. "github.com/foo/bar/domain").
     // The last segment is the package name used as the call receiver.
     if path.contains('/') {
-        return path.split('/').last().filter(|s| !s.is_empty());
+        return path.split('/').next_back().filter(|s| !s.is_empty());
     }
 
     // Plain single-segment paths (e.g. "fmt", "os" in stdlib).

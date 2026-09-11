@@ -246,25 +246,25 @@ fn test_c_broken_dep_opt_out_mentions_infrastructure() {
 // Broken config: external opt-in — domain external_allow=[] blocks stdlib
 // ---------------------------------------------------------------------------
 
-/// `src/domain/user.h` includes `<string.h>` (Stdlib).
-/// `src/infrastructure/user_repo.c` includes `<stdio.h>` (Stdlib).
-/// Since Stdlib is NOT External, external_mode opt-in won't catch Stdlib.
-/// Instead we test: infra with external_mode="opt-in" external_allow=[]
-/// will NOT trigger for stdlib includes (they are Stdlib, not External).
-/// To test external violation, we would need a genuinely external header.
-/// For this test, we verify the valid fixture passes with external_mode="opt-in"
-/// since all includes are either Internal or Stdlib (not External).
+// `src/domain/user.h` includes `<string.h>` (Stdlib).
+// `src/infrastructure/user_repo.c` includes `<stdio.h>` (Stdlib).
+// Since Stdlib is NOT External, external_mode opt-in won't catch Stdlib.
+// Instead we test: infra with external_mode="opt-in" external_allow=[]
+// will NOT trigger for stdlib includes (they are Stdlib, not External).
+// To test external violation, we would need a genuinely external header.
+// For this test, we verify the valid fixture passes with external_mode="opt-in"
+// since all includes are either Internal or Stdlib (not External).
 
 // ---------------------------------------------------------------------------
 // Broken config: external opt-out — infrastructure external_deny blocks curl
 // ---------------------------------------------------------------------------
 
-/// We inject a test where domain has external_deny=["string.h"].
-/// But string.h is Stdlib, not External — so this won't trigger.
-/// Instead, let's test with a config that denies a stdlib header via external_deny.
-/// Since stdlib headers are classified as Stdlib (not External), external_deny
-/// only applies to External imports. This is correct behavior.
-/// For a meaningful test, we verify external_deny on a genuinely external header.
+// We inject a test where domain has external_deny=["string.h"].
+// But string.h is Stdlib, not External — so this won't trigger.
+// Instead, let's test with a config that denies a stdlib header via external_deny.
+// Since stdlib headers are classified as Stdlib (not External), external_deny
+// only applies to External imports. This is correct behavior.
+// For a meaningful test, we verify external_deny on a genuinely external header.
 
 // ---------------------------------------------------------------------------
 // Broken config: naming — name_deny blocks "user"

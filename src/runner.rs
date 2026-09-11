@@ -629,14 +629,7 @@ fn scan_target_imports(
             continue;
         }
         if path.is_dir() {
-            scan_target_imports(
-                root,
-                &path,
-                parser,
-                target_depth,
-                target_rel,
-                analyses,
-            );
+            scan_target_imports(root, &path, parser, target_depth, target_rel, analyses);
         } else if is_source_file(&name) {
             let Ok(source) = fs::read_to_string(&path) else {
                 continue;
